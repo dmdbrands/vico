@@ -38,6 +38,7 @@ import com.patrykandpatrick.vico.core.cartesian.layer.ColumnCartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.layer.HorizontalCartesianLayerMargins
 import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.layer.MutableCartesianLayerDimensions
+import com.patrykandpatrick.vico.core.cartesian.layer.scale
 import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarker
 import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarkerVisibilityListener
 import com.patrykandpatrick.vico.core.common.Legend
@@ -76,6 +77,7 @@ private constructor(
   protected val decorations: List<Decoration> = emptyList(),
   protected val persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
   protected val getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
+  public val visibleLabelsCount: Int = 0,
   /** @suppress */
   @get:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP) public val id: UUID,
   private var previousMarkerTargetHashCode: Int?,
@@ -205,6 +207,7 @@ private constructor(
    * @param decorations the [Decoration]s.
    * @param persistentMarkers adds persistent [CartesianMarker]s.
    * @param getXStep defines the _x_ step (the difference between neighboring major _x_ values).
+   * @param visibleLabelsCount the number of visible labels to display, used to calculate optimal spacing.
    */
   public constructor(
     vararg layers: CartesianLayer<*>,
@@ -220,6 +223,7 @@ private constructor(
     decorations: List<Decoration> = emptyList(),
     persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
     getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
+    visibleLabelsCount: Int = 0,
   ) : this(
     layers = layers,
     startAxis = startAxis,
@@ -234,6 +238,7 @@ private constructor(
     decorations = decorations,
     persistentMarkers = persistentMarkers,
     getXStep = getXStep,
+    visibleLabelsCount = visibleLabelsCount,
     id = UUID.randomUUID(),
     previousMarkerTargetHashCode = null,
     persistentMarkerMap = mutableMapOf(),
@@ -242,6 +247,28 @@ private constructor(
 
   private fun setLayerBounds(left: Float, top: Float, right: Float, bottom: Float) {
     layerBounds.set(left, top, right, bottom)
+  }
+
+  /**
+   * Calculates a scale factor to adjust spacing based on visible labels count.
+   * This ensures optimal label spacing across the entire chart.
+   */
+  private fun calculateLabelSpacingScale(
+    context: CartesianMeasuringContext,
+    layerDimensions: MutableCartesianLayerDimensions
+  ): Float {
+    with(context) {
+      val availableWidth = canvasBounds.width() - layerDimensions.startPadding - layerDimensions.endPadding
+      val currentSpacing = layerDimensions.xSpacing
+
+      if (currentSpacing <= 0f || availableWidth <= 0f) return 1f
+
+      // Calculate desired spacing based on visible labels count
+      val desiredSpacing = availableWidth / visibleLabelsCount
+
+      // Return the scale factor needed to achieve desired spacing
+      return (desiredSpacing / currentSpacing).coerceIn(0.1f, 5.0f) // Reasonable limits
+    }
   }
 
   /** @suppress */
@@ -264,6 +291,15 @@ private constructor(
           this.layerDimensions = layerDimensions
         }
       )
+
+      // Apply spacing adjustment for visible labels if specified
+      if (visibleLabelsCount > 0) {
+        val scaleFactor = calculateLabelSpacingScale(context, layerDimensions)
+        if (scaleFactor != 1f) {
+          layerDimensions.scale(scaleFactor)
+        }
+      }
+
       startAxis?.updateLayerDimensions(context, layerDimensions)
       topAxis?.updateLayerDimensions(context, layerDimensions)
       endAxis?.updateLayerDimensions(context, layerDimensions)
@@ -466,6 +502,7 @@ private constructor(
     decorations: List<Decoration> = this.decorations,
     persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = this.persistentMarkers,
     getXStep: ((CartesianChartModel) -> Double) = this.getXStep,
+    visibleLabelsCount: Int = this.visibleLabelsCount,
   ): CartesianChart =
     CartesianChart(
       layers = layers,
@@ -481,6 +518,7 @@ private constructor(
       decorations = decorations,
       persistentMarkers = persistentMarkers,
       getXStep = getXStep,
+      visibleLabelsCount = visibleLabelsCount,
       id = id,
       previousMarkerTargetHashCode = previousMarkerTargetHashCode,
       persistentMarkerMap = persistentMarkerMap,
@@ -499,6 +537,7 @@ private constructor(
         decorations == other.decorations &&
         persistentMarkers == other.persistentMarkers &&
         getXStep == other.getXStep &&
+        visibleLabelsCount == other.visibleLabelsCount &&
         layers == other.layers &&
         startAxis == other.startAxis &&
         topAxis == other.topAxis &&
@@ -514,6 +553,7 @@ private constructor(
     result = 31 * result + decorations.hashCode()
     result = 31 * result + persistentMarkers.hashCode()
     result = 31 * result + getXStep.hashCode()
+    result = 31 * result + visibleLabelsCount.hashCode()
     result = 31 * result + layers.hashCode()
     result = 31 * result + startAxis.hashCode()
     result = 31 * result + topAxis.hashCode()

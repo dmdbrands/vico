@@ -16,6 +16,7 @@
 
 package com.patrykandpatrick.vico.sample.compose
 
+import android.R.attr.stepSize
 import android.graphics.Typeface
 import android.util.Log
 import android.webkit.WebSettings
@@ -89,11 +90,18 @@ import com.patrykandpatrick.vico.core.common.component.ShapeComponent
 import com.patrykandpatrick.vico.core.common.component.TextComponent
 import com.patrykandpatrick.vico.core.common.data.ExtraStore
 import com.patrykandpatrick.vico.core.common.shape.CorneredShape
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.max
 import kotlin.math.sqrt
+import kotlin.times
 
 
 /**
@@ -174,6 +182,8 @@ fun DynamicYRangeExample() {
   val scrollState = rememberVicoScrollState()
 
   val horizontalItemPlacer = horizontalItemPlacer{min, max ->
+    minTarget = min
+    maxTarget = max
 
   }
   val decoration = rememberHorizontalLine()
@@ -202,8 +212,8 @@ fun DynamicYRangeExample() {
         value.toInt().toString()
       },
       itemPlacer = horizontalItemPlacer,
-      visibleLabelCount = 12,
     ),
+    visibleLabelsCount = 5
   )
 
   // Initialize chart data
@@ -233,7 +243,6 @@ fun DynamicYRangeExample() {
         }
       }
   }
-
 
   Column(
     modifier = Modifier

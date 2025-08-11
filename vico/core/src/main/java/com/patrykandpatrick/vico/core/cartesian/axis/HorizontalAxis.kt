@@ -67,11 +67,6 @@ protected constructor(
   titleComponent: TextComponent?,
   title: CharSequence?,
   public val separators: (ExtraStore) -> List<Double> = { emptyList() },
-  public val visibleLabelsCount: Int = 0,
-  private var cachedSpacing: Float? = null,
-  private var lastBoundsWidth: Float = 0f,
-  private var lastStartPadding: Float = 0f,
-  private var lastEndPadding: Float = 0f,
 ) :
   BaseAxis<P>(
     line,
@@ -119,7 +114,6 @@ protected constructor(
     titleComponent,
     title,
     { emptyList() },
-    0,
   )
 
   override fun drawUnderLayers(context: CartesianDrawingContext) {
@@ -320,62 +314,7 @@ protected constructor(
 
   override fun drawOverLayers(context: CartesianDrawingContext) {}
 
-  /** Resets the cached spacing to allow fresh calculation. Call this when data changes significantly. */
-  public fun resetSpacingCache() {
-    cachedSpacing = null
-    lastBoundsWidth = 0f
-    lastStartPadding = 0f
-    lastEndPadding = 0f
-  }
 
-  /**
-   * Efficiently calculates xSpacing only when dependencies change.
-   * This prevents expensive recalculations on every frame.
-   */
-  private fun calculateSpacingIfNeeded(
-    context: CartesianMeasuringContext,
-    layerDimensions: MutableCartesianLayerDimensions,
-    maxLabelWidth: Float
-  ): Boolean {
-    if (visibleLabelsCount <= 0) return false
-
-    with(context) {
-      val currentBoundsWidth = bounds.width()
-      val currentStartPadding = layerDimensions.startPadding
-      val currentEndPadding = layerDimensions.endPadding
-
-      // Only calculate if dependencies have changed significantly
-      val boundsChanged = kotlin.math.abs(currentBoundsWidth - lastBoundsWidth) > 1f
-      val paddingChanged = kotlin.math.abs(currentStartPadding - lastStartPadding) > 1f ||
-                          kotlin.math.abs(currentEndPadding - lastEndPadding) > 1f
-      val noCachedValue = cachedSpacing == null
-
-      if (!boundsChanged && !paddingChanged && !noCachedValue) {
-        // Use cached value if available and dependencies haven't changed
-        cachedSpacing?.let { cached ->
-          layerDimensions.xSpacing = cached
-          return true
-        }
-      }
-
-      // Calculate new spacing
-      val availableWidth = currentBoundsWidth - currentStartPadding - currentEndPadding
-      val desiredSpacing = availableWidth / visibleLabelsCount
-      val adjustedSpacing = desiredSpacing * 1.05f
-      val finalSpacing = adjustedSpacing.coerceAtLeast(maxLabelWidth)
-
-      // Cache the result and update state
-      cachedSpacing = finalSpacing
-      lastBoundsWidth = currentBoundsWidth
-      lastStartPadding = currentStartPadding
-      lastEndPadding = currentEndPadding
-
-      layerDimensions.xSpacing = finalSpacing
-
-      Log.d("HorizontalAxis", "Calculated new spacing: $finalSpacing (visibleLabelsCount: $visibleLabelsCount)")
-      return true
-    }
-  }
 
   override fun updateLayerDimensions(
     context: CartesianMeasuringContext,
@@ -385,9 +324,6 @@ protected constructor(
     val ranges = context.ranges
     val maxLabelWidth =
       context.getMaxLabelWidth(layerDimensions, context.internalGetFullXRange(layerDimensions))
-
-    // Efficient spacing calculation - only when needed
-    calculateSpacingIfNeeded(context, layerDimensions, maxLabelWidth)
 
     val firstLabelValue = itemPlacer.getFirstLabelValue(context, maxLabelWidth)
     val lastLabelValue = itemPlacer.getLastLabelValue(context, maxLabelWidth)
@@ -562,9 +498,8 @@ protected constructor(
     titleComponent: TextComponent? = this.titleComponent,
     title: CharSequence? = this.title,
     separators: (ExtraStore) -> List<Double> = this.separators,
-    visibleLabelsCount: Int = this.visibleLabelsCount,
   ): HorizontalAxis<P> {
-    val newAxis = HorizontalAxis(
+    return HorizontalAxis(
       position,
       line,
       label,
@@ -578,11 +513,7 @@ protected constructor(
       titleComponent,
       title,
       separators,
-      visibleLabelsCount,
     )
-    // Copy the cached spacing to maintain stability
-    newAxis.cachedSpacing = this.cachedSpacing
-    return newAxis
   }
 
   override fun equals(other: Any?): Boolean =
@@ -681,21 +612,6 @@ protected constructor(
       maxLabelWidth: Float,
     ): Float
 
-    /**
-     * Collects the current visible range from the drawing context.
-     * This method can be used to get the visible range without causing performance issues.
-     * Default implementation returns the current visible range from the context.
-     */
-    public fun collectVisibleRange(context: CartesianDrawingContext): Pair<Double, Double> {
-      return try {
-        val visibleXRange = context.getVisibleXRange()
-        visibleXRange.start to visibleXRange.endInclusive
-      } catch (e: Exception) {
-        // Fallback to ranges if getVisibleXRange fails
-        context.ranges.minX to context.ranges.maxX
-      }
-    }
-
     /** Houses [ItemPlacer] factory functions. */
     public companion object {
       /**
@@ -744,7 +660,6 @@ protected constructor(
       titleComponent: TextComponent? = null,
       title: CharSequence? = null,
       separators: (ExtraStore) -> List<Double> = { emptyList() },
-      visibleLabelsCount: Int = 0,
     ): HorizontalAxis<Axis.Position.Horizontal.Top> =
       HorizontalAxis(
         Axis.Position.Horizontal.Top,
@@ -760,7 +675,6 @@ protected constructor(
         titleComponent,
         title,
         separators,
-        visibleLabelsCount,
       )
 
     /** Creates a bottom [HorizontalAxis]. */
@@ -777,7 +691,6 @@ protected constructor(
       titleComponent: TextComponent? = null,
       title: CharSequence? = null,
       separators: (ExtraStore) -> List<Double> = { emptyList() },
-      visibleLabelsCount: Int = 0,
     ): HorizontalAxis<Axis.Position.Horizontal.Bottom> =
       HorizontalAxis(
         Axis.Position.Horizontal.Bottom,
@@ -793,7 +706,6 @@ protected constructor(
         titleComponent,
         title,
         separators,
-        visibleLabelsCount,
       )
   }
 }

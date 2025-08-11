@@ -71,7 +71,6 @@ public fun HorizontalAxis.Companion.rememberTop(
       size,
       titleComponent,
       title,
-      visibleLabelsCount = visibleLabelCount
     )
   }
 
@@ -89,7 +88,6 @@ public fun HorizontalAxis.Companion.rememberBottom(
   size: BaseAxis.Size = BaseAxis.Size.auto(),
   titleComponent: TextComponent? = null,
   title: CharSequence? = null,
-  visibleLabelCount: Int = 0,
   separators: (ExtraStore) -> List<Double> = { emptyList() },
 ): HorizontalAxis<Axis.Position.Horizontal.Bottom> =
   remember(
@@ -104,7 +102,6 @@ public fun HorizontalAxis.Companion.rememberBottom(
     size,
     titleComponent,
     title,
-    visibleLabelCount,
     separators,
   ) {
     bottom(
@@ -120,6 +117,5 @@ public fun HorizontalAxis.Companion.rememberBottom(
       titleComponent,
       title,
       separators,
-      visibleLabelsCount = visibleLabelCount,
     )
   }

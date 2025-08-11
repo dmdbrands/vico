@@ -57,6 +57,7 @@ public fun rememberCartesianChart(
   fadingEdges: FadingEdges? = null,
   decorations: List<Decoration> = emptyList(),
   persistentMarkers: (CartesianChart.PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
+  visibleLabelsCount: Int = 0,
   getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
 ): CartesianChart {
   val wrapper = remember { ValueWrapper<CartesianChart?>(null) }
@@ -73,6 +74,7 @@ public fun rememberCartesianChart(
     fadingEdges,
     decorations,
     persistentMarkers,
+    visibleLabelsCount,
     getXStep,
   ) {
     val cartesianChart =
@@ -89,6 +91,7 @@ public fun rememberCartesianChart(
         fadingEdges = fadingEdges,
         decorations = decorations,
         persistentMarkers = persistentMarkers,
+        visibleLabelsCount = visibleLabelsCount,
         getXStep = getXStep,
       )
         ?: CartesianChart(
@@ -104,6 +107,7 @@ public fun rememberCartesianChart(
           fadingEdges = fadingEdges,
           decorations = decorations,
           persistentMarkers = persistentMarkers,
+          visibleLabelsCount = visibleLabelsCount,
           getXStep = getXStep,
         )
     wrapper.value = cartesianChart

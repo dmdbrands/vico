@@ -47,7 +47,7 @@ publishing {
             run {
                 groupId = "com.dmdbrands.lib"
                 artifactId = "vico-core"
-                version = "1.2.0-alpha2"
+                version = "1.3.0"
                 artifact("build/outputs/aar/core-release.aar")
             }
         }

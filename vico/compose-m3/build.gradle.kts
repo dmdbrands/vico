@@ -44,7 +44,7 @@ publishing {
             run {
                 groupId = "com.dmdbrands.lib"
                 artifactId = "vico-compose-m3"
-                version = "1.2.0-alpha2"
+                version = "1.3.0"
                 artifact("build/outputs/aar/compose-m3-release.aar")
             }
         }
