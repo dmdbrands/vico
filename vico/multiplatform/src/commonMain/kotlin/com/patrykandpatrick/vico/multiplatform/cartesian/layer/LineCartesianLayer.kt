@@ -432,13 +432,18 @@ protected constructor(
           prevY = y
         }
 
-        saveLayer(opacity = drawingModel?.opacity ?: 1f)
+                saveLayer(opacity = drawingModel?.opacity ?: 1f)
 
         val (lineBitmap, lineCanvas) = getBitmap(cacheKeyNamespace, seriesIndex, "line")
         val (lineFillBitmap, lineFillCanvas) = getBitmap(cacheKeyNamespace, seriesIndex, "lineFill")
         line.draw(context, linePath, lineCanvas, lineFillCanvas, verticalAxisPosition)
         lineCanvas.drawImage(lineFillBitmap, Offset.Zero, srcInPaint)
+
+        // Apply clipping to prevent line overflow beyond chart bounds
+        canvas.save()
+        canvas.clipRect(layerBounds)
         canvas.drawImage(lineBitmap, Offset.Zero, EmptyPaint)
+        canvas.restore()
 
         forEachPointInBounds(series, drawingStart, pointInfoMap) { entry, x, y, _, _ ->
           updateMarkerTargets(entry, x, y, lineFillBitmap)

@@ -20,7 +20,13 @@ plugins { id("com.vanniktech.maven.publish") }
 
 mavenPublishing {
   publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
-  signAllPublications()
+
+  // Only sign publications if signing credentials are available
+  if (System.getenv("ORG_GRADLE_PROJECT_signingInMemoryKey") != null ||
+      project.hasProperty("signingInMemoryKey")) {
+    signAllPublications()
+  }
+
   pom {
     name = "Vico"
     description = "A powerful and extensible multiplatform chart library."

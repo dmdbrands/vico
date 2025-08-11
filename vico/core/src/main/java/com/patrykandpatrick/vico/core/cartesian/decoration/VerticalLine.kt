@@ -19,8 +19,6 @@ package com.patrykandpatrick.vico.core.cartesian.decoration
 import androidx.annotation.RestrictTo
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.axis.Axis
-import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
-import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges
 import com.patrykandpatrick.vico.core.common.Position
 import com.patrykandpatrick.vico.core.common.component.LineComponent
 import com.patrykandpatrick.vico.core.common.component.TextComponent
@@ -29,59 +27,42 @@ import com.patrykandpatrick.vico.core.common.getEnd
 import com.patrykandpatrick.vico.core.common.getStart
 import com.patrykandpatrick.vico.core.common.half
 import com.patrykandpatrick.vico.core.common.inBounds
-import com.patrykandpatrick.vico.core.common.Defaults
-import com.patrykandpatrick.vico.core.common.getDivisors
 import com.patrykandpatrick.vico.core.common.unaryMinus
 import java.text.DecimalFormat
-import kotlin.math.ceil
-import kotlin.math.floor
-
-// Define the key for storing the y-step value
-public object Y_STEP_KEY : ExtraStore.Key<Double>()
-
 
 /**
- * A [Decoration] that highlights a _y_ value.
+ * A [Decoration] that highlights an _x_ value.
  *
- * @property y returns the _y_ value.
+ * @property x returns the _x_ value.
  * @property line the [LineComponent] for the line.
  * @property labelComponent the label [TextComponent].
  * @property label returns the label text.
  * @property horizontalLabelPosition defines the horizontal position of the label.
  * @property verticalLabelPosition defines the vertical position of the label.
  * @property labelRotationDegrees the rotation of the label (in degrees).
- * @property verticalAxisPosition the position of the [VerticalAxis] whose scale the
- *   [HorizontalLine] should use when interpreting [y].
+ * @property horizontalAxisPosition the position of the [HorizontalAxis] whose scale the
+ *   [VerticalLine] should use when interpreting [x]. Currently not used as x range is global.
  */
-public class HorizontalLine(
-  private val y: (ExtraStore) -> Double,
+public class VerticalLine(
+  private val x: (ExtraStore) -> Double,
   private val line: LineComponent,
   private val labelComponent: TextComponent? = null,
-  private val label: (ExtraStore) -> CharSequence = { getLabel(y(it)) },
+  private val label: (ExtraStore) -> CharSequence = { getLabel(x(it)) },
   private val horizontalLabelPosition: Position.Horizontal = Position.Horizontal.Start,
   private val verticalLabelPosition: Position.Vertical = Position.Vertical.Top,
   private val labelRotationDegrees: Float = 0f,
-  private val verticalAxisPosition: Axis.Position.Vertical? = null,
+  private val horizontalAxisPosition: Axis.Position.Horizontal? = null,
 ) : Decoration {
-      override fun drawOverLayers(context: CartesianDrawingContext) {
+  override fun drawOverLayers(context: CartesianDrawingContext) {
     with(context) {
-      val y = y(model.extraStore)
+      val x = x(model.extraStore)
       val label = label(model.extraStore)
 
-      // Use the current animated range values from the context
-      val currentYRange = ranges.getYRange(verticalAxisPosition)
+            // Calculate canvas position using the same method as HorizontalAxis guidelines
+      val baseCanvasX = layerBounds.left - scroll + layerDimensions.startPadding * layoutDirectionMultiplier
+      val canvasX = baseCanvasX + ((x - ranges.minX) / ranges.xStep).toFloat() * layerDimensions.xSpacing * layoutDirectionMultiplier
 
-      // Clamp y value to be within the current animated range bounds with proper padding
-      val step = (currentYRange.maxY - currentYRange.minY) / 6
-      val clampedY = when {
-        y > currentYRange.maxY -> currentYRange.maxY + step
-        y < currentYRange.minY -> currentYRange.minY - step
-        else -> y
-      }
-
-      val canvasY =
-        layerBounds.bottom - ((clampedY - currentYRange.minY) / currentYRange.length).toFloat() * layerBounds.height()
-      line.drawHorizontal(context, layerBounds.left, layerBounds.right, canvasY)
+      line.drawVertical(context, canvasX, layerBounds.top, layerBounds.bottom)
       if (labelComponent == null) return
       val clippingFreeVerticalLabelPosition =
         verticalLabelPosition.inBounds(
@@ -92,7 +73,7 @@ public class HorizontalLine(
               text = label,
               rotationDegrees = labelRotationDegrees,
             ),
-          referenceY = canvasY,
+          referenceY = layerBounds.centerY(),
           referenceDistance = line.thicknessDp.half.pixels,
         )
       labelComponent.draw(
@@ -100,15 +81,15 @@ public class HorizontalLine(
         text = label,
         x =
           when (horizontalLabelPosition) {
-            Position.Horizontal.Start -> layerBounds.getStart(isLtr)
-            Position.Horizontal.Center -> layerBounds.centerX()
-            Position.Horizontal.End -> layerBounds.getEnd(isLtr)
+            Position.Horizontal.Start -> canvasX - line.thicknessDp.half.pixels
+            Position.Horizontal.Center -> canvasX
+            Position.Horizontal.End -> canvasX + line.thicknessDp.half.pixels
           },
         y =
           when (clippingFreeVerticalLabelPosition) {
-            Position.Vertical.Top -> canvasY - line.thicknessDp.half.pixels
-            Position.Vertical.Center -> canvasY
-            Position.Vertical.Bottom -> canvasY + line.thicknessDp.half.pixels
+            Position.Vertical.Top -> layerBounds.top
+            Position.Vertical.Center -> layerBounds.centerY()
+            Position.Vertical.Bottom -> layerBounds.bottom
           },
         horizontalPosition = -horizontalLabelPosition,
         verticalPosition = clippingFreeVerticalLabelPosition,
@@ -120,23 +101,21 @@ public class HorizontalLine(
 
   override fun equals(other: Any?): Boolean =
     this === other ||
-      other is HorizontalLine &&
+      other is VerticalLine &&
         line == other.line &&
         labelComponent == other.labelComponent &&
         horizontalLabelPosition == other.horizontalLabelPosition &&
         verticalLabelPosition == other.verticalLabelPosition &&
-        labelRotationDegrees == other.labelRotationDegrees &&
-        verticalAxisPosition == other.verticalAxisPosition
+        labelRotationDegrees == other.labelRotationDegrees
 
   override fun hashCode(): Int {
-    var result = y.hashCode()
+    var result = x.hashCode()
     result = 31 * result + line.hashCode()
     result = 31 * result + labelComponent.hashCode()
     result = 31 * result + label.hashCode()
     result = 31 * result + horizontalLabelPosition.hashCode()
     result = 31 * result + verticalLabelPosition.hashCode()
     result = 31 * result + labelRotationDegrees.hashCode()
-    result = 31 * result + verticalAxisPosition.hashCode()
     return result
   }
 
@@ -145,6 +124,6 @@ public class HorizontalLine(
   public companion object {
     private val decimalFormat: DecimalFormat = DecimalFormat("#.##;−#.##")
 
-    public fun getLabel(y: Double): String = decimalFormat.format(y)
+    public fun getLabel(x: Double): String = decimalFormat.format(x)
   }
 }

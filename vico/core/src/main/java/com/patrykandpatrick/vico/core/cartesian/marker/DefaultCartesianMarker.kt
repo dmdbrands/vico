@@ -28,6 +28,7 @@ import com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerModel
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerMargins
 import com.patrykandpatrick.vico.core.common.Defaults
+import com.patrykandpatrick.vico.core.common.Insets
 import com.patrykandpatrick.vico.core.common.Position
 import com.patrykandpatrick.vico.core.common.appendCompat
 import com.patrykandpatrick.vico.core.common.averageOf
@@ -53,6 +54,7 @@ import kotlin.math.min
  * @property indicator returns a [Component] to be drawn at points with the given color.
  * @property indicatorSizeDp the indicator size (in dp).
  * @property guideline drawn vertically through the marked points.
+ * @property contentPadding additional padding around the label content that doesn't affect chart margins.
  */
 public open class DefaultCartesianMarker(
   protected val label: TextComponent,
@@ -61,6 +63,7 @@ public open class DefaultCartesianMarker(
   protected val indicator: ((Int) -> Component)? = null,
   protected val indicatorSizeDp: Float = Defaults.MARKER_INDICATOR_SIZE,
   protected val guideline: LineComponent? = null,
+  protected val contentPadding: Insets = Insets.Zero,
 ) : CartesianMarker {
 
   protected val markerCorneredShape: MarkerCorneredShape? =
@@ -68,7 +71,7 @@ public open class DefaultCartesianMarker(
 
   protected val tickSizeDp: Float = markerCorneredShape?.tickSizeDp.orZero
 
-  override fun drawOverLayers(
+      override fun drawOverLayers(
     context: CartesianDrawingContext,
     targets: List<CartesianMarker.Target>,
   ) {
@@ -128,6 +131,54 @@ public open class DefaultCartesianMarker(
       )
   }
 
+  protected fun calculateLabelYPosition(
+    context: CartesianDrawingContext,
+    targets: List<CartesianMarker.Target>,
+  ): Float = with(context) {
+    val labelBounds = label.getBounds(context, null, layerBounds.width().toInt())
+
+    when (labelPosition) {
+      LabelPosition.Top -> {
+        context.layerBounds.top - tickSizeDp.pixels - contentPadding.bottomDp.pixels
+      }
+      LabelPosition.Bottom -> {
+        context.layerBounds.bottom + tickSizeDp.pixels + contentPadding.bottomDp.pixels
+      }
+      LabelPosition.AroundPoint,
+      LabelPosition.AbovePoint -> {
+        val topPointY =
+          targets.minOf { target ->
+            when (target) {
+              is CandlestickCartesianLayerMarkerTarget -> target.highCanvasY
+              is ColumnCartesianLayerMarkerTarget ->
+                target.columns.minOf(ColumnCartesianLayerMarkerTarget.Column::canvasY)
+              is LineCartesianLayerMarkerTarget ->
+                target.points.minOf(LineCartesianLayerMarkerTarget.Point::canvasY)
+              else -> error("Unexpected `CartesianMarker.Target` implementation.")
+            }
+          }
+        val flip =
+          labelPosition == LabelPosition.AroundPoint &&
+            topPointY - labelBounds.height() - tickSizeDp.pixels - contentPadding.topDp.pixels < context.layerBounds.top
+        topPointY + (if (flip) 1 else -1) * tickSizeDp.pixels + (if (flip) contentPadding.bottomDp.pixels else -contentPadding.topDp.pixels)
+      }
+      LabelPosition.BelowPoint -> {
+        val bottomPointY =
+          targets.maxOf { target ->
+            when (target) {
+              is CandlestickCartesianLayerMarkerTarget -> target.lowCanvasY
+              is ColumnCartesianLayerMarkerTarget ->
+                target.columns.maxOf(ColumnCartesianLayerMarkerTarget.Column::canvasY)
+              is LineCartesianLayerMarkerTarget ->
+                target.points.maxOf(LineCartesianLayerMarkerTarget.Point::canvasY)
+              else -> error("Unexpected `CartesianMarker.Target` implementation.")
+            }
+          }
+        bottomPointY + tickSizeDp.pixels + contentPadding.bottomDp.pixels
+      }
+    }
+  }
+
   protected fun drawLabel(
     context: CartesianDrawingContext,
     targets: List<CartesianMarker.Target>,
@@ -137,20 +188,18 @@ public open class DefaultCartesianMarker(
       val targetX = targets.averageOf { it.canvasX }
       val labelBounds = label.getBounds(context, text, layerBounds.width().toInt())
       val halfOfTextWidth = labelBounds.width().half
-      val x = overrideXPositionToFit(targetX, layerBounds, halfOfTextWidth)
+      val x = overrideXPositionToFit( targetX, layerBounds, halfOfTextWidth)
       markerCorneredShape?.tickX = targetX
+      val y = calculateLabelYPosition(context, targets)
       val tickPosition: MarkerCorneredShape.TickPosition
-      val y: Float
       val verticalPosition: Position.Vertical
       when (labelPosition) {
         LabelPosition.Top -> {
           tickPosition = MarkerCorneredShape.TickPosition.Bottom
-          y = context.layerBounds.top - tickSizeDp.pixels
           verticalPosition = Position.Vertical.Top
         }
         LabelPosition.Bottom -> {
           tickPosition = MarkerCorneredShape.TickPosition.Top
-          y = context.layerBounds.bottom + tickSizeDp.pixels
           verticalPosition = Position.Vertical.Bottom
         }
         LabelPosition.AroundPoint,
@@ -168,27 +217,14 @@ public open class DefaultCartesianMarker(
             }
           val flip =
             labelPosition == LabelPosition.AroundPoint &&
-              topPointY - labelBounds.height() - tickSizeDp.pixels < context.layerBounds.top
+              topPointY - labelBounds.height() - tickSizeDp.pixels - contentPadding.topDp.pixels < context.layerBounds.top
           tickPosition =
             if (flip) MarkerCorneredShape.TickPosition.Top
             else MarkerCorneredShape.TickPosition.Bottom
-          y = topPointY + (if (flip) 1 else -1) * tickSizeDp.pixels
           verticalPosition = if (flip) Position.Vertical.Bottom else Position.Vertical.Top
         }
         LabelPosition.BelowPoint -> {
-          val bottomPointY =
-            targets.maxOf { target ->
-              when (target) {
-                is CandlestickCartesianLayerMarkerTarget -> target.lowCanvasY
-                is ColumnCartesianLayerMarkerTarget ->
-                  target.columns.maxOf(ColumnCartesianLayerMarkerTarget.Column::canvasY)
-                is LineCartesianLayerMarkerTarget ->
-                  target.points.maxOf(LineCartesianLayerMarkerTarget.Point::canvasY)
-                else -> error("Unexpected `CartesianMarker.Target` implementation.")
-              }
-            }
           tickPosition = MarkerCorneredShape.TickPosition.Top
-          y = bottomPointY + tickSizeDp.pixels
           verticalPosition = Position.Vertical.Bottom
         }
       }
@@ -200,7 +236,7 @@ public open class DefaultCartesianMarker(
         x = x,
         y = y,
         verticalPosition = verticalPosition,
-        maxWidth = ceil(min(layerBounds.right - x, x - layerBounds.left).doubled).toInt(),
+        maxWidth = ceil(min(layerBounds.right + contentPadding.endDp.pixels - x, x - (layerBounds.left - contentPadding.startDp.pixels)).doubled).toInt(),
       )
     }
 
@@ -215,11 +251,21 @@ public open class DefaultCartesianMarker(
       else -> xPosition
     }
 
-  protected fun CartesianDrawingContext.drawGuideline(targets: List<CartesianMarker.Target>) {
+    protected fun CartesianDrawingContext.drawGuideline(targets: List<CartesianMarker.Target>) {
     targets
       .map { it.canvasX }
       .toSet()
-      .forEach { x -> guideline?.drawVertical(this, x, layerBounds.top, layerBounds.bottom) }
+      .forEach { x ->
+        val guidelineTop = when (labelPosition) {
+          LabelPosition.Top, LabelPosition.AbovePoint -> layerBounds.top - contentPadding.topDp.pixels
+          else -> layerBounds.top
+        }
+        val guidelineBottom = when (labelPosition) {
+          LabelPosition.Bottom, LabelPosition.BelowPoint -> layerBounds.bottom + contentPadding.bottomDp.pixels
+          else -> layerBounds.bottom
+        }
+        guideline?.drawVertical(this, x, guidelineTop, guidelineBottom)
+      }
   }
 
   override fun updateLayerMargins(
@@ -249,7 +295,8 @@ public open class DefaultCartesianMarker(
         labelPosition == other.labelPosition &&
         indicator == other.indicator &&
         indicatorSizeDp == other.indicatorSizeDp &&
-        guideline == other.guideline
+        guideline == other.guideline &&
+        contentPadding == other.contentPadding
 
   override fun hashCode(): Int {
     var result = label.hashCode()
@@ -258,6 +305,7 @@ public open class DefaultCartesianMarker(
     result = 31 * result + indicator.hashCode()
     result = 31 * result + indicatorSizeDp.hashCode()
     result = 31 * result + guideline.hashCode()
+    result = 31 * result + contentPadding.hashCode()
     return result
   }
 
@@ -311,6 +359,35 @@ public open class DefaultCartesianMarker(
 
   protected companion object {
     public val keyNamespace: CacheStore.KeyNamespace = CacheStore.KeyNamespace()
+
+    /**
+     * Creates a [DefaultCartesianMarker] with content padding that doesn't affect chart margins.
+     *
+     * @param label the [TextComponent] for the label.
+     * @param valueFormatter formats the values.
+     * @param labelPosition specifies the position of the label.
+     * @param indicator returns a [Component] to be drawn at points with the given color.
+     * @param indicatorSizeDp the indicator size (in dp).
+     * @param guideline drawn vertically through the marked points.
+     * @param contentPadding additional padding around the label content that doesn't affect chart margins.
+     */
+    public fun withContentPadding(
+      label: TextComponent,
+      valueFormatter: ValueFormatter = ValueFormatter.default(),
+      labelPosition: LabelPosition = LabelPosition.Top,
+      indicator: ((Int) -> Component)? = null,
+      indicatorSizeDp: Float = Defaults.MARKER_INDICATOR_SIZE,
+      guideline: LineComponent? = null,
+      contentPadding: Insets,
+    ): DefaultCartesianMarker = DefaultCartesianMarker(
+      label = label,
+      valueFormatter = valueFormatter,
+      labelPosition = labelPosition,
+      indicator = indicator,
+      indicatorSizeDp = indicatorSizeDp,
+      guideline = guideline,
+      contentPadding = contentPadding,
+    )
   }
 }
 

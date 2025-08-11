@@ -27,6 +27,7 @@ import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.common.Defaults
 import com.patrykandpatrick.vico.core.common.component.LineComponent
 import com.patrykandpatrick.vico.core.common.component.TextComponent
+import com.patrykandpatrick.vico.core.common.data.ExtraStore
 
 /** Creates and remembers a top [HorizontalAxis]. */
 @Composable
@@ -41,6 +42,7 @@ public fun HorizontalAxis.Companion.rememberTop(
   itemPlacer: HorizontalAxis.ItemPlacer = remember { HorizontalAxis.ItemPlacer.aligned() },
   size: BaseAxis.Size = BaseAxis.Size.auto(),
   titleComponent: TextComponent? = null,
+  visibleLabelCount: Int = 0,
   title: CharSequence? = null,
 ): HorizontalAxis<Axis.Position.Horizontal.Top> =
   remember(
@@ -55,6 +57,7 @@ public fun HorizontalAxis.Companion.rememberTop(
     size,
     titleComponent,
     title,
+    visibleLabelCount
   ) {
     top(
       line,
@@ -68,6 +71,7 @@ public fun HorizontalAxis.Companion.rememberTop(
       size,
       titleComponent,
       title,
+      visibleLabelsCount = visibleLabelCount
     )
   }
 
@@ -85,6 +89,8 @@ public fun HorizontalAxis.Companion.rememberBottom(
   size: BaseAxis.Size = BaseAxis.Size.auto(),
   titleComponent: TextComponent? = null,
   title: CharSequence? = null,
+  visibleLabelCount: Int = 0,
+  separators: (ExtraStore) -> List<Double> = { emptyList() },
 ): HorizontalAxis<Axis.Position.Horizontal.Bottom> =
   remember(
     line,
@@ -98,6 +104,8 @@ public fun HorizontalAxis.Companion.rememberBottom(
     size,
     titleComponent,
     title,
+    visibleLabelCount,
+    separators,
   ) {
     bottom(
       line,
@@ -111,5 +119,7 @@ public fun HorizontalAxis.Companion.rememberBottom(
       size,
       titleComponent,
       title,
+      separators,
+      visibleLabelsCount = visibleLabelCount,
     )
   }

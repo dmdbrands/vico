@@ -71,7 +71,7 @@ internal fun CartesianChartModelProducer.collectAsState(
   val isInPreview = LocalInspectionMode.current
   val scope = rememberCoroutineScope { getCoroutineContext(isInPreview) }
   val chartState = rememberWrappedValue(chart)
-  LaunchRegistration(chart.id, animateIn, isInPreview) {
+  LaunchRegistration(chart, animateIn, isInPreview) {
     var mainAnimationJob: Job? = null
     var animationFrameJob: Job? = null
     var finalAnimationFrameJob: Job? = null
@@ -155,7 +155,7 @@ internal fun CartesianChartModelProducer.collectAsState(
 
 @Composable
 private fun LaunchRegistration(
-  chartID: UUID,
+  chart : CartesianChart,
   animateIn: Boolean,
   isInPreview: Boolean,
   block: () -> () -> Unit,
@@ -163,7 +163,7 @@ private fun LaunchRegistration(
   if (isInPreview) {
     runBlocking(getCoroutineContext(isPreview = true)) { block() }
   } else {
-    LaunchedEffect(chartID, animateIn) {
+    LaunchedEffect(chart, animateIn ) {
       withContext(getCoroutineContext(isPreview = false)) {
         val disposable = block()
         currentCoroutineContext().job.invokeOnCompletion { disposable() }

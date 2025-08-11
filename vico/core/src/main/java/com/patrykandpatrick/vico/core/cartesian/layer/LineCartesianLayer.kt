@@ -109,6 +109,7 @@ protected constructor(
     protected val areaFill: AreaFill? = null,
     public val pointProvider: PointProvider? = null,
     public val pointConnector: PointConnector = PointConnector.Sharp,
+    public val connectionCondition: ((LineCartesianLayerModel.Entry, LineCartesianLayerModel.Entry?) -> Boolean)? = null,
     public val dataLabel: TextComponent? = null,
     public val dataLabelPosition: Position.Vertical = Position.Vertical.Top,
     public val dataLabelValueFormatter: CartesianValueFormatter = CartesianValueFormatter.decimal(),
@@ -250,7 +251,7 @@ protected constructor(
     }
   }
 
-  /** Connects a [LineCartesianLayer] line’s points, thus defining its shape. */
+  /** Connects a [LineCartesianLayer] line's points, thus defining its shape. */
   public fun interface PointConnector {
     /** Connects ([x1], [y2]) and ([x2], [y2]). */
     public fun connect(
@@ -275,6 +276,51 @@ protected constructor(
       public fun cubic(
         @FloatRange(from = 0.0, to = 1.0, fromInclusive = false) curvature: Float = 0.5f
       ): PointConnector = CubicPointConnector(curvature)
+
+      /**
+       * Connects points only when the condition is met. If condition is false, moves to the new point instead of connecting.
+       * @param condition Function that determines whether to connect two points based on their coordinates and context
+       * @param fallbackConnector The connector to use when condition is true (defaults to Sharp)
+       */
+      public fun conditional(
+        condition: (CartesianDrawingContext, Float, Float, Float, Float) -> Boolean,
+        fallbackConnector: PointConnector = Sharp
+      ): PointConnector = ConditionalPointConnector(condition, fallbackConnector)
+
+      /**
+       * Connects points only when the condition is met. If condition is false, moves to the new point instead of connecting.
+       * @param condition Function that determines whether to connect two points based on their coordinates
+       * @param fallbackConnector The connector to use when condition is true (defaults to Sharp)
+       */
+      public fun conditional(
+        condition: (Float, Float, Float, Float) -> Boolean,
+        fallbackConnector: PointConnector = Sharp
+      ): PointConnector = ConditionalPointConnector({ _, x1, y1, x2, y2 -> condition(x1, y1, x2, y2) }, fallbackConnector)
+    }
+  }
+
+  /**
+   * A PointConnector that only connects points when a condition is met.
+   * If the condition is false, it moves to the new point instead of connecting.
+   */
+  private class ConditionalPointConnector(
+    private val condition: (CartesianDrawingContext, Float, Float, Float, Float) -> Boolean,
+    private val fallbackConnector: PointConnector
+  ) : PointConnector {
+    override fun connect(
+      context: CartesianDrawingContext,
+      path: Path,
+      x1: Float,
+      y1: Float,
+      x2: Float,
+      y2: Float,
+    ) {
+      if (condition(context, x1, y1, x2, y2)) {
+        fallbackConnector.connect(context, path, x1, y1, x2, y2)
+      } else {
+        // Move to the new point instead of connecting
+        path.moveTo(x2, y2)
+      }
     }
   }
 
@@ -414,22 +460,33 @@ protected constructor(
         val drawingStart =
           layerBounds.getStart(isLtr = isLtr) + drawingStartAlignmentCorrection - scroll
 
+        var previousEntry: LineCartesianLayerModel.Entry? = null
+
         forEachPointInBounds(
           series = series,
           drawingStart = drawingStart,
           pointInfoMap = pointInfoMap,
           drawFullLineLength = line.stroke is LineStroke.Dashed,
-        ) { _, x, y, _, _ ->
+        ) { entry, x, y, _, _ ->
           if (linePath.isEmpty) {
             linePath.moveTo(x, y)
           } else {
-            line.pointConnector.connect(this, linePath, prevX, prevY, x, y)
+            // Check connection condition if provided
+            val shouldConnect = line.connectionCondition?.invoke(previousEntry!!, entry) ?: true
+
+            if (shouldConnect) {
+              line.pointConnector.connect(this, linePath, prevX, prevY, x, y)
+            } else {
+              // Move to the new point without connecting (creates a gap)
+              linePath.moveTo(x, y)
+            }
           }
           prevX = x
           prevY = y
+          previousEntry = entry
         }
 
-        canvas.saveLayer(opacity = drawingModel?.opacity ?: 1f)
+                canvas.saveLayer(opacity = drawingModel?.opacity ?: 1f)
 
         val lineBitmap = getBitmap(cacheKeyNamespace, seriesIndex, "line")
         lineCanvas.setBitmap(lineBitmap)
@@ -437,7 +494,12 @@ protected constructor(
         lineFillCanvas.setBitmap(lineFillBitmap)
         line.draw(context, linePath, lineCanvas, lineFillCanvas, verticalAxisPosition)
         lineCanvas.drawBitmap(lineFillBitmap, 0f, 0f, srcInPaint)
+
+        // Apply clipping to prevent line overflow beyond chart bounds
+        canvas.save()
+        canvas.clipRect(layerBounds)
         canvas.drawBitmap(lineBitmap, 0f, 0f, null)
+        canvas.restore()
 
         forEachPointInBounds(series, drawingStart, pointInfoMap) { entry, x, y, _, _ ->
           updateMarkerTargets(entry, x, y, lineFillBitmap)
@@ -750,7 +812,41 @@ protected constructor(
     )
 
   /** Provides access to [Line] and [Point] factory functions. */
-  public companion object
+  public companion object {
+    /**
+     * Creates a line with a connection condition that only connects points when the condition is true.
+     * @param fill the line fill
+     * @param stroke the line stroke
+     * @param connectionCondition function that determines if two consecutive points should be connected
+     * @param pointProvider optional point provider
+     * @param pointConnector the point connector to use when condition is true
+     * @param dataLabel optional data label
+     * @param dataLabelPosition the data label position
+     * @param dataLabelValueFormatter the data label value formatter
+     * @param dataLabelRotationDegrees the data label rotation
+     */
+    public fun withConnectionCondition(
+      fill: LineFill,
+      stroke: LineStroke = LineStroke.Continuous(),
+      connectionCondition: (LineCartesianLayerModel.Entry, LineCartesianLayerModel.Entry?) -> Boolean,
+      pointProvider: PointProvider? = null,
+      pointConnector: PointConnector = PointConnector.Sharp,
+      dataLabel: TextComponent? = null,
+      dataLabelPosition: Position.Vertical = Position.Vertical.Top,
+      dataLabelValueFormatter: CartesianValueFormatter = CartesianValueFormatter.decimal(),
+      dataLabelRotationDegrees: Float = 0f,
+    ): Line = Line(
+      fill = fill,
+      stroke = stroke,
+      pointProvider = pointProvider,
+      pointConnector = pointConnector,
+      connectionCondition = connectionCondition,
+      dataLabel = dataLabel,
+      dataLabelPosition = dataLabelPosition,
+      dataLabelValueFormatter = dataLabelValueFormatter,
+      dataLabelRotationDegrees = dataLabelRotationDegrees,
+    )
+  }
 }
 
 internal fun CartesianDrawingContext.getCanvasSplitY(

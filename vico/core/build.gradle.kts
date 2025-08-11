@@ -40,3 +40,26 @@ dependencies {
   testImplementation(libs.mockK)
   testImplementation(libs.testCore)
 }
+
+publishing {
+    publications {
+        create<MavenPublication>("gpr") {
+            run {
+                groupId = "com.dmdbrands.lib"
+                artifactId = "vico-core"
+                version = "1.2.0-alpha2"
+                artifact("build/outputs/aar/core-release.aar")
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/dmdbrands/vico")
+            credentials {
+                username = System.getenv("GPR_USER") ?: ""
+                password = System.getenv("GPR_API_KEY") ?: ""
+            }
+        }
+    }
+}

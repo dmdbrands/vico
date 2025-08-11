@@ -98,6 +98,7 @@ public fun LineCartesianLayer.Companion.rememberLine(
   areaFill: LineCartesianLayer.AreaFill? = null,
   pointProvider: LineCartesianLayer.PointProvider? = null,
   pointConnector: LineCartesianLayer.PointConnector = LineCartesianLayer.PointConnector.Sharp,
+  connectionCondition: ((com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry, com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry?) -> Boolean)? = null,
   dataLabel: TextComponent? = null,
   dataLabelPosition: Position.Vertical = Position.Vertical.Top,
   dataLabelValueFormatter: CartesianValueFormatter = CartesianValueFormatter.Default,
@@ -109,9 +110,10 @@ public fun LineCartesianLayer.Companion.rememberLine(
     areaFill,
     pointProvider,
     pointConnector,
+    connectionCondition,
     dataLabel,
     dataLabelPosition,
-    dataLabelRotationDegrees,
+    dataLabelValueFormatter,
     dataLabelRotationDegrees,
   ) {
     LineCartesianLayer.Line(
@@ -120,6 +122,7 @@ public fun LineCartesianLayer.Companion.rememberLine(
       areaFill,
       pointProvider,
       pointConnector,
+      connectionCondition,
       dataLabel,
       dataLabelPosition,
       dataLabelValueFormatter,
@@ -127,11 +130,44 @@ public fun LineCartesianLayer.Companion.rememberLine(
     )
   }
 
+/** Creates and remembers a [LineCartesianLayer.Line] with a connection condition. */
+@Composable
+public fun LineCartesianLayer.Companion.rememberLineWithConnectionCondition(
+  fill: LineCartesianLayer.LineFill =
+    vicoTheme.lineCartesianLayerColors.first().let { color ->
+      remember(color) { LineCartesianLayer.LineFill.single(fill(color)) }
+    },
+  stroke: LineCartesianLayer.LineStroke = LineCartesianLayer.LineStroke.continuous(),
+  connectionCondition: (com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry, com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry?) -> Boolean,
+  areaFill: LineCartesianLayer.AreaFill? = null,
+  pointProvider: LineCartesianLayer.PointProvider? = null,
+  pointConnector: LineCartesianLayer.PointConnector = LineCartesianLayer.PointConnector.Sharp,
+  dataLabel: TextComponent? = null,
+  dataLabelPosition: Position.Vertical = Position.Vertical.Top,
+  dataLabelValueFormatter: CartesianValueFormatter = CartesianValueFormatter.Default,
+  dataLabelRotationDegrees: Float = 0f,
+): LineCartesianLayer.Line =
+  rememberLine(
+    fill = fill,
+    stroke = stroke,
+    areaFill = areaFill,
+    pointProvider = pointProvider,
+    pointConnector = pointConnector,
+    connectionCondition = connectionCondition,
+    dataLabel = dataLabel,
+    dataLabelPosition = dataLabelPosition,
+    dataLabelValueFormatter = dataLabelValueFormatter,
+    dataLabelRotationDegrees = dataLabelRotationDegrees,
+  )
+
+
+
 /** Creates a [LineCartesianLayer.Point]. */
 public fun LineCartesianLayer.Companion.point(
   component: Component,
   size: Dp = Defaults.POINT_SIZE.dp,
 ): LineCartesianLayer.Point = LineCartesianLayer.Point(component, size.value)
+
 
 private val StrokeCap.paintCap: Paint.Cap
   get() =
