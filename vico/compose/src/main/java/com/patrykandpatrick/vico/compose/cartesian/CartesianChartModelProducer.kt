@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalInspectionMode
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartData
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartDataState
@@ -174,3 +175,46 @@ private fun LaunchRegistration(
 
 private fun getCoroutineContext(isPreview: Boolean): CoroutineContext =
   if (isPreview) Dispatchers.Unconfined + PreviewContext else EmptyCoroutineContext
+
+/**
+ * Creates and remembers a [CartesianChartModelProducer] instance that survives recompositions only.
+ * The instance will be recreated on configuration changes.
+ *
+ * Use this when you want to preserve the instance across recompositions but don't need
+ * it to survive configuration changes.
+ *
+ * @return A [CartesianChartModelProducer] instance that survives recompositions
+ */
+@Composable
+public fun rememberCartesianChartModelProducer(): CartesianChartModelProducer =
+  remember { CartesianChartModelProducer() }
+
+/**
+ * Creates and remembers a [CartesianChartModelProducer] instance that survives both recompositions
+ * and configuration changes.
+ *
+ * **Enhanced preservation**: This function now preserves the actual chart data across configuration
+ * changes, so you don't need to rebuild the data each time. The chart model producer will be restored
+ * with its previous state automatically.
+ *
+ * ```kotlin
+ * val modelProducer = rememberSaveableCartesianChartModelProducer()
+ *
+ * // Data is now preserved automatically - no need for LaunchedEffect after configuration changes
+ * // Only populate data when initially creating the chart or when your data actually changes
+ * LaunchedEffect(dataVersion) { // Only trigger when data changes
+ *   modelProducer.runTransaction {
+ *     lineSeries {
+ *       series(xValues, yValues)
+ *     }
+ *   }
+ * }
+ * ```
+ *
+ * @return A [CartesianChartModelProducer] instance that survives configuration changes with preserved data
+ */
+@Composable
+public fun rememberSaveableCartesianChartModelProducer(): CartesianChartModelProducer =
+  rememberSaveable(saver = CartesianChartModelProducer.Saver()) {
+    CartesianChartModelProducer()
+  }

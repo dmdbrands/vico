@@ -18,6 +18,7 @@ materialIcons = "1.7.3"
 mavenPublish = "0.32.0"
 mockK = "1.14.2"
 testCore = "1.6.1"
+runtimeSaveable = "1.9.0"
 
 [libraries]
 activityCompose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity" }
@@ -34,6 +35,7 @@ composeMaterial3 = { group = "androidx.compose.material3", name = "material3" }
 composeMultiplatform = { group = "org.jetbrains.compose", name = "compose-gradle-plugin", version.ref = "composeMultiplatform" }
 composeNavigation = { group = "org.jetbrains.androidx.navigation", name = "navigation-compose", version.ref = "composeNavigation" }
 composePreview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+composeRuntimeSaveable = { group = "androidx.compose.runtime", name = "runtime-saveable" }
 composeStableMarker = { group = "com.github.skydoves", name = "compose-stable-marker", version.ref = "composeStableMarker" }
 composeUI = { group = "androidx.compose.ui", name = "ui" }
 composeUITooling = { group = "androidx.compose.ui", name = "ui-tooling" }
@@ -52,3 +54,4 @@ materialIcons = { group = "org.jetbrains.compose.material", name = "material-ico
 mavenPublish = { group = "com.vanniktech.maven.publish", name = "com.vanniktech.maven.publish.gradle.plugin", version.ref = "mavenPublish" }
 mockK = { group = "io.mockk", name = "mockk", version.ref = "mockK" }
 testCore = { group = "androidx.test", name = "core-ktx", version.ref = "testCore" }
+runtimeSaveable = { group = "androidx.compose.runtime", name = "runtime-saveable", version.ref = "runtimeSaveable" }

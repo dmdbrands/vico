@@ -30,6 +30,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -42,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -109,7 +114,9 @@ import kotlin.times
  * when x1 is odd and x2 is even, combined with dynamic Y range updates.
  */
 @Composable
-fun DynamicYRangeExample() {
+fun DynamicYRangeExample(
+  onNavigateBack: () -> Unit = {}
+) {
   // Sample data
   // Sample data
   val xLabels = List(50) {
@@ -252,11 +259,31 @@ fun DynamicYRangeExample() {
   ) {
     // Controls
     Column {
+      Text(
+        text = "Dynamic Y Range Example",
+        style = MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.Bold
+      )
+
+      Text(
+        text = "Screen 2 of 2",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+
       Text("Dynamic Y Range with Timestamp Data Example")
       Text("Using timestamp data with one-day x-step. Max 7 labels shown.",
            style = MaterialTheme.typography.bodySmall)
       Text("Current Y Range: ${manualMinY.toInt()} - ${manualMaxY.toInt()}",
            style = MaterialTheme.typography.bodySmall)
+
+      Spacer(modifier = Modifier.height(16.dp))
+
+      // Back button
+      Button(onClick = onNavigateBack) {
+        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        Text("← Back to Saveable State Demo")
+      }
 
       Spacer(modifier = Modifier.height(16.dp))
 

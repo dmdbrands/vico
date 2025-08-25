@@ -59,6 +59,7 @@ kotlin {
     androidMain.dependencies {
       implementation(libs.activityCompose)
       implementation(libs.material)
+      implementation(libs.composeNavigation)
       implementation(project(":sample:compose"))
       implementation(project(":sample:multiplatform"))
       implementation(project(":sample:views"))

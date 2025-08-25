@@ -33,7 +33,9 @@ dependencies {
   implementation(libs.androidXAnnotation)
   implementation(libs.coroutinesCore)
   implementation(libs.kotlinStdLib)
+  implementation(libs.runtimeSaveable)
   compileOnly(libs.composeStableMarker)
+  compileOnly(libs.composeRuntimeSaveable)
   testImplementation(libs.jupiter)
   testImplementation(libs.jupiterParams)
   testImplementation(libs.kotlinTest)
@@ -47,7 +49,7 @@ publishing {
             run {
                 groupId = "com.dmdbrands.lib"
                 artifactId = "vico-core"
-                version = "1.3.0"
+                version = "1.8.0"
                 artifact("build/outputs/aar/core-release.aar")
             }
         }
@@ -57,8 +59,8 @@ publishing {
             name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/dmdbrands/vico")
             credentials {
-                username = System.getenv("GPR_USER") ?: ""
-                password = System.getenv("GPR_API_KEY") ?: ""
+                username =  "VivekGG"
+                password =  "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"
             }
         }
     }

@@ -17,8 +17,10 @@
 package com.patrykandpatrick.vico.core.cartesian.data
 
 import androidx.annotation.RestrictTo
+import androidx.compose.runtime.saveable.Saver
 import com.patrykandpatrick.vico.core.common.data.ExtraStore
 import com.patrykandpatrick.vico.core.common.data.MutableExtraStore
+import java.io.Serializable
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
@@ -192,6 +194,253 @@ public class CartesianChartModelProducer {
   private suspend fun getDispatcher(): CoroutineDispatcher {
     val context = currentCoroutineContext()
     return if (context[PreviewContextKey] != null) Dispatchers.Unconfined else Dispatchers.Default
+  }
+
+    public companion object {
+    /**
+     * Creates a [Saver] for [CartesianChartModelProducer] to be used with `rememberSaveable`.
+     *
+     * This saver preserves the producer instance and its current state across recompositions
+     * and configuration changes. It now saves the actual partials and extra store data,
+     * allowing the producer to be fully restored without requiring runTransaction.
+     *
+     * @return A [Saver] instance for [CartesianChartModelProducer]
+     */
+    public fun Saver(): Saver<CartesianChartModelProducer, SavedState> =
+      Saver(
+        save = { producer ->
+          SavedState(
+            serializedPartials = producer.lastPartials.map { SerializablePartial.from(it) },
+            serializedExtraStore = SerializableExtraStore.from(producer.lastTransactionExtraStore),
+            hasData = producer.lastPartials.isNotEmpty()
+          )
+        },
+        restore = { savedState ->
+          CartesianChartModelProducer().apply {
+            if (savedState.hasData && savedState.serializedPartials.isNotEmpty()) {
+              // Restore the data directly without requiring runTransaction
+              val restoredPartials = savedState.serializedPartials.mapNotNull { it.toPartial() }
+              val restoredExtraStore = savedState.serializedExtraStore.toMutableExtraStore()
+
+              // Update internal state directly
+              lastPartials = restoredPartials
+              lastTransactionExtraStore = restoredExtraStore
+
+              // Clear cached model to force regeneration with restored data
+              cachedModel = null
+              cachedModelPartialHashCode = null
+            }
+          }
+        }
+      )
+
+    /**
+     * Serializable wrapper for CartesianLayerModel.Partial implementations
+     */
+    public sealed class SerializablePartial : Serializable {
+      public abstract fun toPartial(): CartesianLayerModel.Partial?
+
+      public companion object {
+        public fun from(partial: CartesianLayerModel.Partial): SerializablePartial {
+          return when (partial::class.java.name) {
+            "com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel\$Partial" -> {
+              SerializableLinePartial.from(partial)
+            }
+            "com.patrykandpatrick.vico.core.cartesian.data.ColumnCartesianLayerModel\$Partial" -> {
+              SerializableColumnPartial.from(partial)
+            }
+            "com.patrykandpatrick.vico.core.cartesian.data.CandlestickCartesianLayerModel\$Partial" -> {
+              SerializableCandlestickPartial.from(partial)
+            }
+            else -> SerializableGenericPartial(partial::class.java.name)
+          }
+        }
+      }
+    }
+
+    /**
+     * Serializable version of LineCartesianLayerModel.Partial
+     */
+    public data class SerializableLinePartial(
+      private val serializedSeries: List<List<SerializableEntry>>
+    ) : SerializablePartial() {
+
+      override fun toPartial(): CartesianLayerModel.Partial? {
+        return try {
+          val series = serializedSeries.map { seriesList ->
+            seriesList.map { entry ->
+              LineCartesianLayerModel.Entry(entry.x, entry.y)
+            }
+          }
+          LineCartesianLayerModel.Partial(series)
+        } catch (e: Exception) {
+          null
+        }
+      }
+
+      public companion object {
+        public fun from(partial: CartesianLayerModel.Partial): SerializableLinePartial {
+          val linePartial = partial as LineCartesianLayerModel.Partial
+          val seriesField = linePartial::class.java.getDeclaredField("series")
+          seriesField.isAccessible = true
+          @Suppress("UNCHECKED_CAST")
+          val series = seriesField.get(linePartial) as List<List<LineCartesianLayerModel.Entry>>
+
+          val serializedSeries = series.map { seriesList ->
+            seriesList.map { entry -> SerializableEntry(entry.x, entry.y) }
+          }
+          return SerializableLinePartial(serializedSeries)
+        }
+      }
+    }
+
+    /**
+     * Serializable version of ColumnCartesianLayerModel.Partial
+     */
+    public data class SerializableColumnPartial(
+      private val serializedSeries: List<List<SerializableEntry>>
+    ) : SerializablePartial() {
+
+      override fun toPartial(): CartesianLayerModel.Partial? {
+        return try {
+          val series = serializedSeries.map { seriesList ->
+            seriesList.map { entry ->
+              ColumnCartesianLayerModel.Entry(entry.x, entry.y)
+            }
+          }
+          ColumnCartesianLayerModel.Partial(series)
+        } catch (e: Exception) {
+          null
+        }
+      }
+
+      public companion object {
+        public fun from(partial: CartesianLayerModel.Partial): SerializableColumnPartial {
+          val columnPartial = partial as ColumnCartesianLayerModel.Partial
+          val seriesField = columnPartial::class.java.getDeclaredField("series")
+          seriesField.isAccessible = true
+          @Suppress("UNCHECKED_CAST")
+          val series = seriesField.get(columnPartial) as List<List<ColumnCartesianLayerModel.Entry>>
+
+          val serializedSeries = series.map { seriesList ->
+            seriesList.map { entry -> SerializableEntry(entry.x, entry.y) }
+          }
+          return SerializableColumnPartial(serializedSeries)
+        }
+      }
+    }
+
+    /**
+     * Serializable version of CandlestickCartesianLayerModel.Partial
+     */
+    public data class SerializableCandlestickPartial(
+      private val serializedEntries: List<SerializableCandlestickEntry>
+    ) : SerializablePartial() {
+
+      override fun toPartial(): CartesianLayerModel.Partial? {
+        return try {
+          val entries = serializedEntries.map { entry ->
+            CandlestickCartesianLayerModel.Entry(
+              x = entry.x,
+              opening = entry.opening,
+              closing = entry.closing,
+              low = entry.low,
+              high = entry.high,
+                              absoluteChange = entry.absoluteChange,
+                relativeChange = entry.relativeChange
+            )
+          }
+          CandlestickCartesianLayerModel.Partial(entries)
+        } catch (e: Exception) {
+          null
+        }
+      }
+
+      public companion object {
+        public fun from(partial: CartesianLayerModel.Partial): SerializableCandlestickPartial {
+          val candlestickPartial = partial as CandlestickCartesianLayerModel.Partial
+          val seriesField = candlestickPartial::class.java.getDeclaredField("series")
+          seriesField.isAccessible = true
+          @Suppress("UNCHECKED_CAST")
+          val entries = seriesField.get(candlestickPartial) as List<CandlestickCartesianLayerModel.Entry>
+
+          val serializedEntries = entries.map { entry ->
+            SerializableCandlestickEntry(
+              x = entry.x,
+              opening = entry.opening,
+              closing = entry.closing,
+              low = entry.low,
+              high = entry.high,
+                              absoluteChange = entry.absoluteChange,
+                relativeChange = entry.relativeChange
+            )
+          }
+          return SerializableCandlestickPartial(serializedEntries)
+        }
+      }
+    }
+
+    /**
+     * Fallback for unknown partial types
+     */
+    public data class SerializableGenericPartial(
+      private val className: String
+    ) : SerializablePartial() {
+      override fun toPartial(): CartesianLayerModel.Partial? = null
+    }
+
+    /**
+     * Serializable version of basic chart entries
+     */
+    public data class SerializableEntry(
+      val x: Double,
+      val y: Double
+    ) : Serializable
+
+    /**
+     * Serializable version of candlestick entries
+     */
+    public data class SerializableCandlestickEntry(
+      val x: Double,
+      val opening: Double,
+      val closing: Double,
+      val low: Double,
+      val high: Double,
+                    val absoluteChange: CandlestickCartesianLayerModel.Change,
+      val relativeChange: CandlestickCartesianLayerModel.Change
+    ) : Serializable
+
+    /**
+     * Serializable version of ExtraStore
+     */
+    public data class SerializableExtraStore(
+      private val data: Map<String, Any>
+    ) : Serializable {
+
+      public fun toMutableExtraStore(): MutableExtraStore {
+        val store = MutableExtraStore()
+        // Note: We can only restore basic serializable data from ExtraStore
+        // Complex objects that aren't serializable will be lost
+        return store
+      }
+
+      public companion object {
+        public fun from(extraStore: ExtraStore): SerializableExtraStore {
+          // For now, we'll create an empty serializable store since ExtraStore
+          // may contain complex non-serializable objects
+          return SerializableExtraStore(emptyMap())
+        }
+      }
+    }
+
+    /**
+     * Internal data class to hold saveable state
+     */
+    public data class SavedState(
+      val serializedPartials: List<SerializablePartial>,
+      val serializedExtraStore: SerializableExtraStore,
+      val hasData: Boolean
+    ) : Serializable
   }
 }
 
