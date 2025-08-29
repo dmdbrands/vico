@@ -219,6 +219,7 @@ fun DynamicYRangeExample(
         value.toInt().toString()
       },
       itemPlacer = horizontalItemPlacer,
+      horizontalLabelPosition = Position.Horizontal.Start
     ),
     visibleLabelsCount = 5
   )

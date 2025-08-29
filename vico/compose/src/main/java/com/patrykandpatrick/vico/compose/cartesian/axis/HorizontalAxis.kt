@@ -16,6 +16,7 @@
 
 package com.patrykandpatrick.vico.compose.cartesian.axis
 
+import android.R.attr.label
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
@@ -25,9 +26,11 @@ import com.patrykandpatrick.vico.core.cartesian.axis.BaseAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.common.Defaults
+import com.patrykandpatrick.vico.core.common.Position
 import com.patrykandpatrick.vico.core.common.component.LineComponent
 import com.patrykandpatrick.vico.core.common.component.TextComponent
 import com.patrykandpatrick.vico.core.common.data.ExtraStore
+import java.nio.file.Files.size
 
 /** Creates and remembers a top [HorizontalAxis]. */
 @Composable
@@ -42,8 +45,9 @@ public fun HorizontalAxis.Companion.rememberTop(
   itemPlacer: HorizontalAxis.ItemPlacer = remember { HorizontalAxis.ItemPlacer.aligned() },
   size: BaseAxis.Size = BaseAxis.Size.auto(),
   titleComponent: TextComponent? = null,
-  visibleLabelCount: Int = 0,
   title: CharSequence? = null,
+  separators: (ExtraStore) -> List<Double> = { emptyList() },
+  horizontalLabelPosition: Position.Horizontal = Position.Horizontal.Center,
 ): HorizontalAxis<Axis.Position.Horizontal.Top> =
   remember(
     line,
@@ -57,7 +61,8 @@ public fun HorizontalAxis.Companion.rememberTop(
     size,
     titleComponent,
     title,
-    visibleLabelCount
+    separators,
+    horizontalLabelPosition
   ) {
     top(
       line,
@@ -71,6 +76,9 @@ public fun HorizontalAxis.Companion.rememberTop(
       size,
       titleComponent,
       title,
+      separators,
+      horizontalLabelPosition
+
     )
   }
 
@@ -89,6 +97,7 @@ public fun HorizontalAxis.Companion.rememberBottom(
   titleComponent: TextComponent? = null,
   title: CharSequence? = null,
   separators: (ExtraStore) -> List<Double> = { emptyList() },
+  horizontalLabelPosition: Position.Horizontal = Position.Horizontal.Center,
 ): HorizontalAxis<Axis.Position.Horizontal.Bottom> =
   remember(
     line,
@@ -103,6 +112,7 @@ public fun HorizontalAxis.Companion.rememberBottom(
     titleComponent,
     title,
     separators,
+    horizontalLabelPosition
   ) {
     bottom(
       line,
@@ -117,5 +127,6 @@ public fun HorizontalAxis.Companion.rememberBottom(
       titleComponent,
       title,
       separators,
+      horizontalLabelPosition
     )
   }

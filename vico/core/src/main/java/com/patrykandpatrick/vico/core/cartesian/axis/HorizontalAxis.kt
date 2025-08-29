@@ -51,6 +51,8 @@ import kotlin.math.min
  *   and guidelines.
  * @property separators returns a list of x values where vertical separator lines should be drawn.
  * @property visibleLabelsCount the number of visible labels to display, used to calculate xSpacing.
+ * @property horizontalLabelPosition defines the horizontal position of the labels relative to the
+ *   axis line.
  */
 public open class HorizontalAxis<P : Axis.Position.Horizontal>
 protected constructor(
@@ -67,6 +69,7 @@ protected constructor(
   titleComponent: TextComponent?,
   title: CharSequence?,
   public val separators: (ExtraStore) -> List<Double> = { emptyList() },
+  public val horizontalLabelPosition: Position.Horizontal = Position.Horizontal.Center,
 ) :
   BaseAxis<P>(
     line,
@@ -86,6 +89,32 @@ protected constructor(
         Axis.Position.Horizontal.Top -> Position.Vertical.Top
         Axis.Position.Horizontal.Bottom -> Position.Vertical.Bottom
       }
+
+  protected val textHorizontalPosition: Position.Horizontal
+    get() = horizontalLabelPosition
+
+  protected fun CartesianDrawingContext.getTickTopY(): Float {
+    val onTop = position == Axis.Position.Horizontal.Top
+    val base = if (onTop) bounds.bottom else bounds.top
+    return when (horizontalLabelPosition) {
+      Position.Horizontal.Start -> if (onTop) base - lineThickness - tickLength else base
+      Position.Horizontal.End -> if (onTop) base - lineThickness else base + tickLength
+      Position.Horizontal.Center -> if (onTop) base - lineThickness - tickLength.half else base + tickLength.half
+    }
+  }
+
+  protected fun CartesianDrawingContext.getTickBottomY(): Float = getTickTopY() + lineThickness + tickLength
+
+  protected fun CartesianDrawingContext.getLabelY(): Float {
+    val onTop = position == Axis.Position.Horizontal.Top
+    return if (areLabelsOutsideAtTopOrInsideAtBottom == onTop) getTickTopY() else getTickBottomY()
+  }
+
+  protected val areLabelsOutsideAtTopOrInsideAtBottom: Boolean
+    get() =
+      position == Axis.Position.Horizontal.Top && horizontalLabelPosition == Position.Horizontal.Start ||
+        position == Axis.Position.Horizontal.Bottom && horizontalLabelPosition == Position.Horizontal.End ||
+        horizontalLabelPosition == Position.Horizontal.Center
 
   /** @suppress */
   @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -114,18 +143,12 @@ protected constructor(
     titleComponent,
     title,
     { emptyList() },
+    Position.Horizontal.Center,
   )
 
   override fun drawUnderLayers(context: CartesianDrawingContext) {
     with(context) {
       val saveCount = canvas.save()
-      val tickTop =
-        if (position == Axis.Position.Horizontal.Top) {
-          bounds.bottom - lineThickness - tickLength
-        } else {
-          bounds.top
-        }
-      val tickBottom = tickTop + lineThickness + tickLength
       val fullXRange = internalGetFullXRange(layerDimensions)
       val maxLabelWidth = getMaxLabelWidth(layerDimensions, fullXRange)
 
@@ -137,8 +160,6 @@ protected constructor(
           itemPlacer.getEndLayerMargin(this, layerDimensions, tickThickness, maxLabelWidth),
         max(bounds.bottom, layerBounds.bottom),
       )
-
-      val textY = if (position == Axis.Position.Horizontal.Top) tickTop else tickBottom
       val baseCanvasX =
         bounds.getStart(isLtr) - scroll + layerDimensions.startPadding * layoutDirectionMultiplier
       val visibleXRange = getVisibleXRange()
@@ -161,7 +182,8 @@ protected constructor(
           text =
             valueFormatter.formatForAxis(context = this, value = x, verticalAxisPosition = null),
           x = canvasX,
-          y = textY,
+          y = getLabelY(),
+          horizontalPosition = textHorizontalPosition,
           verticalPosition = position.textVerticalPosition,
           maxWidth = maxWidth,
           maxHeight = (bounds.height() - tickLength - lineThickness.half).toInt(),
@@ -172,8 +194,8 @@ protected constructor(
           tick?.drawVertical(
             context = this,
             x = canvasX + getLinesCorrectionX(x, fullXRange),
-            top = tickTop,
-            bottom = tickBottom,
+            top = getTickTopY(),
+            bottom = getTickBottomY(),
           )
         }
       }
@@ -187,8 +209,8 @@ protected constructor(
                 layerDimensions.xSpacing *
                 layoutDirectionMultiplier +
               getLinesCorrectionX(x, fullXRange),
-          top = tickTop,
-          bottom = tickBottom,
+          top = getTickTopY(),
+          bottom = getTickBottomY(),
         )
       }
 
@@ -498,6 +520,7 @@ protected constructor(
     titleComponent: TextComponent? = this.titleComponent,
     title: CharSequence? = this.title,
     separators: (ExtraStore) -> List<Double> = this.separators,
+    horizontalLabelPosition: Position.Horizontal = this.horizontalLabelPosition,
   ): HorizontalAxis<P> {
     return HorizontalAxis(
       position,
@@ -513,13 +536,17 @@ protected constructor(
       titleComponent,
       title,
       separators,
+      horizontalLabelPosition,
     )
   }
 
   override fun equals(other: Any?): Boolean =
-    super.equals(other) && other is HorizontalAxis<*> && itemPlacer == other.itemPlacer
+    super.equals(other) && other is HorizontalAxis<*> &&
+    itemPlacer == other.itemPlacer &&
+    horizontalLabelPosition == other.horizontalLabelPosition
 
-  override fun hashCode(): Int = 31 * super.hashCode() + itemPlacer.hashCode()
+  override fun hashCode(): Int =
+    31 * (31 * super.hashCode() + itemPlacer.hashCode()) + horizontalLabelPosition.hashCode()
 
   /** Determines for what _x_ values a [HorizontalAxis] displays labels, ticks, and guidelines. */
   public interface ItemPlacer {
@@ -660,6 +687,7 @@ protected constructor(
       titleComponent: TextComponent? = null,
       title: CharSequence? = null,
       separators: (ExtraStore) -> List<Double> = { emptyList() },
+      horizontalLabelPosition: Position.Horizontal = Position.Horizontal.Center,
     ): HorizontalAxis<Axis.Position.Horizontal.Top> =
       HorizontalAxis(
         Axis.Position.Horizontal.Top,
@@ -675,6 +703,7 @@ protected constructor(
         titleComponent,
         title,
         separators,
+        horizontalLabelPosition,
       )
 
     /** Creates a bottom [HorizontalAxis]. */
@@ -691,6 +720,7 @@ protected constructor(
       titleComponent: TextComponent? = null,
       title: CharSequence? = null,
       separators: (ExtraStore) -> List<Double> = { emptyList() },
+      horizontalLabelPosition: Position.Horizontal = Position.Horizontal.Center,
     ): HorizontalAxis<Axis.Position.Horizontal.Bottom> =
       HorizontalAxis(
         Axis.Position.Horizontal.Bottom,
@@ -706,6 +736,7 @@ protected constructor(
         titleComponent,
         title,
         separators,
+        horizontalLabelPosition,
       )
   }
 }
