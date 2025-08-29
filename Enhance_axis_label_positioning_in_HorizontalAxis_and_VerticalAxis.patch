@@ -1,0 +1,649 @@
+Subject: [PATCH] Enhance axis label positioning in HorizontalAxis and VerticalAxis
+---
+Index: sample/compose/src/main/kotlin/com/patrykandpatrick/vico/sample/compose/SaveableStateDemo.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/sample/compose/src/main/kotlin/com/patrykandpatrick/vico/sample/compose/SaveableStateDemo.kt b/sample/compose/src/main/kotlin/com/patrykandpatrick/vico/sample/compose/SaveableStateDemo.kt
+--- a/sample/compose/src/main/kotlin/com/patrykandpatrick/vico/sample/compose/SaveableStateDemo.kt	(revision c820eb238fcfb4f502a4b9b18f68692e907b18f5)
++++ b/sample/compose/src/main/kotlin/com/patrykandpatrick/vico/sample/compose/SaveableStateDemo.kt	(revision c2576687f862e0288f942f45c38f40272ea28ac3)
+@@ -20,11 +20,15 @@
+ import androidx.compose.animation.core.animate
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.automirrored.filled.ArrowForward
+ import androidx.compose.material3.Button
++import androidx.compose.material3.ButtonDefaults
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.Text
+@@ -32,6 +36,7 @@
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableIntStateOf
++import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.runtime.setValue
+@@ -53,8 +58,14 @@
+ import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+ import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
+ import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
++import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
++import com.patrykandpatrick.vico.compose.common.component.shapeComponent
++import com.patrykandpatrick.vico.compose.common.fill
++import com.patrykandpatrick.vico.compose.common.insets
++import com.patrykandpatrick.vico.core.common.shape.CorneredShape
+ import kotlinx.coroutines.runBlocking
+ import kotlin.random.Random
++import androidx.compose.ui.unit.sp
+ 
+ /**
+  * Demo showing how rememberSaveableCartesianChartModelProducer preserves chart data
+@@ -74,6 +85,22 @@
+ 
+   var dataVersion by rememberSaveable { mutableIntStateOf(0) }
+ 
++  // Label positioning demo state
++  var horizontalLabelPosition by rememberSaveable { mutableStateOf(HorizontalAxis.LabelPosition.Between) }
++  var verticalLabelPosition by rememberSaveable { mutableStateOf(VerticalAxis.LabelPosition.Between) }
++
++  // Custom text component for better label visibility
++  val customLabelComponent = rememberTextComponent(
++    color = MaterialTheme.colorScheme.onSurface,
++    textSize = 12.sp,
++    background = shapeComponent(
++      fill = fill(MaterialTheme.colorScheme.surfaceVariant),
++      shape = CorneredShape.rounded(4f),
++      strokeFill = fill(MaterialTheme.colorScheme.outline),
++      strokeThickness = 1.dp
++    )
++  )
++
+   // Only rebuild data when dataVersion changes (user action), not on configuration changes or navigation
+   LaunchedEffect(Unit) {
+       // Initialize with some default data
+@@ -92,7 +119,7 @@
+   }
+ 
+   Column(
+-    modifier = modifier.padding(16.dp),
++    modifier = modifier.padding(16.dp).verticalScroll(rememberScrollState()),
+     verticalArrangement = Arrangement.spacedBy(16.dp)
+   ) {
+     Text(
+@@ -129,18 +156,128 @@
+       Text("Generate New Data (Version: $dataVersion)")
+     }
+ 
++    Text(
++      text = "Label Positioning Demo",
++      style = MaterialTheme.typography.titleMedium,
++      fontWeight = FontWeight.Bold
++    )
++
++    Text(
++      text = "This demo showcases the new label positioning functionality for both axes. " +
++            "You can change where labels appear relative to the axis lines and see the changes in real-time.",
++      style = MaterialTheme.typography.bodyMedium,
++      color = MaterialTheme.colorScheme.onSurfaceVariant
++    )
++
++    Text(
++      text = "Horizontal Axis Label Position:",
++      style = MaterialTheme.typography.bodySmall,
++      fontWeight = FontWeight.Medium,
++      color = MaterialTheme.colorScheme.onSurfaceVariant
++    )
++
++    Text(
++      text = "• OnLine: Labels appear centered on the axis line\n" +
++            "• Between: Labels appear centered between grid lines\n" +
++            "• Auto: Labels follow the default behavior",
++      style = MaterialTheme.typography.bodySmall,
++      color = MaterialTheme.colorScheme.onSurfaceVariant
++    )
++
++    Row(
++      modifier = Modifier.fillMaxWidth(),
++      horizontalArrangement = Arrangement.spacedBy(8.dp)
++    ) {
++      HorizontalAxis.LabelPosition.values().forEach { position ->
++        Button(
++          onClick = { horizontalLabelPosition = position },
++          modifier = Modifier.weight(1f),
++          colors = ButtonDefaults.buttonColors(
++            containerColor = if (horizontalLabelPosition == position)
++              MaterialTheme.colorScheme.primary
++            else
++              MaterialTheme.colorScheme.secondary
++          )
++        ) {
++          Text(
++            text = when (position) {
++              HorizontalAxis.LabelPosition.OnLine -> "OnLine"
++              HorizontalAxis.LabelPosition.Between -> "Between"
++              HorizontalAxis.LabelPosition.Auto -> "Auto"
++            },
++            style = MaterialTheme.typography.bodySmall
++          )
++        }
++      }
++    }
++
++    Text(
++      text = "Vertical Axis Label Position:",
++      style = MaterialTheme.typography.bodySmall,
++      fontWeight = FontWeight.Medium,
++      color = MaterialTheme.colorScheme.onSurfaceVariant
++    )
++
++    Text(
++      text = "• OnLine: Labels appear on the axis line itself\n" +
++            "• Between: Labels appear between grid lines (above/below)\n" +
++            "• Auto: Labels follow the horizontalLabelPosition setting",
++      style = MaterialTheme.typography.bodySmall,
++      color = MaterialTheme.colorScheme.onSurfaceVariant
++    )
++
++    Row(
++      modifier = Modifier.fillMaxWidth(),
++      horizontalArrangement = Arrangement.spacedBy(8.dp)
++    ) {
++      VerticalAxis.LabelPosition.values().forEach { position ->
++        Button(
++          onClick = { verticalLabelPosition = position },
++          modifier = Modifier.weight(1f),
++          colors = ButtonDefaults.buttonColors(
++            containerColor = if (verticalLabelPosition == position)
++              MaterialTheme.colorScheme.primary
++            else
++              MaterialTheme.colorScheme.secondary
++          )
++        ) {
++          Text(
++            text = when (position) {
++              VerticalAxis.LabelPosition.OnLine -> "OnLine"
++              VerticalAxis.LabelPosition.Between -> "Between"
++              VerticalAxis.LabelPosition.Auto -> "Auto"
++            },
++            style = MaterialTheme.typography.bodySmall
++          )
++        }
++      }
++    }
++
+     Text(
+       text = "Current scroll position: ${scrollState.value.toInt()}px",
+       style = MaterialTheme.typography.bodySmall,
+       color = MaterialTheme.colorScheme.onSurfaceVariant
+     )
+ 
++    Text(
++      text = "Note: Label positioning preferences are also saved and restored across configuration changes and navigation!",
++      style = MaterialTheme.typography.bodySmall,
++      color = MaterialTheme.colorScheme.primary,
++      fontWeight = FontWeight.Medium
++    )
++
+     CartesianChartHost(
+       chart = rememberCartesianChart(
+         rememberColumnCartesianLayer(),
+         rememberLineCartesianLayer(),
+-        startAxis = VerticalAxis.rememberStart(),
+-        bottomAxis = HorizontalAxis.rememberBottom(),
++        startAxis = VerticalAxis.rememberStart(
++          label = customLabelComponent,
++          labelPosition = verticalLabelPosition
++        ),
++        bottomAxis = HorizontalAxis.rememberBottom(
++          label = customLabelComponent,
++          labelPosition = horizontalLabelPosition
++        ),
+       ),
+       animateIn = false,
+       modelProducer = modelProducer,
+Index: vico/compose/src/main/java/com/patrykandpatrick/vico/compose/cartesian/axis/HorizontalAxis.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vico/compose/src/main/java/com/patrykandpatrick/vico/compose/cartesian/axis/HorizontalAxis.kt b/vico/compose/src/main/java/com/patrykandpatrick/vico/compose/cartesian/axis/HorizontalAxis.kt
+--- a/vico/compose/src/main/java/com/patrykandpatrick/vico/compose/cartesian/axis/HorizontalAxis.kt	(revision c820eb238fcfb4f502a4b9b18f68692e907b18f5)
++++ b/vico/compose/src/main/java/com/patrykandpatrick/vico/compose/cartesian/axis/HorizontalAxis.kt	(revision c2576687f862e0288f942f45c38f40272ea28ac3)
+@@ -44,6 +44,8 @@
+   titleComponent: TextComponent? = null,
+   visibleLabelCount: Int = 0,
+   title: CharSequence? = null,
++  separators: (ExtraStore) -> List<Double> = { emptyList() },
++  labelPosition: HorizontalAxis.LabelPosition = HorizontalAxis.LabelPosition.Between,
+ ): HorizontalAxis<Axis.Position.Horizontal.Top> =
+   remember(
+     line,
+@@ -57,7 +59,9 @@
+     size,
+     titleComponent,
+     title,
+-    visibleLabelCount
++    visibleLabelCount,
++    separators,
++    labelPosition
+   ) {
+     top(
+       line,
+@@ -71,6 +75,8 @@
+       size,
+       titleComponent,
+       title,
++      separators,
++      labelPosition,
+     )
+   }
+ 
+@@ -89,6 +95,7 @@
+   titleComponent: TextComponent? = null,
+   title: CharSequence? = null,
+   separators: (ExtraStore) -> List<Double> = { emptyList() },
++  labelPosition: HorizontalAxis.LabelPosition = HorizontalAxis.LabelPosition.Between,
+ ): HorizontalAxis<Axis.Position.Horizontal.Bottom> =
+   remember(
+     line,
+@@ -103,6 +110,7 @@
+     titleComponent,
+     title,
+     separators,
++    labelPosition,
+   ) {
+     bottom(
+       line,
+@@ -117,5 +125,6 @@
+       titleComponent,
+       title,
+       separators,
++      labelPosition,
+     )
+   }
+Index: vico/compose/src/main/java/com/patrykandpatrick/vico/compose/cartesian/axis/VerticalAxis.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vico/compose/src/main/java/com/patrykandpatrick/vico/compose/cartesian/axis/VerticalAxis.kt b/vico/compose/src/main/java/com/patrykandpatrick/vico/compose/cartesian/axis/VerticalAxis.kt
+--- a/vico/compose/src/main/java/com/patrykandpatrick/vico/compose/cartesian/axis/VerticalAxis.kt	(revision c820eb238fcfb4f502a4b9b18f68692e907b18f5)
++++ b/vico/compose/src/main/java/com/patrykandpatrick/vico/compose/cartesian/axis/VerticalAxis.kt	(revision c2576687f862e0288f942f45c38f40272ea28ac3)
+@@ -22,6 +22,7 @@
+ import androidx.compose.ui.unit.dp
+ import com.patrykandpatrick.vico.core.cartesian.axis.Axis
+ import com.patrykandpatrick.vico.core.cartesian.axis.BaseAxis
++import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
+ import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
+ import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
+ import com.patrykandpatrick.vico.core.common.Defaults
+@@ -46,6 +47,7 @@
+   size: BaseAxis.Size = BaseAxis.Size.auto(),
+   titleComponent: TextComponent? = null,
+   title: CharSequence? = null,
++  labelPosition: VerticalAxis.LabelPosition = VerticalAxis.LabelPosition.Between,
+ ): VerticalAxis<Axis.Position.Vertical.Start> =
+   remember(
+     line,
+@@ -61,6 +63,7 @@
+     size,
+     titleComponent,
+     title,
++    labelPosition,
+   ) {
+     start(
+       line,
+@@ -76,6 +79,7 @@
+       size,
+       titleComponent,
+       title,
++      labelPosition,
+     )
+   }
+ 
+@@ -96,6 +100,7 @@
+   size: BaseAxis.Size = BaseAxis.Size.auto(),
+   titleComponent: TextComponent? = null,
+   title: CharSequence? = null,
++  labelPosition: VerticalAxis.LabelPosition = VerticalAxis.LabelPosition.Between,
+ ): VerticalAxis<Axis.Position.Vertical.End> =
+   remember(
+     line,
+@@ -111,6 +116,7 @@
+     size,
+     titleComponent,
+     title,
++    labelPosition,
+   ) {
+     end(
+       line,
+@@ -126,5 +132,6 @@
+       size,
+       titleComponent,
+       title,
++      labelPosition,
+     )
+   }
+Index: vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/HorizontalAxis.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/HorizontalAxis.kt b/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/HorizontalAxis.kt
+--- a/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/HorizontalAxis.kt	(revision c820eb238fcfb4f502a4b9b18f68692e907b18f5)
++++ b/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/HorizontalAxis.kt	(revision c2576687f862e0288f942f45c38f40272ea28ac3)
+@@ -51,6 +51,7 @@
+  *   and guidelines.
+  * @property separators returns a list of x values where vertical separator lines should be drawn.
+  * @property visibleLabelsCount the number of visible labels to display, used to calculate xSpacing.
++ * @property labelPosition defines the position of the labels relative to the axis line.
+  */
+ public open class HorizontalAxis<P : Axis.Position.Horizontal>
+ protected constructor(
+@@ -67,6 +68,7 @@
+   titleComponent: TextComponent?,
+   title: CharSequence?,
+   public val separators: (ExtraStore) -> List<Double> = { emptyList() },
++  public val labelPosition: LabelPosition = LabelPosition.Between,
+ ) :
+   BaseAxis<P>(
+     line,
+@@ -114,6 +116,7 @@
+     titleComponent,
+     title,
+     { emptyList() },
++    LabelPosition.Between,
+   )
+ 
+   override fun drawUnderLayers(context: CartesianDrawingContext) {
+@@ -156,11 +159,30 @@
+         val maxWidth =
+           ceil(min(x - previousX, nextX - x) / ranges.xStep * layerDimensions.xSpacing).toInt()
+ 
++        // Calculate label X position based on labelPosition
++        val labelX = when (labelPosition) {
++          LabelPosition.OnLine -> canvasX
++          LabelPosition.Between -> {
++            // Position label centered between grid lines
++            // Calculate the next grid line position
++            val nextX = labelValues.getOrNull(index + 1) ?: (fullXRange.endInclusive.doubled - x)
++            val nextCanvasX = baseCanvasX +
++              ((nextX - ranges.minX) / ranges.xStep).toFloat() *
++                layerDimensions.xSpacing *
++                layoutDirectionMultiplier
++            // Calculate the center point between current and next grid line
++            val centerX = (canvasX + nextCanvasX) / 2f
++            // Position the label so its center aligns with the center point
++            centerX
++          }
++          LabelPosition.Auto -> canvasX
++        }
++
+         label?.draw(
+           context = this,
+           text =
+             valueFormatter.formatForAxis(context = this, value = x, verticalAxisPosition = null),
+-          x = canvasX,
++          x = labelX,
+           y = textY,
+           verticalPosition = position.textVerticalPosition,
+           maxWidth = maxWidth,
+@@ -391,9 +413,23 @@
+       ),
+       itemPlacer.getEndLayerMargin(context, layerDimensions, context.tickThickness, maxLabelWidth),
+     )
++
++    // Update margins based on labelPosition
+     when (position) {
+-      Axis.Position.Horizontal.Top -> layerMargins.ensureValuesAtLeast(top = height)
+-      Axis.Position.Horizontal.Bottom -> layerMargins.ensureValuesAtLeast(bottom = height)
++      Axis.Position.Horizontal.Top -> {
++        when (labelPosition) {
++          LabelPosition.OnLine -> layerMargins.ensureValuesAtLeast(top = height)
++          LabelPosition.Between -> layerMargins.ensureValuesAtLeast(bottom = height)
++          LabelPosition.Auto -> layerMargins.ensureValuesAtLeast(top = height)
++        }
++      }
++      Axis.Position.Horizontal.Bottom -> {
++        when (labelPosition) {
++          LabelPosition.OnLine -> layerMargins.ensureValuesAtLeast(top = height)
++          LabelPosition.Between -> layerMargins.ensureValuesAtLeast(bottom = height)
++          LabelPosition.Auto -> layerMargins.ensureValuesAtLeast(bottom = height)
++        }
++      }
+     }
+   }
+ 
+@@ -498,6 +534,7 @@
+     titleComponent: TextComponent? = this.titleComponent,
+     title: CharSequence? = this.title,
+     separators: (ExtraStore) -> List<Double> = this.separators,
++    labelPosition: LabelPosition = this.labelPosition,
+   ): HorizontalAxis<P> {
+     return HorizontalAxis(
+       position,
+@@ -513,13 +550,14 @@
+       titleComponent,
+       title,
+       separators,
++      labelPosition,
+     )
+   }
+ 
+   override fun equals(other: Any?): Boolean =
+-    super.equals(other) && other is HorizontalAxis<*> && itemPlacer == other.itemPlacer
++    super.equals(other) && other is HorizontalAxis<*> && itemPlacer == other.itemPlacer && labelPosition == other.labelPosition
+ 
+-  override fun hashCode(): Int = 31 * super.hashCode() + itemPlacer.hashCode()
++  override fun hashCode(): Int = 31 * super.hashCode() + itemPlacer.hashCode() + labelPosition.hashCode()
+ 
+   /** Determines for what _x_ values a [HorizontalAxis] displays labels, ticks, and guidelines. */
+   public interface ItemPlacer {
+@@ -660,6 +698,7 @@
+       titleComponent: TextComponent? = null,
+       title: CharSequence? = null,
+       separators: (ExtraStore) -> List<Double> = { emptyList() },
++      labelPosition: LabelPosition = LabelPosition.Between,
+     ): HorizontalAxis<Axis.Position.Horizontal.Top> =
+       HorizontalAxis(
+         Axis.Position.Horizontal.Top,
+@@ -675,6 +714,7 @@
+         titleComponent,
+         title,
+         separators,
++        labelPosition,
+       )
+ 
+     /** Creates a bottom [HorizontalAxis]. */
+@@ -691,6 +731,7 @@
+       titleComponent: TextComponent? = null,
+       title: CharSequence? = null,
+       separators: (ExtraStore) -> List<Double> = { emptyList() },
++      labelPosition: LabelPosition = LabelPosition.Between,
+     ): HorizontalAxis<Axis.Position.Horizontal.Bottom> =
+       HorizontalAxis(
+         Axis.Position.Horizontal.Bottom,
+@@ -706,6 +747,24 @@
+         titleComponent,
+         title,
+         separators,
++        labelPosition,
+       )
+   }
++
++  /**
++   * Specifies the position of a [HorizontalAxis]'s labels relative to the grid lines.
++   */
++  public enum class LabelPosition {
++    /** Positions the label centered on the axis line itself. */
++    OnLine,
++
++    /** Positions the label centered between grid lines. */
++    Between,
++
++    /**
++     * Positions the label based on the axis position (on line for top, between for bottom).
++     * This is the default behavior.
++     */
++    Auto,
++  }
+ }
+Index: vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/VerticalAxis.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/VerticalAxis.kt b/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/VerticalAxis.kt
+--- a/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/VerticalAxis.kt	(revision c820eb238fcfb4f502a4b9b18f68692e907b18f5)
++++ b/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/VerticalAxis.kt	(revision c2576687f862e0288f942f45c38f40272ea28ac3)
+@@ -51,6 +51,7 @@
+  *   axis line.
+  * @property verticalLabelPosition defines the vertical positions of the labels relative to their
+  *   ticks.
++ * @property labelPosition defines the position of the labels relative to the axis line.
+  */
+ public open class VerticalAxis<P : Axis.Position.Vertical>
+ protected constructor(
+@@ -68,6 +69,7 @@
+   size: Size,
+   titleComponent: TextComponent?,
+   title: CharSequence?,
++  public val labelPosition: LabelPosition = LabelPosition.Between,
+ ) :
+   BaseAxis<P>(
+     line,
+@@ -126,6 +128,7 @@
+     Size.Auto(),
+     titleComponent,
+     title,
++    LabelPosition.Between,
+   )
+ 
+   override fun drawUnderLayers(context: CartesianDrawingContext) {
+@@ -249,6 +252,26 @@
+           .getBounds(context = this, text = label, rotationDegrees = labelRotationDegrees)
+           .apply { translate(labelX, tickCenterY - centerY()) }
+ 
++      // Calculate tick positions for label positioning
++      val tickLeftX = getTickLeftX()
++      val tickRightX = tickLeftX + lineThickness + tickLength
++
++      // Calculate label Y position based on labelPosition
++      val finalLabelY = when (labelPosition) {
++        LabelPosition.OnLine -> tickCenterY
++        LabelPosition.Between -> {
++          // Position label between grid lines (above/below the current guideline)
++          // Use a simple offset approach
++          val offset = 20f // pixels offset from the guideline
++          if (position == Axis.Position.Vertical.Start) {
++            tickCenterY - offset
++          } else {
++            tickCenterY + offset
++          }
++        }
++        LabelPosition.Auto -> tickCenterY
++      }
++
+       if (
+         horizontalLabelPosition == Outside ||
+           isNotInRestrictedBounds(
+@@ -262,7 +285,7 @@
+           context = this,
+           text = label,
+           x = labelX,
+-          y = tickCenterY,
++          y = finalLabelY,
+           horizontalPosition = textHorizontalPosition,
+           verticalPosition = verticalLabelPosition,
+           rotationDegrees = labelRotationDegrees,
+@@ -410,6 +433,7 @@
+     size: Size = this.size,
+     titleComponent: TextComponent? = this.titleComponent,
+     title: CharSequence? = this.title,
++    labelPosition: LabelPosition = this.labelPosition,
+   ): VerticalAxis<P> =
+     VerticalAxis(
+       position,
+@@ -426,6 +450,7 @@
+       size,
+       titleComponent,
+       title,
++      labelPosition,
+     )
+ 
+   override fun equals(other: Any?): Boolean =
+@@ -433,13 +458,15 @@
+       other is VerticalAxis<*> &&
+       horizontalLabelPosition == other.horizontalLabelPosition &&
+       verticalLabelPosition == other.verticalLabelPosition &&
+-      itemPlacer == other.itemPlacer
++      itemPlacer == other.itemPlacer &&
++      labelPosition == other.labelPosition
+ 
+   override fun hashCode(): Int {
+     var result = super.hashCode()
+     result = 31 * result + horizontalLabelPosition.hashCode()
+     result = 31 * result + verticalLabelPosition.hashCode()
+     result = 31 * result + itemPlacer.hashCode()
++    result = 31 * result + labelPosition.hashCode()
+     return result
+   }
+ 
+@@ -564,6 +591,7 @@
+       size: Size = Size.Auto(),
+       titleComponent: TextComponent? = null,
+       title: CharSequence? = null,
++      labelPosition: LabelPosition = LabelPosition.Between,
+     ): VerticalAxis<Axis.Position.Vertical.Start> =
+       VerticalAxis(
+         Axis.Position.Vertical.Start,
+@@ -580,6 +608,7 @@
+         size,
+         titleComponent,
+         title,
++        labelPosition,
+       )
+ 
+     /** Creates an end [VerticalAxis]. */
+@@ -597,6 +626,7 @@
+       size: Size = Size.Auto(),
+       titleComponent: TextComponent? = null,
+       title: CharSequence? = null,
++      labelPosition: LabelPosition = LabelPosition.Between,
+     ): VerticalAxis<Axis.Position.Vertical.End> =
+       VerticalAxis(
+         Axis.Position.Vertical.End,
+@@ -613,6 +643,24 @@
+         size,
+         titleComponent,
+         title,
++        labelPosition,
+       )
+   }
++
++  /**
++   * Specifies the position of a [VerticalAxis]'s labels relative to the grid lines.
++   */
++  public enum class LabelPosition {
++    /** Positions the label on the axis line itself. */
++    OnLine,
++
++    /** Positions the label between grid lines (above/below the guidelines). */
++    Between,
++
++    /**
++     * Positions the label based on the horizontalLabelPosition setting.
++     * This is the default behavior.
++     */
++    Auto,
++  }
+ }

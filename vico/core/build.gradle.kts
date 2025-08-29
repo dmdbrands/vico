@@ -59,8 +59,8 @@ publishing {
             name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/dmdbrands/vico")
             credentials {
-                username =  "VivekGG"
-                password =  "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"
+                username = System.getenv("GITHUB_USERNAME") ?: "VivekGG"
+                password = System.getenv("GITHUB_TOKEN")
             }
         }
     }
