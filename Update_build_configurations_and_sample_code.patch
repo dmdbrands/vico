@@ -1,0 +1,222 @@
+Subject: [PATCH] Update build configurations and sample code
+---
+Index: sample/compose/src/main/kotlin/com/patrykandpatrick/vico/sample/compose/SaveableStateDemo.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/sample/compose/src/main/kotlin/com/patrykandpatrick/vico/sample/compose/SaveableStateDemo.kt b/sample/compose/src/main/kotlin/com/patrykandpatrick/vico/sample/compose/SaveableStateDemo.kt
+--- a/sample/compose/src/main/kotlin/com/patrykandpatrick/vico/sample/compose/SaveableStateDemo.kt	(revision b6fc9ec2d1e69a1e2fc258e8e4f0b3b9615dba59)
++++ b/sample/compose/src/main/kotlin/com/patrykandpatrick/vico/sample/compose/SaveableStateDemo.kt	(revision 08c807bd2200db044fc07d98dbd182dc4c2e9c27)
+@@ -16,6 +16,7 @@
+ 
+ package com.patrykandpatrick.vico.sample.compose
+ 
++import android.graphics.Typeface
+ import android.util.Log
+ import androidx.compose.animation.core.animate
+ import androidx.compose.foundation.layout.Arrangement
+@@ -36,10 +37,12 @@
+ import androidx.compose.runtime.saveable.rememberSaveable
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
+ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.tooling.preview.Preview
+ import androidx.compose.ui.unit.dp
+ import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
++import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisGuidelineComponent
+ import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
+ import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
+ import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
+@@ -48,11 +51,22 @@
+ import com.patrykandpatrick.vico.compose.cartesian.rememberSaveableCartesianChartModelProducer
+ import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
+ import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
++import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
++import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
++import com.patrykandpatrick.vico.compose.common.component.shapeComponent
++import com.patrykandpatrick.vico.compose.common.fill
++import com.patrykandpatrick.vico.compose.common.insets
++import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
++import com.patrykandpatrick.vico.core.cartesian.axis.Axis
+ import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
+ import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
+ import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+ import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
+ import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
++import com.patrykandpatrick.vico.core.cartesian.decoration.Decoration
++import com.patrykandpatrick.vico.core.cartesian.decoration.HorizontalLine
++import com.patrykandpatrick.vico.core.common.Position
++import com.patrykandpatrick.vico.core.common.shape.CorneredShape
+ import kotlinx.coroutines.runBlocking
+ import kotlin.random.Random
+ 
+@@ -134,13 +148,19 @@
+       style = MaterialTheme.typography.bodySmall,
+       color = MaterialTheme.colorScheme.onSurfaceVariant
+     )
++    val decoration = rememberHorizontalLine()
+ 
+     CartesianChartHost(
+       chart = rememberCartesianChart(
+         rememberColumnCartesianLayer(),
+         rememberLineCartesianLayer(),
+         startAxis = VerticalAxis.rememberStart(),
+-        bottomAxis = HorizontalAxis.rememberBottom(),
++        bottomAxis = HorizontalAxis.rememberBottom(
++          tick = rememberAxisGuidelineComponent(),
++          tickLength = 20.dp,
++          horizontalLabelPosition = Position.Horizontal.End
++        ),
++        decorations = listOf(decoration)
+       ),
+       animateIn = false,
+       modelProducer = modelProducer,
+@@ -152,6 +172,41 @@
+   }
+ }
+ 
++@Composable
++private fun rememberHorizontalLine(
++): Decoration {
++  val fill = fill(Color(0xFF458239))
++  val line = rememberLineComponent(fill = fill(Color(0xFF458239)), thickness = 2.dp)
++  val labelComponent =
++    rememberTextComponent(
++      typeface = Typeface.DEFAULT_BOLD,
++      color = Color(0xfffdc8c4),
++      margins = insets(start = (-40).dp),
++      padding = insets(horizontal = 8.dp , vertical = 2.dp),
++      background =
++        shapeComponent(
++          fill,
++          shape = CorneredShape.Pill,
++        ),
++    )
++
++  val decoration =
++    object : Decoration {
++      override fun drawUnderLayers(context: CartesianDrawingContext) {
++        HorizontalLine(
++          y = { 150.0 },
++          line = line.copy(fill = fill(Color.Transparent)),
++          labelComponent = labelComponent,
++          horizontalLabelPosition = Position.Horizontal.Start,
++          verticalLabelPosition = Position.Vertical.Bottom,
++          verticalAxisPosition = Axis.Position.Vertical.End,
++        ).drawOverLayers(context)
++      }
++    }
++  return remember { decoration }
++}
++
++
+ @Composable
+ @Preview
+ private fun SaveableStateDemoPreview() {
+Index: vico/compose-m3/build.gradle.kts
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vico/compose-m3/build.gradle.kts b/vico/compose-m3/build.gradle.kts
+--- a/vico/compose-m3/build.gradle.kts	(revision b6fc9ec2d1e69a1e2fc258e8e4f0b3b9615dba59)
++++ b/vico/compose-m3/build.gradle.kts	(revision 08c807bd2200db044fc07d98dbd182dc4c2e9c27)
+@@ -44,7 +44,7 @@
+             run {
+                 groupId = "com.dmdbrands.lib"
+                 artifactId = "vico-compose-m3"
+-                version = "1.8.0"
++                version = "2.0.1"
+                 artifact("build/outputs/aar/compose-m3-release.aar")
+             }
+         }
+Index: vico/compose/build.gradle.kts
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vico/compose/build.gradle.kts b/vico/compose/build.gradle.kts
+--- a/vico/compose/build.gradle.kts	(revision b6fc9ec2d1e69a1e2fc258e8e4f0b3b9615dba59)
++++ b/vico/compose/build.gradle.kts	(revision 08c807bd2200db044fc07d98dbd182dc4c2e9c27)
+@@ -49,7 +49,7 @@
+             run {
+                 groupId = "com.dmdbrands.lib"
+                 artifactId = "vico-compose"
+-                version = "1.8.0"
++                version = "2.0.1"
+                 artifact("build/outputs/aar/compose-release.aar")
+             }
+         }
+Index: vico/core/build.gradle.kts
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vico/core/build.gradle.kts b/vico/core/build.gradle.kts
+--- a/vico/core/build.gradle.kts	(revision b6fc9ec2d1e69a1e2fc258e8e4f0b3b9615dba59)
++++ b/vico/core/build.gradle.kts	(revision 08c807bd2200db044fc07d98dbd182dc4c2e9c27)
+@@ -49,7 +49,7 @@
+             run {
+                 groupId = "com.dmdbrands.lib"
+                 artifactId = "vico-core"
+-                version = "1.8.0"
++                version = "2.0.1"
+                 artifact("build/outputs/aar/core-release.aar")
+             }
+         }
+Index: vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/HorizontalAxis.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/HorizontalAxis.kt b/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/HorizontalAxis.kt
+--- a/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/HorizontalAxis.kt	(revision b6fc9ec2d1e69a1e2fc258e8e4f0b3b9615dba59)
++++ b/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/axis/HorizontalAxis.kt	(revision 08c807bd2200db044fc07d98dbd182dc4c2e9c27)
+@@ -96,18 +96,22 @@
+   protected fun CartesianDrawingContext.getTickTopY(): Float {
+     val onTop = position == Axis.Position.Horizontal.Top
+     val base = if (onTop) bounds.bottom else bounds.top
+-    return when (horizontalLabelPosition) {
+-      Position.Horizontal.Start -> if (onTop) base - lineThickness - tickLength else base
+-      Position.Horizontal.End -> if (onTop) base - lineThickness else base + tickLength
+-      Position.Horizontal.Center -> if (onTop) base - lineThickness - tickLength.half else base + tickLength.half
+-    }
++    // Always start ticks from the axis line, regardless of horizontalLabelPosition
++    return if (onTop) base - lineThickness else base
+   }
+ 
+   protected fun CartesianDrawingContext.getTickBottomY(): Float = getTickTopY() + lineThickness + tickLength
+ 
+   protected fun CartesianDrawingContext.getLabelY(): Float {
+     val onTop = position == Axis.Position.Horizontal.Top
+-    return if (areLabelsOutsideAtTopOrInsideAtBottom == onTop) getTickTopY() else getTickBottomY()
++    val base = if (onTop) bounds.bottom else bounds.top
++
++    // Position labels based on horizontalLabelPosition, independent of tick positioning
++    return when (horizontalLabelPosition) {
++      Position.Horizontal.Start -> if (onTop) base - lineThickness - tickLength else base + lineThickness + tickLength
++      Position.Horizontal.End -> if (onTop) base - lineThickness else base + lineThickness
++      Position.Horizontal.Center -> if (onTop) base - lineThickness - tickLength.half else base + lineThickness + tickLength.half
++    }
+   }
+ 
+   protected val areLabelsOutsideAtTopOrInsideAtBottom: Boolean
+Index: vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/decoration/HorizontalLine.kt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/decoration/HorizontalLine.kt b/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/decoration/HorizontalLine.kt
+--- a/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/decoration/HorizontalLine.kt	(revision b6fc9ec2d1e69a1e2fc258e8e4f0b3b9615dba59)
++++ b/vico/core/src/main/java/com/patrykandpatrick/vico/core/cartesian/decoration/HorizontalLine.kt	(revision 08c807bd2200db044fc07d98dbd182dc4c2e9c27)
+@@ -72,7 +72,7 @@
+       val currentYRange = ranges.getYRange(verticalAxisPosition)
+ 
+       // Clamp y value to be within the current animated range bounds with proper padding
+-      val step = (currentYRange.maxY - currentYRange.minY) / 6
++      val step = (currentYRange.maxY - currentYRange.minY) / 5
+       val clampedY = when {
+         y > currentYRange.maxY -> currentYRange.maxY + step
+         y < currentYRange.minY -> currentYRange.minY - step

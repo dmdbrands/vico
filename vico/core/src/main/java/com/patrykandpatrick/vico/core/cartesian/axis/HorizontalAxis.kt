@@ -96,18 +96,22 @@ protected constructor(
   protected fun CartesianDrawingContext.getTickTopY(): Float {
     val onTop = position == Axis.Position.Horizontal.Top
     val base = if (onTop) bounds.bottom else bounds.top
-    return when (horizontalLabelPosition) {
-      Position.Horizontal.Start -> if (onTop) base - lineThickness - tickLength else base
-      Position.Horizontal.End -> if (onTop) base - lineThickness else base + tickLength
-      Position.Horizontal.Center -> if (onTop) base - lineThickness - tickLength.half else base + tickLength.half
-    }
+    // Always start ticks from the axis line, regardless of horizontalLabelPosition
+    return if (onTop) base - lineThickness else base
   }
 
   protected fun CartesianDrawingContext.getTickBottomY(): Float = getTickTopY() + lineThickness + tickLength
 
   protected fun CartesianDrawingContext.getLabelY(): Float {
     val onTop = position == Axis.Position.Horizontal.Top
-    return if (areLabelsOutsideAtTopOrInsideAtBottom == onTop) getTickTopY() else getTickBottomY()
+    val base = if (onTop) bounds.bottom else bounds.top
+
+    // Position labels based on horizontalLabelPosition, independent of tick positioning
+    return when (horizontalLabelPosition) {
+      Position.Horizontal.Start -> if (onTop) base - lineThickness - tickLength else base + lineThickness + tickLength
+      Position.Horizontal.End -> if (onTop) base - lineThickness else base + lineThickness
+      Position.Horizontal.Center -> if (onTop) base - lineThickness - tickLength.half else base + lineThickness + tickLength.half
+    }
   }
 
   protected val areLabelsOutsideAtTopOrInsideAtBottom: Boolean

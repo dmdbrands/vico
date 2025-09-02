@@ -72,7 +72,7 @@ public class HorizontalLine(
       val currentYRange = ranges.getYRange(verticalAxisPosition)
 
       // Clamp y value to be within the current animated range bounds with proper padding
-      val step = (currentYRange.maxY - currentYRange.minY) / 6
+      val step = (currentYRange.maxY - currentYRange.minY) / 5
       val clampedY = when {
         y > currentYRange.maxY -> currentYRange.maxY + step
         y < currentYRange.minY -> currentYRange.minY - step

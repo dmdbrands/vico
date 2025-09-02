@@ -16,6 +16,7 @@
 
 package com.patrykandpatrick.vico.sample.compose
 
+import android.graphics.Typeface
 import android.util.Log
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.layout.Arrangement
@@ -36,10 +37,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisGuidelineComponent
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
@@ -48,11 +51,22 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.rememberSaveableCartesianChartModelProducer
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
+import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
+import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
+import com.patrykandpatrick.vico.compose.common.component.shapeComponent
+import com.patrykandpatrick.vico.compose.common.fill
+import com.patrykandpatrick.vico.compose.common.insets
+import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
+import com.patrykandpatrick.vico.core.cartesian.axis.Axis
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
+import com.patrykandpatrick.vico.core.cartesian.decoration.Decoration
+import com.patrykandpatrick.vico.core.cartesian.decoration.HorizontalLine
+import com.patrykandpatrick.vico.core.common.Position
+import com.patrykandpatrick.vico.core.common.shape.CorneredShape
 import kotlinx.coroutines.runBlocking
 import kotlin.random.Random
 
@@ -134,13 +148,19 @@ fun SaveableStateDemo(
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+    val decoration = rememberHorizontalLine()
 
     CartesianChartHost(
       chart = rememberCartesianChart(
         rememberColumnCartesianLayer(),
         rememberLineCartesianLayer(),
         startAxis = VerticalAxis.rememberStart(),
-        bottomAxis = HorizontalAxis.rememberBottom(),
+        bottomAxis = HorizontalAxis.rememberBottom(
+          tick = rememberAxisGuidelineComponent(),
+          tickLength = 20.dp,
+          horizontalLabelPosition = Position.Horizontal.End
+        ),
+        decorations = listOf(decoration)
       ),
       animateIn = false,
       modelProducer = modelProducer,
@@ -151,6 +171,41 @@ fun SaveableStateDemo(
     )
   }
 }
+
+@Composable
+private fun rememberHorizontalLine(
+): Decoration {
+  val fill = fill(Color(0xFF458239))
+  val line = rememberLineComponent(fill = fill(Color(0xFF458239)), thickness = 2.dp)
+  val labelComponent =
+    rememberTextComponent(
+      typeface = Typeface.DEFAULT_BOLD,
+      color = Color(0xfffdc8c4),
+      margins = insets(start = (-40).dp),
+      padding = insets(horizontal = 8.dp , vertical = 2.dp),
+      background =
+        shapeComponent(
+          fill,
+          shape = CorneredShape.Pill,
+        ),
+    )
+
+  val decoration =
+    object : Decoration {
+      override fun drawUnderLayers(context: CartesianDrawingContext) {
+        HorizontalLine(
+          y = { 150.0 },
+          line = line.copy(fill = fill(Color.Transparent)),
+          labelComponent = labelComponent,
+          horizontalLabelPosition = Position.Horizontal.Start,
+          verticalLabelPosition = Position.Vertical.Bottom,
+          verticalAxisPosition = Axis.Position.Vertical.End,
+        ).drawOverLayers(context)
+      }
+    }
+  return remember { decoration }
+}
+
 
 @Composable
 @Preview

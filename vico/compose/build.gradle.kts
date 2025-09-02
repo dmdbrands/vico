@@ -49,7 +49,7 @@ publishing {
             run {
                 groupId = "com.dmdbrands.lib"
                 artifactId = "vico-compose"
-                version = "1.8.0"
+                version = "2.0.1"
                 artifact("build/outputs/aar/compose-release.aar")
             }
         }
