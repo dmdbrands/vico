@@ -197,7 +197,7 @@ protected constructor(
         )
 
         label ?: return@forEach
-        drawLabel(
+        drawLabelWithCenteredAlignment(
           context = this,
           labelComponent = label,
           label = valueFormatter.formatForAxis(this, labelValue, position),
@@ -264,6 +264,41 @@ protected constructor(
           x = labelX,
           y = tickCenterY,
           horizontalPosition = textHorizontalPosition,
+          verticalPosition = verticalLabelPosition,
+          rotationDegrees = labelRotationDegrees,
+          maxWidth = (maxLabelWidth ?: (layerBounds.width().half - tickLength)).toInt(),
+        )
+      }
+    }
+
+  protected open fun drawLabelWithCenteredAlignment(
+    context: CartesianDrawingContext,
+    labelComponent: TextComponent,
+    label: CharSequence,
+    labelX: Float,
+    tickCenterY: Float,
+  ): Unit =
+    with(context) {
+      val textBounds =
+        labelComponent
+          .getBounds(context = this, text = label, rotationDegrees = labelRotationDegrees)
+          .apply { translate(labelX, tickCenterY - centerY()) }
+
+      if (
+        horizontalLabelPosition == Outside ||
+          isNotInRestrictedBounds(
+            left = textBounds.left,
+            top = textBounds.top,
+            right = textBounds.right,
+            bottom = textBounds.bottom,
+          )
+      ) {
+        labelComponent.draw(
+          context = this,
+          text = label,
+          x = labelX,
+          y = tickCenterY,
+          horizontalPosition = Position.Horizontal.Center,
           verticalPosition = verticalLabelPosition,
           rotationDegrees = labelRotationDegrees,
           maxWidth = (maxLabelWidth ?: (layerBounds.width().half - tickLength)).toInt(),

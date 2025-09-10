@@ -53,12 +53,24 @@ public interface CartesianMeasuringContext : MeasuringContext {
   public val pointerPosition: Point?
 }
 
-internal fun CartesianMeasuringContext.getFullXRange(layerDimensions: CartesianLayerDimensions) =
+public fun CartesianMeasuringContext.getFullXRange(layerDimensions: CartesianLayerDimensions) =
   layerDimensions.run {
     val start = ranges.minX - startPadding / xSpacing * ranges.xStep
     val end = ranges.maxX + endPadding / xSpacing * ranges.xStep
     start..end
   }
+
+public fun CartesianMeasuringContext.getVisibleXRange(
+  bounds: androidx.compose.ui.geometry.Rect,
+  layerDimensions: CartesianLayerDimensions,
+  scroll: Float,
+): ClosedFloatingPointRange<Double> {
+  val fullRange = getFullXRange(layerDimensions)
+  val start =
+    fullRange.start + layoutDirectionMultiplier * scroll / layerDimensions.xSpacing * ranges.xStep
+  val end = start + bounds.width / layerDimensions.xSpacing * ranges.xStep
+  return start..end
+}
 
 @Composable
 internal fun rememberCartesianMeasuringContext(

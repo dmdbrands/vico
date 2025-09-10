@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +72,13 @@ import kotlinx.coroutines.runBlocking
 import kotlin.random.Random
 
 /**
+ * Generates random data points for chart demonstration.
+ */
+private fun generateData(count: Int, minValue: Int, maxValue: Int): List<Float> {
+  return (1..count).map { Random.nextFloat() * (maxValue - minValue) + minValue }
+}
+
+/**
  * Demo showing how rememberSaveableCartesianChartModelProducer preserves chart data
  * across configuration changes and navigation without requiring manual data recreation.
  */
@@ -86,22 +94,48 @@ fun SaveableStateDemo(
   val scrollState = rememberVicoScrollState()
   val zoomState = rememberVicoZoomState()
 
+  // Collect visible range from scroll state
+  val visibleRange by scrollState.visibleRange.collectAsState()
+
   var dataVersion by rememberSaveable { mutableIntStateOf(0) }
 
   // Only rebuild data when dataVersion changes (user action), not on configuration changes or navigation
   LaunchedEffect(Unit) {
-      // Initialize with some default data
+      // Initialize with 100 data points for better scrolling demonstration
     if (dataVersion == 0) {
       Log.i("CHECKING" , "done")
       modelProducer.runTransaction {
         columnSeries {
-          series(5, 6, 5, 2, 11, 8, 5, 2, 15, 11, 8, 13, 12, 10, 2, 7)
+          series(*generateData(100, 0, 20).toTypedArray())
         }
         lineSeries {
-          series(3, 4, 8, 5, 9, 6, 7, 4, 12, 9, 6, 11, 10, 8, 4, 5)
+          series(*generateData(100, 0, 15).toTypedArray())
         }
       }
       dataVersion++
+    }
+  }
+
+  // Regenerate data when dataVersion changes (user clicks "Generate New Data" button)
+  LaunchedEffect(dataVersion) {
+    if (dataVersion > 0) {
+      modelProducer.runTransaction {
+        columnSeries {
+          series(*generateData(100, 0, 20).toTypedArray())
+        }
+        lineSeries {
+          series(*generateData(100, 0, 15).toTypedArray())
+        }
+      }
+    }
+  }
+
+  // Log visible range changes (emits continuously during scrolling)
+  LaunchedEffect(visibleRange) {
+    visibleRange?.let { range ->
+      Log.i("VisibleRange", "🔄 Visible X Range: ${range.visibleXRange.start} to ${range.visibleXRange.endInclusive}")
+      Log.i("VisibleRange", "📊 Full X Range: ${range.fullXRange.start} to ${range.fullXRange.endInclusive}")
+      Log.i("VisibleRange", "📍 Scroll: ${range.scrollValue}/${range.maxScrollValue}")
     }
   }
 
@@ -132,7 +166,9 @@ fun SaveableStateDemo(
             "• Navigation (leaving and returning to this screen)\n" +
             "• Process death and recreation\n\n" +
             "Try scrolling the chart, then navigate away and back, or rotate the device. " +
-            "Your position and data will be preserved!",
+            "Your position and data will be preserved!\n\n" +
+            "The visible range information below updates continuously during scrolling, " +
+            "showing the current visible X range and scroll progress in real-time.",
       style = MaterialTheme.typography.bodyMedium
     )
 
@@ -148,6 +184,25 @@ fun SaveableStateDemo(
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+
+    // Display visible range information
+    visibleRange?.let { range ->
+      Text(
+        text = "Visible X Range: ${String.format("%.1f", range.visibleXRange.start)} to ${String.format("%.1f", range.visibleXRange.endInclusive)}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+      Text(
+        text = "Full X Range: ${String.format("%.1f", range.fullXRange.start)} to ${String.format("%.1f", range.fullXRange.endInclusive)}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+      Text(
+        text = "Scroll Progress: ${String.format("%.1f", range.scrollValue)}/${String.format("%.1f", range.maxScrollValue)} (${String.format("%.1f", (range.scrollValue / range.maxScrollValue * 100))}%)",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+    }
     val decoration = rememberHorizontalLine()
 
     CartesianChartHost(
@@ -214,8 +269,8 @@ private fun SaveableStateDemoPreview() {
   // Use `runBlocking` only for previews, which don't support asynchronous execution.
   runBlocking {
     modelProducer.runTransaction {
-      columnSeries { series(5, 6, 5, 2, 11, 8, 5, 2, 15, 11, 8, 13, 12, 10, 2, 7) }
-      lineSeries { series(3, 4, 8, 5, 9, 6, 7, 4, 12, 9, 6, 11, 10, 8, 4, 5) }
+      columnSeries { series(*generateData(100, 0, 20).toTypedArray()) }
+      lineSeries { series(*generateData(100, 0, 15).toTypedArray()) }
     }
   }
   PreviewBox { SaveableStateDemo() }

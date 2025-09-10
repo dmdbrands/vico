@@ -34,6 +34,9 @@ import com.patrykandpatrick.vico.multiplatform.cartesian.data.CartesianChartMode
 import com.patrykandpatrick.vico.multiplatform.cartesian.layer.CartesianLayerDimensions
 import com.patrykandpatrick.vico.multiplatform.common.rangeWith
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Houses information on a [CartesianChart]’s scroll value. Allows for scroll customization and
@@ -53,6 +56,10 @@ public class VicoScrollState {
   internal val scrollEnabled: Boolean
   internal val pointerXDeltas = MutableSharedFlow<Float>(extraBufferCapacity = 1)
 
+  private val _visibleRange = MutableStateFlow<VisibleRange?>(null)
+  /** StateFlow that emits the current visible range when scrolling starts or during scroll. */
+  public val visibleRange: StateFlow<VisibleRange?> = _visibleRange.asStateFlow()
+
   internal val scrollableState = ScrollableState { delta ->
     val oldValue = value
     value += delta
@@ -71,7 +78,11 @@ public class VicoScrollState {
     private set(newValue) {
       val oldValue = value
       _value.floatValue = newValue.coerceIn(0f.rangeWith(maxValue))
-      if (value != oldValue) pointerXDeltas.tryEmit(oldValue - value)
+      if (value != oldValue) {
+        pointerXDeltas.tryEmit(oldValue - value)
+        // Emit visible range when scroll value changes
+        emitVisibleRange()
+      }
     }
 
   /** The maximum scroll value (in pixels). */
@@ -138,6 +149,19 @@ public class VicoScrollState {
     }
   }
 
+  private fun emitVisibleRange() {
+    withUpdated { context, layerDimensions, bounds ->
+      val fullXRange = context.getFullXRange(layerDimensions)
+      val visibleXRange = context.getVisibleXRange(bounds, layerDimensions, value)
+      _visibleRange.value = VisibleRange(
+        visibleXRange = visibleXRange,
+        fullXRange = fullXRange,
+        scrollValue = value,
+        maxScrollValue = maxValue
+      )
+    }
+  }
+
   internal fun update(
     context: CartesianMeasuringContext,
     bounds: Rect,
@@ -151,6 +175,8 @@ public class VicoScrollState {
       value = initialScroll.getValue(context, layerDimensions, bounds, maxValue)
       initialScrollHandled = true
     }
+    // Emit initial visible range
+    emitVisibleRange()
   }
 
   internal suspend fun autoScroll(model: CartesianChartModel, oldModel: CartesianChartModel?) {
