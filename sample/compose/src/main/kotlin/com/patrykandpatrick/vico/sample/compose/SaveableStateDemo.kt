@@ -34,9 +34,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -45,8 +47,10 @@ import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisGuidelineComponent
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberEnd
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLine
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.rememberSaveableCartesianChartModelProducer
@@ -66,9 +70,16 @@ import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.core.cartesian.decoration.Decoration
 import com.patrykandpatrick.vico.core.cartesian.decoration.HorizontalLine
+import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.core.common.Position
 import com.patrykandpatrick.vico.core.common.shape.CorneredShape
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 /**
@@ -94,50 +105,88 @@ fun SaveableStateDemo(
   val scrollState = rememberVicoScrollState()
   val zoomState = rememberVicoZoomState()
 
-  // Collect visible range from scroll state
-  val visibleRange by scrollState.visibleRange.collectAsState()
 
   var dataVersion by rememberSaveable { mutableIntStateOf(0) }
 
-  // Only rebuild data when dataVersion changes (user action), not on configuration changes or navigation
-  LaunchedEffect(Unit) {
-      // Initialize with 100 data points for better scrolling demonstration
-    if (dataVersion == 0) {
-      Log.i("CHECKING" , "done")
-      modelProducer.runTransaction {
-        columnSeries {
-          series(*generateData(100, 0, 20).toTypedArray())
-        }
+  var minY by rememberSaveable { mutableIntStateOf(0) }
+  var maxY by rememberSaveable { mutableIntStateOf(15) }
+
+  var rangeUpdateTrigger by remember { mutableIntStateOf(0) }
+  val visibleRange by scrollState.visibleRange.collectAsState()
+
+  val data = remember { generateData(100, 0, 15).toList() }
+  val secondaryData = remember { generateData(100, 5, 25).toList() }
+
+  var showSecondaryLine by rememberSaveable { mutableStateOf(false) }
+  var animateIn by remember { mutableStateOf(false) }
+  var secondaryMinY by rememberSaveable { mutableIntStateOf(5) }
+  var secondaryMaxY by rememberSaveable { mutableIntStateOf(25) }
+
+
+  LaunchedEffect(showSecondaryLine) {
+    animateIn = false
+    modelProducer.runTransaction {
         lineSeries {
-          series(*generateData(100, 0, 15).toTypedArray())
+          series(data)
         }
-      }
-      dataVersion++
+      if(showSecondaryLine)
+        lineSeries {
+          series(secondaryData)
+        }
     }
   }
 
-  // Regenerate data when dataVersion changes (user clicks "Generate New Data" button)
-  LaunchedEffect(dataVersion) {
-    if (dataVersion > 0) {
-      modelProducer.runTransaction {
-        columnSeries {
-          series(*generateData(100, 0, 20).toTypedArray())
-        }
-        lineSeries {
-          series(*generateData(100, 0, 15).toTypedArray())
-        }
-      }
-    }
-  }
 
-  // Log visible range changes (emits continuously during scrolling)
   LaunchedEffect(visibleRange) {
     visibleRange?.let { range ->
-      Log.i("VisibleRange", "🔄 Visible X Range: ${range.visibleXRange.start} to ${range.visibleXRange.endInclusive}")
-      Log.i("VisibleRange", "📊 Full X Range: ${range.fullXRange.start} to ${range.fullXRange.endInclusive}")
-      Log.i("VisibleRange", "📍 Scroll: ${range.scrollValue}/${range.maxScrollValue}")
+      val startX = range.visibleXRange.start
+      val endX = range.visibleXRange.endInclusive
+
+      snapshotFlow { startX to endX }
+        .debounce(300)
+        .distinctUntilChanged()
+        .collect { (start, end) ->
+          // Calculate the actual Y range from the visible data
+          val visibleData = data.let { data ->
+            val startIndex = max(0, min(start.toInt(), data.size - 1))
+            val endIndex = max(0, min(end.toInt(), data.size - 1))
+            data.subList(startIndex, endIndex + 1)
+          }
+
+           if (visibleData.isNotEmpty()) {
+             val calculatedMinY = visibleData.minOrNull()?.toInt() ?: 0
+             val calculatedMaxY = visibleData.maxOrNull()?.toInt() ?: 20
+
+             // Update the Y range based on visible data
+             minY = calculatedMinY - 2
+             maxY = calculatedMaxY + 2
+
+             // Calculate secondary range if secondary line is shown
+             if (showSecondaryLine) {
+               val secondaryVisibleData = secondaryData.let { data ->
+                 val startIndex = max(0, min(start.toInt(), data.size - 1))
+                 val endIndex = max(0, min(end.toInt(), data.size - 1))
+                 data.subList(startIndex, endIndex + 1)
+               }
+
+               if (secondaryVisibleData.isNotEmpty()) {
+                 val secondaryCalculatedMinY = secondaryVisibleData.minOrNull()?.toInt() ?: 5
+                 val secondaryCalculatedMaxY = secondaryVisibleData.maxOrNull()?.toInt() ?: 25
+
+                 secondaryMinY = secondaryCalculatedMinY - 2
+                 secondaryMaxY = secondaryCalculatedMaxY + 2
+               }
+             }
+
+             Log.i("VisibleRange", "Updated Y range: Min=$minY, Max=$maxY for visible data range")
+             if (showSecondaryLine) {
+               Log.i("VisibleRange", "Updated Secondary Y range: Min=$secondaryMinY, Max=$secondaryMaxY")
+             }
+           }
+        }
     }
   }
+
 
   Column(
     modifier = modifier.padding(16.dp),
@@ -161,14 +210,7 @@ fun SaveableStateDemo(
     }
 
     Text(
-      text = "This chart's data AND scroll position persist across:\n" +
-            "• Configuration changes (screen rotation)\n" +
-            "• Navigation (leaving and returning to this screen)\n" +
-            "• Process death and recreation\n\n" +
-            "Try scrolling the chart, then navigate away and back, or rotate the device. " +
-            "Your position and data will be preserved!\n\n" +
-            "The visible range information below updates continuously during scrolling, " +
-            "showing the current visible X range and scroll progress in real-time.",
+      text = "This chart's data AND scroll position persist across configuration changes and navigation.",
       style = MaterialTheme.typography.bodyMedium
     )
 
@@ -179,36 +221,80 @@ fun SaveableStateDemo(
       Text("Generate New Data (Version: $dataVersion)")
     }
 
-    Text(
-      text = "Current scroll position: ${scrollState.value.toInt()}px",
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant
+    Button(
+      onClick = {
+        minY = (0..10).random()
+        maxY = (15..30).random()
+      },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text("Change Y Range (Min: $minY, Max: $maxY)")
+    }
+
+    Button(
+      onClick = {
+        minY = 0
+        maxY = 20
+      },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text("Reset Y Range")
+    }
+
+    Button(
+      onClick = { showSecondaryLine = !showSecondaryLine },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text(if (showSecondaryLine) "Hide Secondary Line" else "Show Secondary Line")
+    }
+
+    val decoration = rememberHorizontalLine()
+
+    val primaryLayer = rememberLineCartesianLayer(
+      verticalAxisPosition = Axis.Position.Vertical.Start,
+      rangeProvider = remember(rangeUpdateTrigger, minY, maxY) {
+        val currentMinY = minY
+        val currentMaxY = maxY
+        object : com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider {
+          override fun getMinY(minY: Double, maxY: Double, extraStore: com.patrykandpatrick.vico.core.common.data.ExtraStore): Double {
+            return currentMinY.toDouble()
+          }
+          override fun getMaxY(minY: Double, maxY: Double, extraStore: com.patrykandpatrick.vico.core.common.data.ExtraStore): Double {
+            return currentMaxY.toDouble()
+          }
+        }
+      }
     )
 
-    // Display visible range information
-    visibleRange?.let { range ->
-      Text(
-        text = "Visible X Range: ${String.format("%.1f", range.visibleXRange.start)} to ${String.format("%.1f", range.visibleXRange.endInclusive)}",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-      )
-      Text(
-        text = "Full X Range: ${String.format("%.1f", range.fullXRange.start)} to ${String.format("%.1f", range.fullXRange.endInclusive)}",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-      )
-      Text(
-        text = "Scroll Progress: ${String.format("%.1f", range.scrollValue)}/${String.format("%.1f", range.maxScrollValue)} (${String.format("%.1f", (range.scrollValue / range.maxScrollValue * 100))}%)",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-      )
-    }
-    val decoration = rememberHorizontalLine()
+    val colorList = listOf(Color.Red)
+
+    val secondaryLayer = rememberLineCartesianLayer(
+      verticalAxisPosition = Axis.Position.Vertical.End,
+      lineProvider = LineCartesianLayer.LineProvider.series(
+        listOf(colorList).map {
+          LineCartesianLayer.rememberLine(
+        fill = LineCartesianLayer.LineFill.single(fill(it.first()))
+        )
+        },
+      ),
+      rangeProvider = remember(rangeUpdateTrigger, secondaryMinY, secondaryMaxY) {
+        val currentSecondaryMinY = secondaryMinY
+        val currentSecondaryMaxY = secondaryMaxY
+        object : com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider {
+          override fun getMinY(minY: Double, maxY: Double, extraStore: com.patrykandpatrick.vico.core.common.data.ExtraStore): Double {
+            return currentSecondaryMinY.toDouble()
+          }
+          override fun getMaxY(minY: Double, maxY: Double, extraStore: com.patrykandpatrick.vico.core.common.data.ExtraStore): Double {
+            return currentSecondaryMaxY.toDouble()
+          }
+        }
+      }
+    )
 
     CartesianChartHost(
       chart = rememberCartesianChart(
-        rememberColumnCartesianLayer(),
-        rememberLineCartesianLayer(),
+        primaryLayer,
+        secondaryLayer,
         startAxis = VerticalAxis.rememberStart(),
         bottomAxis = HorizontalAxis.rememberBottom(
           tick = rememberAxisGuidelineComponent(),
@@ -217,12 +303,11 @@ fun SaveableStateDemo(
         ),
         decorations = listOf(decoration)
       ),
-      animateIn = false,
+      animateIn = true,
       modelProducer = modelProducer,
       scrollState = scrollState,
       zoomState = zoomState,
       modifier = Modifier.fillMaxWidth()
-
     )
   }
 }

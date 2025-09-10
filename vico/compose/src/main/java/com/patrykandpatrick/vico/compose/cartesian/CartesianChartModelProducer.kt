@@ -16,25 +16,32 @@
 
 package com.patrykandpatrick.vico.compose.cartesian
 
+import android.util.Log
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalInspectionMode
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartData
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartDataState
 import com.patrykandpatrick.vico.compose.common.rememberWrappedValue
 import com.patrykandpatrick.vico.core.cartesian.CartesianChart
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModel
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges
 import com.patrykandpatrick.vico.core.cartesian.data.MutableCartesianChartRanges
 import com.patrykandpatrick.vico.core.cartesian.data.PreviewContext
 import com.patrykandpatrick.vico.core.cartesian.data.toImmutable
+import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayer
 import com.patrykandpatrick.vico.core.common.Animation
 import com.patrykandpatrick.vico.core.common.NEW_PRODUCER_ERROR_MESSAGE
 import com.patrykandpatrick.vico.core.common.ValueWrapper
@@ -72,7 +79,10 @@ internal fun CartesianChartModelProducer.collectAsState(
   val isInPreview = LocalInspectionMode.current
   val scope = rememberCoroutineScope { getCoroutineContext(isInPreview) }
   val chartState = rememberWrappedValue(chart)
-  LaunchRegistration(chart, animateIn, isInPreview) {
+  var tempModel by remember { ValueWrapper<Int?>(null) }
+  var initAnimation by remember { ValueWrapper(false) }
+
+  LaunchRegistration(chart.id, animateIn, isInPreview , chart.layers) {
     var mainAnimationJob: Job? = null
     var animationFrameJob: Job? = null
     var finalAnimationFrameJob: Job? = null
@@ -80,7 +90,7 @@ internal fun CartesianChartModelProducer.collectAsState(
     var isAnimationFrameGenerationRunning = false
     val startAnimation: (transformModel: suspend (key: Any, fraction: Float) -> Unit) -> Unit =
       { transformModel ->
-        if (animationSpec != null && !isInPreview && (dataState.value.model != null || animateIn)) {
+        if (animationSpec != null && !isInPreview && (dataState.value.model != null  && animateIn) && initAnimation) {
           isAnimationRunning = true
           mainAnimationJob =
             scope.launch {
@@ -132,6 +142,10 @@ internal fun CartesianChartModelProducer.collectAsState(
         transform = { extraStore, fraction -> chartState.value.transform(extraStore, fraction) },
         hostExtraStore = extraStore,
         updateRanges = { model ->
+          if(model?.id != tempModel && dataState.value.model?.id != null){
+            initAnimation = false
+            tempModel = model?.id
+          }
           ranges.reset()
           if (model != null) {
             chartState.value.updateRanges(ranges, model)
@@ -142,6 +156,7 @@ internal fun CartesianChartModelProducer.collectAsState(
         },
       ) { model, ranges, extraStore ->
         dataState.set(model, ranges, extraStore)
+        initAnimation = true
       }
     }
     return@LaunchRegistration {
@@ -151,20 +166,22 @@ internal fun CartesianChartModelProducer.collectAsState(
       unregisterFromUpdates(chartState.value.id)
     }
   }
+
   return dataState
 }
 
 @Composable
 private fun LaunchRegistration(
-  chart : CartesianChart,
+  chartID: UUID,
   animateIn: Boolean,
   isInPreview: Boolean,
+  layers: List<CartesianLayer<*>>,
   block: () -> () -> Unit,
 ) {
   if (isInPreview) {
     runBlocking(getCoroutineContext(isPreview = true)) { block() }
   } else {
-    LaunchedEffect(chart, animateIn ) {
+    LaunchedEffect(chartID, animateIn , layers) {
       withContext(getCoroutineContext(isPreview = false)) {
         val disposable = block()
         currentCoroutineContext().job.invokeOnCompletion { disposable() }
