@@ -46,6 +46,7 @@ public fun VerticalAxis.Companion.rememberStart(
   size: BaseAxis.Size = BaseAxis.Size.auto(),
   titleComponent: TextComponent? = null,
   title: CharSequence? = null,
+  markerDecoration: VerticalAxis.MarkerDecoration? = null,
 ): VerticalAxis<Axis.Position.Vertical.Start> =
   remember(
     line,
@@ -61,6 +62,7 @@ public fun VerticalAxis.Companion.rememberStart(
     size,
     titleComponent,
     title,
+    markerDecoration,
   ) {
     start(
       line,
@@ -76,6 +78,7 @@ public fun VerticalAxis.Companion.rememberStart(
       size,
       titleComponent,
       title,
+      markerDecoration,
     )
   }
 
@@ -96,6 +99,7 @@ public fun VerticalAxis.Companion.rememberEnd(
   size: BaseAxis.Size = BaseAxis.Size.auto(),
   titleComponent: TextComponent? = null,
   title: CharSequence? = null,
+  markerDecoration: VerticalAxis.MarkerDecoration? = null,
 ): VerticalAxis<Axis.Position.Vertical.End> =
   remember(
     line,
@@ -111,6 +115,7 @@ public fun VerticalAxis.Companion.rememberEnd(
     size,
     titleComponent,
     title,
+    markerDecoration,
   ) {
     end(
       line,
@@ -126,5 +131,6 @@ public fun VerticalAxis.Companion.rememberEnd(
       size,
       titleComponent,
       title,
+      markerDecoration,
     )
   }

@@ -36,6 +36,7 @@ import com.patrykandpatrick.vico.core.common.data.ExtraStore
 import com.patrykandpatrick.vico.core.common.half
 import com.patrykandpatrick.vico.core.common.orZero
 import com.patrykandpatrick.vico.core.common.translate
+import java.text.DecimalFormat
 import kotlin.math.ceil
 import kotlin.math.max
 
@@ -68,6 +69,7 @@ protected constructor(
   size: Size,
   titleComponent: TextComponent?,
   title: CharSequence?,
+  public val markerDecoration: MarkerDecoration? = null,
 ) :
   BaseAxis<P>(
     line,
@@ -126,6 +128,7 @@ protected constructor(
     Size.Auto(),
     titleComponent,
     title,
+    null,
   )
 
   override fun drawUnderLayers(context: CartesianDrawingContext) {
@@ -180,7 +183,27 @@ protected constructor(
         itemPlacer.getLabelValues(this, bounds.height(), getMaxLabelHeight(), position)
       val tickLeftX = getTickLeftX()
       val tickRightX = tickLeftX + lineThickness + tickLength
-      val labelX = if (areLabelsOutsideAtStartOrInsideAtEnd == isLtr) tickLeftX else tickRightX
+
+      // Calculate label position considering axis size and alignment
+      val axisWidth = when (size) {
+        is Size.Fixed -> size.valueDp.pixels
+        is Size.Auto -> bounds.width()
+        is Size.Fraction -> canvasBounds.width() * size.fraction
+        is Size.Text -> bounds.width()
+      }
+      val labelX = if (areLabelsOutsideAtStartOrInsideAtEnd == isLtr) {
+        // Outside labels - position relative to axis bounds
+        when (horizontalLabelPosition) {
+          HorizontalLabelPosition.Outside -> bounds.right - axisWidth
+          HorizontalLabelPosition.Inside -> bounds.left + axisWidth
+        }
+      } else {
+        // Inside labels - position relative to axis bounds
+        when (horizontalLabelPosition) {
+          HorizontalLabelPosition.Outside -> bounds.left + axisWidth
+          HorizontalLabelPosition.Inside -> bounds.right - axisWidth
+        }
+      }
       var tickCenterY: Float
       val yRange = ranges.getYRange(position)
 
@@ -201,7 +224,7 @@ protected constructor(
           context = this,
           labelComponent = label,
           label = valueFormatter.formatForAxis(this, labelValue, position),
-          labelX = labelX,
+          labelX = labelX ,
           tickCenterY = tickCenterY,
         )
       }
@@ -227,6 +250,107 @@ protected constructor(
             },
           maxHeight = bounds.height().toInt(),
         )
+      }
+
+      // Draw marker decoration if present
+      markerDecoration?.let { marker ->
+        val markerY = marker.y(model.extraStore)
+        val markerLabel = marker.label(model.extraStore)
+        val yRange = ranges.getYRange(position)
+
+        // Check if marker Y value is within the visible range
+        val isWithinRange = markerY >= yRange.minY && markerY <= yRange.maxY
+
+        val markerCanvasY = if (isWithinRange) {
+          // Normal positioning within range using the same method as labels
+          bounds.bottom - bounds.height() * ((markerY - yRange.minY) / yRange.length).toFloat() +
+            getLineCanvasYCorrection(tickThickness, markerY)
+        } else {
+          // If outside range, position at top or bottom with offset
+          if (markerY < yRange.minY) {
+            // Below range - position at bottom with offset
+            bounds.bottom + 40f
+          } else {
+            // Above range - position at top with offset
+            bounds.bottom - bounds.height() - 40f
+          }
+        }
+
+        // Draw marker component if present
+        marker.markerComponent?.let { markerComponent ->
+          val tickLeftX = getTickLeftX()
+          val tickRightX = tickLeftX + lineThickness + tickLength
+
+          // Use the same positioning logic as label component
+          val axisWidth = when (size) {
+            is Size.Fixed -> size.valueDp.pixels
+            is Size.Auto -> bounds.width()
+            is Size.Fraction -> canvasBounds.width() * size.fraction
+            is Size.Text -> bounds.width()
+          }
+          val markerX = if (areLabelsOutsideAtStartOrInsideAtEnd == isLtr) {
+            // Outside labels - position relative to axis bounds
+            when (marker.horizontalLabelPosition) {
+              HorizontalLabelPosition.Outside -> bounds.right - axisWidth
+              HorizontalLabelPosition.Inside -> bounds.left + axisWidth
+            }
+          } else {
+            // Inside labels - position relative to axis bounds
+            when (marker.horizontalLabelPosition) {
+              HorizontalLabelPosition.Outside -> bounds.left + axisWidth
+              HorizontalLabelPosition.Inside -> bounds.right - axisWidth
+            }
+          }
+
+          markerComponent.draw(
+            context = this,
+            text = markerLabel,
+            x = markerX,
+            y = markerCanvasY,
+            horizontalPosition = Position.Horizontal.Center,
+            verticalPosition = marker.verticalLabelPosition,
+            rotationDegrees = marker.labelRotationDegrees,
+            maxHeight = bounds.height().toInt(),
+          )
+        }
+
+        // Draw label component if present
+        marker.labelComponent?.let { labelComponent ->
+          val tickLeftX = getTickLeftX()
+          val tickRightX = tickLeftX + lineThickness + tickLength
+
+          // Use the same centering logic as regular axis labels
+          val axisWidth = when (size) {
+            is Size.Fixed -> size.valueDp.pixels
+            is Size.Auto -> bounds.width()
+            is Size.Fraction -> canvasBounds.width() * size.fraction
+            is Size.Text -> bounds.width()
+          }
+          val labelX = if (areLabelsOutsideAtStartOrInsideAtEnd == isLtr) {
+            // Outside labels - center within the axis width
+            when (marker.horizontalLabelPosition) {
+              HorizontalLabelPosition.Outside -> bounds.right - axisWidth
+              HorizontalLabelPosition.Inside -> bounds.left + axisWidth
+            }
+          } else {
+            // Inside labels - center within the axis width
+            when (marker.horizontalLabelPosition) {
+              HorizontalLabelPosition.Outside -> bounds.left + axisWidth
+              HorizontalLabelPosition.Inside -> bounds.right - axisWidth
+            }
+          }
+
+          labelComponent.draw(
+            context = this,
+            text = markerLabel,
+            x = labelX,
+            y = markerCanvasY,
+            horizontalPosition = Position.Horizontal.Center,
+            verticalPosition = marker.verticalLabelPosition,
+            rotationDegrees = marker.labelRotationDegrees,
+            maxWidth = (maxLabelWidth ?: (layerBounds.width().half - tickLength)).toInt(),
+          )
+        }
       }
     }
   }
@@ -445,6 +569,7 @@ protected constructor(
     size: Size = this.size,
     titleComponent: TextComponent? = this.titleComponent,
     title: CharSequence? = this.title,
+    markerDecoration: MarkerDecoration? = this.markerDecoration,
   ): VerticalAxis<P> =
     VerticalAxis(
       position,
@@ -461,6 +586,7 @@ protected constructor(
       size,
       titleComponent,
       title,
+      markerDecoration,
     )
 
   override fun equals(other: Any?): Boolean =
@@ -468,13 +594,15 @@ protected constructor(
       other is VerticalAxis<*> &&
       horizontalLabelPosition == other.horizontalLabelPosition &&
       verticalLabelPosition == other.verticalLabelPosition &&
-      itemPlacer == other.itemPlacer
+      itemPlacer == other.itemPlacer &&
+      markerDecoration == other.markerDecoration
 
   override fun hashCode(): Int {
     var result = super.hashCode()
     result = 31 * result + horizontalLabelPosition.hashCode()
     result = 31 * result + verticalLabelPosition.hashCode()
     result = 31 * result + itemPlacer.hashCode()
+    result = 31 * result + markerDecoration.hashCode()
     return result
   }
 
@@ -599,6 +727,7 @@ protected constructor(
       size: Size = Size.Auto(),
       titleComponent: TextComponent? = null,
       title: CharSequence? = null,
+      markerDecoration: MarkerDecoration? = null,
     ): VerticalAxis<Axis.Position.Vertical.Start> =
       VerticalAxis(
         Axis.Position.Vertical.Start,
@@ -615,6 +744,7 @@ protected constructor(
         size,
         titleComponent,
         title,
+        markerDecoration,
       )
 
     /** Creates an end [VerticalAxis]. */
@@ -632,6 +762,7 @@ protected constructor(
       size: Size = Size.Auto(),
       titleComponent: TextComponent? = null,
       title: CharSequence? = null,
+      markerDecoration: MarkerDecoration? = null,
     ): VerticalAxis<Axis.Position.Vertical.End> =
       VerticalAxis(
         Axis.Position.Vertical.End,
@@ -648,6 +779,36 @@ protected constructor(
         size,
         titleComponent,
         title,
+        markerDecoration,
       )
+  }
+
+  /**
+   * A marker decoration that can be positioned at specific Y values on the vertical axis.
+   *
+   * @property y returns the Y value where the marker should be positioned.
+   * @property markerComponent the component to draw at the marker position.
+   * @property labelComponent the label component for the marker.
+   * @property label returns the label text for the marker.
+   * @property horizontalLabelPosition defines the horizontal position of the marker label.
+   * @property verticalLabelPosition defines the vertical position of the marker label.
+   * @property labelRotationDegrees the rotation of the marker label (in degrees).
+   */
+  public data class MarkerDecoration(
+    public val y: (ExtraStore) -> Double,
+    public val markerComponent: TextComponent? = null,
+    public val labelComponent: TextComponent? = null,
+    public val label: (ExtraStore) -> CharSequence = { getMarkerLabel(y(it)) },
+    public val horizontalLabelPosition: HorizontalLabelPosition = HorizontalLabelPosition.Outside,
+    public val verticalLabelPosition: Position.Vertical = Position.Vertical.Center,
+    public val labelRotationDegrees: Float = 0f,
+  ) {
+    /** @suppress */
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    public companion object {
+      private val decimalFormat: DecimalFormat = DecimalFormat("#.##;−#.##")
+
+      public fun getMarkerLabel(y: Double): String = decimalFormat.format(y)
+    }
   }
 }

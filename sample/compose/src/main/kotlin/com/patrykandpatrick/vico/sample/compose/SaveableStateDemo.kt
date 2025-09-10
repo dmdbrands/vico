@@ -17,6 +17,7 @@
 package com.patrykandpatrick.vico.sample.compose
 
 import android.graphics.Typeface
+import android.text.Layout
 import android.util.Log
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.layout.Arrangement
@@ -44,7 +45,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
+import com.patrykandpatrick.vico.compose.cartesian.axis.fixed
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisGuidelineComponent
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberEnd
@@ -61,17 +64,16 @@ import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 import com.patrykandpatrick.vico.compose.common.component.shapeComponent
 import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.compose.common.insets
-import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.axis.Axis
+import com.patrykandpatrick.vico.core.cartesian.axis.BaseAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
-import com.patrykandpatrick.vico.core.cartesian.decoration.Decoration
-import com.patrykandpatrick.vico.core.cartesian.decoration.HorizontalLine
 import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.core.common.Position
+import com.patrykandpatrick.vico.core.common.component.TextComponent
 import com.patrykandpatrick.vico.core.common.shape.CorneredShape
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
@@ -121,6 +123,7 @@ fun SaveableStateDemo(
   var animateIn by remember { mutableStateOf(false) }
   var secondaryMinY by rememberSaveable { mutableIntStateOf(5) }
   var secondaryMaxY by rememberSaveable { mutableIntStateOf(25) }
+  var markerValue by rememberSaveable { mutableStateOf(100.0) }
 
 
   LaunchedEffect(showSecondaryLine) {
@@ -248,7 +251,14 @@ fun SaveableStateDemo(
       Text(if (showSecondaryLine) "Hide Secondary Line" else "Show Secondary Line")
     }
 
-    val decoration = rememberHorizontalLine()
+    Button(
+      onClick = { markerValue = (0..10).random().toDouble() },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text("Randomize Marker Value (Current: $markerValue)")
+    }
+
+    val markerDecoration = rememberMarkerDecoration(markerValue)
 
     val primaryLayer = rememberLineCartesianLayer(
       verticalAxisPosition = Axis.Position.Vertical.Start,
@@ -290,18 +300,25 @@ fun SaveableStateDemo(
         }
       }
     )
+    val fill = fill(Color(0xFF458239))
 
     CartesianChartHost(
       chart = rememberCartesianChart(
         primaryLayer,
         secondaryLayer,
-        startAxis = VerticalAxis.rememberStart(),
+        startAxis = VerticalAxis.rememberStart(
+          label = rememberTextComponent(
+            textSize = 14.sp,
+            textAlignment = Layout.Alignment.ALIGN_CENTER
+          ),
+          size = BaseAxis.Size.fixed(20.dp),
+          markerDecoration = markerDecoration
+        ),
         bottomAxis = HorizontalAxis.rememberBottom(
           tick = rememberAxisGuidelineComponent(),
           tickLength = 20.dp,
           horizontalLabelPosition = Position.Horizontal.End
-        ),
-        decorations = listOf(decoration)
+        )
       ),
       animateIn = true,
       modelProducer = modelProducer,
@@ -313,16 +330,17 @@ fun SaveableStateDemo(
 }
 
 @Composable
-private fun rememberHorizontalLine(
-): Decoration {
+private fun rememberMarkerDecoration(markerValue: Double): VerticalAxis.MarkerDecoration {
   val fill = fill(Color(0xFF458239))
   val line = rememberLineComponent(fill = fill(Color(0xFF458239)), thickness = 2.dp)
   val labelComponent =
     rememberTextComponent(
       typeface = Typeface.DEFAULT_BOLD,
       color = Color(0xfffdc8c4),
-      margins = insets(start = (-40).dp),
-      padding = insets(horizontal = 8.dp , vertical = 2.dp),
+      padding = insets(horizontal = 6.dp , vertical = 2.dp),
+      textSize = 14.sp,
+      textAlignment = Layout.Alignment.ALIGN_CENTER,
+      minWidth = TextComponent.MinWidth.fixed(32f),
       background =
         shapeComponent(
           fill,
@@ -330,20 +348,15 @@ private fun rememberHorizontalLine(
         ),
     )
 
-  val decoration =
-    object : Decoration {
-      override fun drawUnderLayers(context: CartesianDrawingContext) {
-        HorizontalLine(
-          y = { 150.0 },
-          line = line.copy(fill = fill(Color.Transparent)),
-          labelComponent = labelComponent,
-          horizontalLabelPosition = Position.Horizontal.Start,
-          verticalLabelPosition = Position.Vertical.Bottom,
-          verticalAxisPosition = Axis.Position.Vertical.End,
-        ).drawOverLayers(context)
-      }
-    }
-  return remember { decoration }
+  return remember(markerValue) {
+    VerticalAxis.MarkerDecoration(
+      y = { markerValue },
+      labelComponent = labelComponent,
+      label = { markerValue.toInt().toString() },
+      horizontalLabelPosition = VerticalAxis.HorizontalLabelPosition.Outside,
+      verticalLabelPosition = Position.Vertical.Center,
+    )
+  }
 }
 
 
