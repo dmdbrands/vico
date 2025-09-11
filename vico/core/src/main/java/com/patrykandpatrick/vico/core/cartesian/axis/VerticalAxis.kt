@@ -184,24 +184,26 @@ protected constructor(
       val tickLeftX = getTickLeftX()
       val tickRightX = tickLeftX + lineThickness + tickLength
 
-      // Calculate label position considering axis size and alignment
+      // Calculate label position considering axis size, alignment, and text minWidth
       val axisWidth = when (size) {
         is Size.Fixed -> size.valueDp.pixels
         is Size.Auto -> bounds.width()
         is Size.Fraction -> canvasBounds.width() * size.fraction
         is Size.Text -> bounds.width()
       }
+      // Calculate dynamic offset based on tick length and line thickness
+      val offset = (tickLength + lineThickness).half
       val labelX = if (areLabelsOutsideAtStartOrInsideAtEnd == isLtr) {
-        // Outside labels - position relative to axis bounds
+        // Outside labels - position relative to axis bounds with dynamic offset
         when (horizontalLabelPosition) {
-          HorizontalLabelPosition.Outside -> bounds.right - axisWidth
-          HorizontalLabelPosition.Inside -> bounds.left + axisWidth
+          HorizontalLabelPosition.Outside -> bounds.right - axisWidth.half - offset
+          HorizontalLabelPosition.Inside -> bounds.left + axisWidth.half + offset
         }
       } else {
-        // Inside labels - position relative to axis bounds
+        // Inside labels - position relative to axis bounds with dynamic offset
         when (horizontalLabelPosition) {
-          HorizontalLabelPosition.Outside -> bounds.left + axisWidth
-          HorizontalLabelPosition.Inside -> bounds.right - axisWidth
+          HorizontalLabelPosition.Outside -> bounds.left + axisWidth.half + offset
+          HorizontalLabelPosition.Inside -> bounds.right - axisWidth.half - offset
         }
       }
       var tickCenterY: Float
@@ -281,24 +283,26 @@ protected constructor(
           val tickLeftX = getTickLeftX()
           val tickRightX = tickLeftX + lineThickness + tickLength
 
-          // Use the same positioning logic as label component
+          // Use the same positioning logic as label component, considering text minWidth
           val axisWidth = when (size) {
             is Size.Fixed -> size.valueDp.pixels
             is Size.Auto -> bounds.width()
             is Size.Fraction -> canvasBounds.width() * size.fraction
             is Size.Text -> bounds.width()
           }
+          // Calculate dynamic offset based on tick length and line thickness
+          val offset = (tickLength + lineThickness).half
           val markerX = if (areLabelsOutsideAtStartOrInsideAtEnd == isLtr) {
-            // Outside labels - position relative to axis bounds
+            // Outside labels - position relative to axis bounds with dynamic offset
             when (marker.horizontalLabelPosition) {
-              HorizontalLabelPosition.Outside -> bounds.right - axisWidth
-              HorizontalLabelPosition.Inside -> bounds.left + axisWidth
+              HorizontalLabelPosition.Outside -> bounds.right - axisWidth.half - offset
+              HorizontalLabelPosition.Inside -> bounds.left + axisWidth.half + offset
             }
           } else {
-            // Inside labels - position relative to axis bounds
+            // Inside labels - position relative to axis bounds with dynamic offset
             when (marker.horizontalLabelPosition) {
-              HorizontalLabelPosition.Outside -> bounds.left + axisWidth
-              HorizontalLabelPosition.Inside -> bounds.right - axisWidth
+              HorizontalLabelPosition.Outside -> bounds.left + axisWidth.half + offset
+              HorizontalLabelPosition.Inside -> bounds.right - axisWidth.half - offset
             }
           }
 
@@ -319,24 +323,26 @@ protected constructor(
           val tickLeftX = getTickLeftX()
           val tickRightX = tickLeftX + lineThickness + tickLength
 
-          // Use the same centering logic as regular axis labels
+          // Use the same centering logic as regular axis labels, considering text minWidth
           val axisWidth = when (size) {
             is Size.Fixed -> size.valueDp.pixels
             is Size.Auto -> bounds.width()
             is Size.Fraction -> canvasBounds.width() * size.fraction
             is Size.Text -> bounds.width()
           }
+          // Calculate dynamic offset based on tick length and line thickness
+          val offset = (tickLength + lineThickness).half
           val labelX = if (areLabelsOutsideAtStartOrInsideAtEnd == isLtr) {
-            // Outside labels - center within the axis width
+            // Outside labels - position relative to axis bounds with dynamic offset
             when (marker.horizontalLabelPosition) {
-              HorizontalLabelPosition.Outside -> bounds.right - axisWidth
-              HorizontalLabelPosition.Inside -> bounds.left + axisWidth
+              HorizontalLabelPosition.Outside -> bounds.right - axisWidth.half - offset
+              HorizontalLabelPosition.Inside -> bounds.left + axisWidth.half + offset
             }
           } else {
-            // Inside labels - center within the axis width
+            // Inside labels - position relative to axis bounds with dynamic offset
             when (marker.horizontalLabelPosition) {
-              HorizontalLabelPosition.Outside -> bounds.left + axisWidth
-              HorizontalLabelPosition.Inside -> bounds.right - axisWidth
+              HorizontalLabelPosition.Outside -> bounds.left + axisWidth.half + offset
+              HorizontalLabelPosition.Inside -> bounds.right - axisWidth.half - offset
             }
           }
 

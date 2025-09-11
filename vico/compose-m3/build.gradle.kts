@@ -16,19 +16,27 @@
 
 plugins {
   `dokka-convention`
-  `publishing-convention`
   id("com.android.library")
   id("kotlin-android")
   id("org.jetbrains.kotlin.plugin.compose")
+  id("maven-publish")
 }
 
 android {
   configure()
-  kotlinOptions { jvmTarget = JavaVersion.VERSION_1_8.toString() }
+  kotlinOptions {
+    jvmTarget = JavaVersion.VERSION_1_8.toString()
+    freeCompilerArgs += listOf("-Xjsr305=strict", "-Xjvm-default=all")
+  }
   namespace = moduleNamespace
 }
 
 kotlin { explicitApi() }
+
+tasks.register<Jar>("sourcesJar") {
+    archiveClassifier.set("sources")
+    from(android.sourceSets.getByName("main").java.srcDirs)
+}
 
 composeCompiler { reportsDestination = layout.buildDirectory.dir("reports") }
 
@@ -44,8 +52,11 @@ publishing {
             run {
                 groupId = "com.dmdbrands.lib"
                 artifactId = "vico-compose-m3"
-                version = "2.0.1"
-                artifact("build/outputs/aar/compose-m3-release.aar")
+                version = Versions.VICO
+                artifact("build/outputs/aar/compose-m3-debug.aar")
+
+                // Add sources JAR
+                artifact(tasks.named("sourcesJar"))
             }
         }
     }

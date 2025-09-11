@@ -306,19 +306,23 @@ fun SaveableStateDemo(
       chart = rememberCartesianChart(
         primaryLayer,
         secondaryLayer,
-        startAxis = VerticalAxis.rememberStart(
+        endAxis = VerticalAxis.rememberEnd(
           label = rememberTextComponent(
             textSize = 14.sp,
-            textAlignment = Layout.Alignment.ALIGN_CENTER
+            textAlignment = Layout.Alignment.ALIGN_CENTER,
           ),
-          size = BaseAxis.Size.fixed(20.dp),
-          markerDecoration = markerDecoration
+          size = BaseAxis.Size.fixed(40.dp),
+          markerDecoration = markerDecoration,
+          tickLength = 0.dp,
+          tick = null
         ),
         bottomAxis = HorizontalAxis.rememberBottom(
           tick = rememberAxisGuidelineComponent(),
           tickLength = 20.dp,
           horizontalLabelPosition = Position.Horizontal.End
         )
+        ,
+        visibleLabelsCount = 6
       ),
       animateIn = true,
       modelProducer = modelProducer,
@@ -340,8 +344,8 @@ private fun rememberMarkerDecoration(markerValue: Double): VerticalAxis.MarkerDe
       padding = insets(horizontal = 6.dp , vertical = 2.dp),
       textSize = 14.sp,
       textAlignment = Layout.Alignment.ALIGN_CENTER,
-      minWidth = TextComponent.MinWidth.fixed(32f),
-      background =
+
+              background =
         shapeComponent(
           fill,
           shape = CorneredShape.Pill,
