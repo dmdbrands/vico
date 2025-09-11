@@ -25,7 +25,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import com.patrykandpatrick.vico.compose.common.detectZoomGestures
 import com.patrykandpatrick.vico.core.common.Point
 
-private const val BASE_SCROLL_ZOOM_DELTA = 0.1f
+private const val BASE_SCROLL_ZOOM_DELTA = 0.05f
 
 private fun Offset.toPoint() = Point(x, y)
 

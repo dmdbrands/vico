@@ -65,9 +65,9 @@ import kotlinx.coroutines.launch
  * @param chart the [CartesianChart].
  * @param modelProducer creates and updates the [CartesianChartModel].
  * @param modifier the modifier to be applied to the chart.
- * @param scrollState houses information on the [CartesianChart]’s scroll value. Allows for scroll
+ * @param scrollState houses information on the [CartesianChart]'s scroll value. Allows for scroll
  *   customization and programmatic scrolling.
- * @param zoomState houses information on the [CartesianChart]’s zoom factor. Allows for zoom
+ * @param zoomState houses information on the [CartesianChart]'s zoom factor. Allows for zoom
  *   customization.
  * @param animationSpec the [AnimationSpec] for difference animations.
  * @param animateIn whether to run an initial animation when the [CartesianChartHost] enters
@@ -117,9 +117,9 @@ public fun CartesianChartHost(
  * @param chart the [CartesianChart].
  * @param model the [CartesianChartModel].
  * @param modifier the modifier to be applied to the chart.
- * @param scrollState houses information on the [CartesianChart]’s scroll value. Allows for scroll
+ * @param scrollState houses information on the [CartesianChart]'s scroll value. Allows for scroll
  *   customization and programmatic scrolling.
- * @param zoomState houses information on the [CartesianChart]’s zoom factor. Allows for zoom
+ * @param zoomState houses information on the [CartesianChart]'s zoom factor. Allows for zoom
  *   customization.
  * @param consumeMoveEvents whether to consume move touch events when scroll is disabled and
  *   [CartesianChart.marker] is not null.
@@ -139,6 +139,7 @@ public fun CartesianChartHost(
     ranges.reset()
     chart.updateRanges(ranges, model)
   }
+
   CartesianChartHostBox(modifier) {
     CartesianChartHostImpl(
       chart,

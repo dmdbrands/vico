@@ -63,6 +63,7 @@ public class VicoScrollState {
   private var layerDimensions: CartesianLayerDimensions? = null
   private var bounds: RectF? = null
   internal val scrollEnabled: Boolean
+  internal val scrollThreshold: Float
   internal val pointerXDeltas = MutableSharedFlow<Float>(extraBufferCapacity = 1)
 
   private val _visibleRange = MutableStateFlow<VisibleRange?>(null)
@@ -70,13 +71,24 @@ public class VicoScrollState {
   public val visibleRange: StateFlow<VisibleRange?> = _visibleRange.asStateFlow()
 
   internal val scrollableState = ScrollableState { delta ->
-    val oldValue = value
-    value += delta
-    val consumedValue = value - oldValue
-    if (oldValue + delta == value) {
-      delta
+    // Apply scroll threshold to reduce sensitivity
+    val thresholdedDelta = if (kotlin.math.abs(delta) < scrollThreshold) {
+      0f
     } else {
-      pointerXDeltas.tryEmit(consumedValue - delta)
+      delta
+    }
+
+    if (thresholdedDelta == 0f) {
+      return@ScrollableState 0f
+    }
+
+    val oldValue = value
+    value += thresholdedDelta
+    val consumedValue = value - oldValue
+    if (oldValue + thresholdedDelta == value) {
+      thresholdedDelta
+    } else {
+      pointerXDeltas.tryEmit(consumedValue - thresholdedDelta)
       consumedValue
     }
   }
@@ -109,6 +121,7 @@ public class VicoScrollState {
     autoScroll: Scroll,
     autoScrollCondition: AutoScrollCondition,
     autoScrollAnimationSpec: AnimationSpec<Float>,
+    scrollThreshold: Float,
     value: Float,
     initialScrollHandled: Boolean,
   ) {
@@ -117,12 +130,13 @@ public class VicoScrollState {
     this.autoScroll = autoScroll
     this.autoScrollCondition = autoScrollCondition
     this.autoScrollAnimationSpec = autoScrollAnimationSpec
+    this.scrollThreshold = scrollThreshold
     _value = mutableFloatStateOf(value)
     this.initialScrollHandled = initialScrollHandled
   }
 
   /**
-   * Houses information on a [CartesianChart]’s scroll value. Allows for scroll customization and
+   * Houses information on a [CartesianChart]'s scroll value. Allows for scroll customization and
    * programmatic scrolling.
    *
    * @param scrollEnabled whether scroll is enabled.
@@ -130,6 +144,7 @@ public class VicoScrollState {
    * @param autoScroll represents the scroll value or delta for automatic scrolling.
    * @param autoScrollCondition defines when an automatic scroll should occur.
    * @param autoScrollAnimationSpec the [AnimationSpec] for automatic scrolling.
+   * @param scrollThreshold minimum scroll delta required to trigger scrolling (in pixels).
    */
   public constructor(
     scrollEnabled: Boolean,
@@ -137,12 +152,14 @@ public class VicoScrollState {
     autoScroll: Scroll,
     autoScrollCondition: AutoScrollCondition,
     autoScrollAnimationSpec: AnimationSpec<Float>,
+    scrollThreshold: Float = 5f,
   ) : this(
     scrollEnabled = scrollEnabled,
     initialScroll = initialScroll,
     autoScroll = autoScroll,
     autoScrollCondition = autoScrollCondition,
     autoScrollAnimationSpec = autoScrollAnimationSpec,
+    scrollThreshold = scrollThreshold,
     value = 0f,
     initialScrollHandled = false,
   )
@@ -225,6 +242,7 @@ public class VicoScrollState {
       autoScroll: Scroll,
       autoScrollCondition: AutoScrollCondition,
       autoScrollAnimationSpec: AnimationSpec<Float>,
+      scrollThreshold: Float,
     ) =
       Saver<VicoScrollState, Pair<Float, Boolean>>(
         save = { it.value to it.initialScrollHandled },
@@ -235,6 +253,7 @@ public class VicoScrollState {
             autoScroll,
             autoScrollCondition,
             autoScrollAnimationSpec,
+            scrollThreshold,
             value,
             initialScrollHandled,
           )
@@ -251,6 +270,7 @@ public fun rememberVicoScrollState(
   autoScroll: Scroll = initialScroll,
   autoScrollCondition: AutoScrollCondition = AutoScrollCondition.Never,
   autoScrollAnimationSpec: AnimationSpec<Float> = spring(),
+  scrollThreshold: Float = 5f,
 ): VicoScrollState =
   rememberSaveable(
     scrollEnabled,
@@ -258,14 +278,16 @@ public fun rememberVicoScrollState(
     autoScroll,
     autoScrollCondition,
     autoScrollAnimationSpec,
+    scrollThreshold,
     saver =
-      remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec) {
+      remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec, scrollThreshold) {
         VicoScrollState.Saver(
           scrollEnabled,
           initialScroll,
           autoScroll,
           autoScrollCondition,
           autoScrollAnimationSpec,
+          scrollThreshold,
         )
       },
   ) {
@@ -275,5 +297,6 @@ public fun rememberVicoScrollState(
       autoScroll,
       autoScrollCondition,
       autoScrollAnimationSpec,
+      scrollThreshold,
     )
   }

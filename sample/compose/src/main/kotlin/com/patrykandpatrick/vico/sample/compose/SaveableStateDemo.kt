@@ -49,12 +49,14 @@ import androidx.compose.ui.unit.sp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.fixed
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisGuidelineComponent
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberAxisLineComponent
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberEnd
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLine
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.marker.rememberDefaultCartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.rememberSaveableCartesianChartModelProducer
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
@@ -86,14 +88,37 @@ import kotlin.random.Random
 
 /**
  * Generates random data points for chart demonstration.
+ * Returns a pair where first is x coordinates (custom values) and second is y coordinates (data values).
  */
-private fun generateData(count: Int, minValue: Int, maxValue: Int): List<Float> {
-  return (1..count).map { Random.nextFloat() * (maxValue - minValue) + minValue }
+private fun generateData(count: Int, minValue: Int, maxValue: Int): Pair<List<Double>, List<Double>> {
+  // Generate custom x values (not sequential, can be any values like 1, 5, 7, 9, 11, 12, 15, 16, 18, etc.)
+  val xValues = (1..count).map {
+    // Generate random x values between 1 and count*2 to create non-sequential x coordinates
+    Random.nextInt(1, count * 2).toDouble()
+  }.distinct().sorted() // Remove duplicates and sort to maintain order
+
+  // Generate y values for each x coordinate
+  val yValues = xValues.map { Random.nextFloat() * (maxValue - minValue) + minValue }.map { it.toDouble() }
+  return Pair(xValues, yValues)
+}
+
+/**
+ * Generates example data with specific x values like 1, 5, 7, 9, 11, 12, 15, 16, 18, etc.
+ * This demonstrates how x values can be any custom values, not just sequential indices.
+ */
+private fun generateExampleData(minValue: Int, maxValue: Int): Pair<List<Double>, List<Double>> {
+  // Example x values: non-sequential custom values
+  val xValues = listOf(1.0, 5.0, 7.0, 9.0, 11.0, 12.0, 15.0, 16.0, 18.0, 20.0, 22.0, 25.0, 28.0, 30.0, 33.0, 35.0, 38.0, 40.0, 42.0, 45.0)
+
+  // Generate y values for each x coordinate
+  val yValues = xValues.map { Random.nextFloat() * (maxValue - minValue) + minValue }.map { it.toDouble() }
+  return Pair(xValues, yValues)
 }
 
 /**
  * Demo showing how rememberSaveableCartesianChartModelProducer preserves chart data
  * across configuration changes and navigation without requiring manual data recreation.
+ * Also demonstrates scroll threshold feature for controlling scroll sensitivity.
  */
 @Composable
 fun SaveableStateDemo(
@@ -103,12 +128,16 @@ fun SaveableStateDemo(
   // Using rememberSaveableCartesianChartModelProducer preserves data across configuration changes AND navigation
   val modelProducer = rememberSaveableCartesianChartModelProducer()
 
+  // Scroll threshold to control scroll sensitivity (higher values = less sensitive)
+  var scrollThreshold by rememberSaveable { mutableStateOf(5f) }
+
   // Also use saveable scroll and zoom states to preserve chart position
-  val scrollState = rememberVicoScrollState()
+  val scrollState = rememberVicoScrollState(scrollThreshold = scrollThreshold)
   val zoomState = rememberVicoZoomState()
 
 
   var dataVersion by rememberSaveable { mutableIntStateOf(0) }
+  var useExampleData by rememberSaveable { mutableStateOf(false) }
 
   var minY by rememberSaveable { mutableIntStateOf(0) }
   var maxY by rememberSaveable { mutableIntStateOf(15) }
@@ -116,8 +145,12 @@ fun SaveableStateDemo(
   var rangeUpdateTrigger by remember { mutableIntStateOf(0) }
   val visibleRange by scrollState.visibleRange.collectAsState()
 
-  val data = remember { generateData(100, 0, 15).toList() }
-  val secondaryData = remember { generateData(100, 5, 25).toList() }
+  val (xData, yData) = remember(useExampleData, dataVersion) {
+    if (useExampleData) generateExampleData(0, 15) else generateData(100, 0, 15)
+  }
+  val (xSecondaryData, ySecondaryData) = remember(useExampleData, dataVersion) {
+    if (useExampleData) generateExampleData(5, 25) else generateData(100, 5, 25)
+  }
 
   var showSecondaryLine by rememberSaveable { mutableStateOf(false) }
   var animateIn by remember { mutableStateOf(false) }
@@ -130,11 +163,11 @@ fun SaveableStateDemo(
     animateIn = false
     modelProducer.runTransaction {
         lineSeries {
-          series(data)
+          series(x = xData, y = yData)
         }
       if(showSecondaryLine)
         lineSeries {
-          series(secondaryData)
+          series(x = xSecondaryData, y = ySecondaryData)
         }
     }
   }
@@ -150,10 +183,10 @@ fun SaveableStateDemo(
         .distinctUntilChanged()
         .collect { (start, end) ->
           // Calculate the actual Y range from the visible data
-          val visibleData = data.let { data ->
-            val startIndex = max(0, min(start.toInt(), data.size - 1))
-            val endIndex = max(0, min(end.toInt(), data.size - 1))
-            data.subList(startIndex, endIndex + 1)
+          // Find data points where x values fall within the visible range
+          val visibleData = yData.filterIndexed { index, _ ->
+            val xValue = xData[index]
+            xValue >= start && xValue <= end
           }
 
            if (visibleData.isNotEmpty()) {
@@ -166,10 +199,9 @@ fun SaveableStateDemo(
 
              // Calculate secondary range if secondary line is shown
              if (showSecondaryLine) {
-               val secondaryVisibleData = secondaryData.let { data ->
-                 val startIndex = max(0, min(start.toInt(), data.size - 1))
-                 val endIndex = max(0, min(end.toInt(), data.size - 1))
-                 data.subList(startIndex, endIndex + 1)
+               val secondaryVisibleData = ySecondaryData.filterIndexed { index, _ ->
+                 val xValue = xSecondaryData[index]
+                 xValue >= start && xValue <= end
                }
 
                if (secondaryVisibleData.isNotEmpty()) {
@@ -217,11 +249,24 @@ fun SaveableStateDemo(
       style = MaterialTheme.typography.bodyMedium
     )
 
+    Text(
+      text = "Use the scroll threshold control below to adjust scroll sensitivity. Higher values make scrolling less sensitive to small movements.",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
     Button(
       onClick = { dataVersion++ },
       modifier = Modifier.fillMaxWidth()
     ) {
       Text("Generate New Data (Version: $dataVersion)")
+    }
+
+    Button(
+      onClick = { useExampleData = !useExampleData },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text(if (useExampleData) "Switch to Random Data" else "Switch to Example Data (1,5,7,9,11,12,15,16,18...)")
     }
 
     Button(
@@ -256,6 +301,25 @@ fun SaveableStateDemo(
       modifier = Modifier.fillMaxWidth()
     ) {
       Text("Randomize Marker Value (Current: $markerValue)")
+    }
+
+    Text(
+      text = "Scroll Threshold: ${scrollThreshold.toInt()}px (Higher = Less Sensitive)",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Button(
+      onClick = {
+        scrollThreshold = when {
+          scrollThreshold < 2f -> 5f
+          scrollThreshold < 10f -> 15f
+          else -> 2f
+        }
+      },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text("Change Scroll Sensitivity (Current: ${scrollThreshold.toInt()}px)")
     }
 
     val markerDecoration = rememberMarkerDecoration(markerValue)
@@ -320,8 +384,12 @@ fun SaveableStateDemo(
           tick = rememberAxisGuidelineComponent(),
           tickLength = 20.dp,
           horizontalLabelPosition = Position.Horizontal.End
-        )
-        ,
+        ),
+        marker = rememberDefaultCartesianMarker(
+          guideline = rememberAxisLineComponent(),
+          contentPadding = insets(horizontal = 40.dp),
+          label = rememberTextComponent()
+        ),
         visibleLabelsCount = 6
       ),
       animateIn = true,
@@ -370,9 +438,11 @@ private fun SaveableStateDemoPreview() {
   val modelProducer = remember { CartesianChartModelProducer() }
   // Use `runBlocking` only for previews, which don't support asynchronous execution.
   runBlocking {
+    val (xData, yData) = generateData(100, 0, 20)
+    val (xSecondaryData, ySecondaryData) = generateData(100, 0, 15)
     modelProducer.runTransaction {
-      columnSeries { series(*generateData(100, 0, 20).toTypedArray()) }
-      lineSeries { series(*generateData(100, 0, 15).toTypedArray()) }
+      columnSeries { series(x = xData, y = yData) }
+      lineSeries { series(x = xSecondaryData, y = ySecondaryData) }
     }
   }
   PreviewBox { SaveableStateDemo() }
