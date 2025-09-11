@@ -9,3 +9,7 @@
 /captures/
 /local.properties
 build/
+
+# Sensitive configuration files
+gradle-local.properties
+gradle-secrets.properties
