@@ -59,6 +59,7 @@ public fun rememberCartesianChart(
   persistentMarkers: (CartesianChart.PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
   visibleLabelsCount: Int = 0,
   getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
+  onChartClick: ((List<Double>, Double) -> Unit)? = null,
 ): CartesianChart {
   val wrapper = remember { ValueWrapper<CartesianChart?>(null) }
   return remember(
@@ -76,6 +77,7 @@ public fun rememberCartesianChart(
     persistentMarkers,
     visibleLabelsCount,
     getXStep,
+    onChartClick,
   ) {
     val cartesianChart =
       wrapper.value?.copy(
@@ -93,6 +95,7 @@ public fun rememberCartesianChart(
         persistentMarkers = persistentMarkers,
         visibleLabelsCount = visibleLabelsCount,
         getXStep = getXStep,
+        onChartClick = onChartClick,
       )
         ?: CartesianChart(
           *layers,
@@ -109,6 +112,7 @@ public fun rememberCartesianChart(
           persistentMarkers = persistentMarkers,
           visibleLabelsCount = visibleLabelsCount,
           getXStep = getXStep,
+          onChartClick = onChartClick,
         )
     wrapper.value = cartesianChart
     cartesianChart

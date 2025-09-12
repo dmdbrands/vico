@@ -41,6 +41,7 @@ import com.patrykandpatrick.vico.core.cartesian.layer.MutableCartesianLayerDimen
 import com.patrykandpatrick.vico.core.cartesian.layer.scale
 import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarker
 import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarkerVisibilityListener
+import com.patrykandpatrick.vico.core.cartesian.marker.MutableLineCartesianLayerMarkerTarget
 import com.patrykandpatrick.vico.core.common.Legend
 import com.patrykandpatrick.vico.core.common.Point
 import com.patrykandpatrick.vico.core.common.data.CacheStore
@@ -83,6 +84,8 @@ private constructor(
   private var previousMarkerTargetHashCode: Int?,
   private val persistentMarkerMap: MutableMap<Double, CartesianMarker>,
   private var previousPersistentMarkerHashCode: Int?,
+  /** Callback invoked when the chart is clicked with marker x values and exact x value */
+  public val onChartClick: ((List<Double>, Double) -> Unit)? = null,
 ) : CartesianLayerMarginUpdater<CartesianChartModel> {
   private val persistentMarkerScope = PersistentMarkerScope {
     persistentMarkerMap[it.toDouble()] = this
@@ -203,11 +206,12 @@ private constructor(
    * @param layerPadding returns the [CartesianLayerPadding].
    * @param legend the legend.
    * @param fadingEdges applies a horizontal fade to the edges of the [CartesianChart], provided
-   *   that it’s scrollable.
+   *   that it's scrollable.
    * @param decorations the [Decoration]s.
    * @param persistentMarkers adds persistent [CartesianMarker]s.
    * @param getXStep defines the _x_ step (the difference between neighboring major _x_ values).
    * @param visibleLabelsCount the number of visible labels to display, used to calculate optimal spacing.
+   * @param onChartClick callback invoked when the chart is clicked with marker x values and exact x value.
    */
   public constructor(
     vararg layers: CartesianLayer<*>,
@@ -224,6 +228,7 @@ private constructor(
     persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
     getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
     visibleLabelsCount: Int = 0,
+    onChartClick: ((List<Double>, Double) -> Unit)? = null,
   ) : this(
     layers = layers,
     startAxis = startAxis,
@@ -243,6 +248,7 @@ private constructor(
     previousMarkerTargetHashCode = null,
     persistentMarkerMap = mutableMapOf(),
     previousPersistentMarkerHashCode = null,
+    onChartClick = onChartClick,
   )
 
   private fun setLayerBounds(left: Float, top: Float, right: Float, bottom: Float) {
@@ -351,7 +357,7 @@ private constructor(
       withCanvas(layerCanvas) {
         model.forEachWithLayer(drawingConsumer.apply { this.context = context })
       }
-      forEachPersistentMarker { marker, targets -> marker.drawUnderLayers(context, targets) }
+      forEachPersistentMarker(context) { marker, targets -> marker.drawUnderLayers(context, targets) }
       val markerTargets = getMarkerTargets(context, pointerPosition)
       if (markerTargets.isNotEmpty()) marker?.drawUnderLayers(context, markerTargets)
       canvas.drawBitmap(layerBitmap, 0f, 0f, null)
@@ -361,7 +367,7 @@ private constructor(
       }
       axisManager.drawOverLayers(context)
       decorations.forEach { it.drawOverLayers(context) }
-      forEachPersistentMarker { marker, targets -> marker.drawOverLayers(context, targets) }
+      forEachPersistentMarker(context) { marker, targets -> marker.drawOverLayers(context, targets) }
       legend?.draw(context)
       if (markerTargets.isNotEmpty()) marker?.drawOverLayers(context, markerTargets)
     }
@@ -438,10 +444,20 @@ private constructor(
   }
 
   private inline fun forEachPersistentMarker(
+    context: CartesianDrawingContext,
     block: (CartesianMarker, List<CartesianMarker.Target>) -> Unit
   ) {
+    val visibleXRange = context.getVisibleXRange()
     persistentMarkerMap.forEach { (x, marker) ->
-      markerTargets[x]?.also { targets -> block(marker, targets) }
+      // Only show persistent marker if its x value is within the visible range
+      if (x >= visibleXRange.start && x <= visibleXRange.endInclusive) {
+        // Create a LineCartesianLayerMarkerTarget for the persistent marker
+        val target = MutableLineCartesianLayerMarkerTarget(
+          x = x,
+          canvasX = context.layerBounds.left + ((x - visibleXRange.start) / context.ranges.xStep * context.layerDimensions.xSpacing).toFloat()
+        )
+        block(marker, listOf(target))
+      }
     }
   }
 
@@ -449,6 +465,14 @@ private constructor(
     context: CartesianDrawingContext,
     pointerPosition: Point?,
   ): List<CartesianMarker.Target> {
+    // Call onChartClick callback with marker x values and exact x value based on click position
+    if (pointerPosition != null) {
+      val clickXPosition = pointerPosition.x
+      val exactXValue = context.getExactXValue(clickXPosition.toDouble())
+      val markerXValues = markerTargets.keys.toList()
+      exactXValue?.let { onChartClick?.invoke(markerXValues, it) }
+    }
+
     val marker = marker ?: return emptyList()
     if (pointerPosition == null || markerTargets.isEmpty()) {
       if (previousMarkerTargetHashCode != null) markerVisibilityListener?.onHidden(marker)
@@ -471,6 +495,7 @@ private constructor(
       markerVisibilityListener?.onUpdated(marker, targets)
     }
     previousMarkerTargetHashCode = targetHashCode
+
     return targets
   }
 
@@ -503,6 +528,7 @@ private constructor(
     persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = this.persistentMarkers,
     getXStep: ((CartesianChartModel) -> Double) = this.getXStep,
     visibleLabelsCount: Int = this.visibleLabelsCount,
+    onChartClick: ((List<Double>, Double) -> Unit)? = this.onChartClick,
   ): CartesianChart =
     CartesianChart(
       layers = layers,
@@ -523,6 +549,7 @@ private constructor(
       previousMarkerTargetHashCode = previousMarkerTargetHashCode,
       persistentMarkerMap = persistentMarkerMap,
       previousPersistentMarkerHashCode = previousPersistentMarkerHashCode,
+      onChartClick = onChartClick,
     )
 
   override fun equals(other: Any?): Boolean =
@@ -538,6 +565,7 @@ private constructor(
         persistentMarkers == other.persistentMarkers &&
         getXStep == other.getXStep &&
         visibleLabelsCount == other.visibleLabelsCount &&
+        onChartClick == other.onChartClick &&
         layers == other.layers &&
         startAxis == other.startAxis &&
         topAxis == other.topAxis &&
@@ -554,6 +582,7 @@ private constructor(
     result = 31 * result + persistentMarkers.hashCode()
     result = 31 * result + getXStep.hashCode()
     result = 31 * result + visibleLabelsCount.hashCode()
+    result = 31 * result + onChartClick.hashCode()
     result = 31 * result + layers.hashCode()
     result = 31 * result + startAxis.hashCode()
     result = 31 * result + topAxis.hashCode()

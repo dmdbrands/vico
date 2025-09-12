@@ -136,8 +136,9 @@ fun SaveableStateDemo(
   val zoomState = rememberVicoZoomState()
 
 
-  var dataVersion by rememberSaveable { mutableIntStateOf(0) }
-  var useExampleData by rememberSaveable { mutableStateOf(false) }
+  // Static values - no longer dynamic
+  val dataVersion = 0
+  val useExampleData = true
 
   var minY by rememberSaveable { mutableIntStateOf(0) }
   var maxY by rememberSaveable { mutableIntStateOf(15) }
@@ -145,27 +146,26 @@ fun SaveableStateDemo(
   var rangeUpdateTrigger by remember { mutableIntStateOf(0) }
   val visibleRange by scrollState.visibleRange.collectAsState()
 
-  val (xData, yData) = remember(useExampleData, dataVersion) {
-    if (useExampleData) generateExampleData(0, 15) else generateData(100, 0, 15)
+  val (xData, yData) = remember {
+    generateExampleData(0, 15)
   }
-  val (xSecondaryData, ySecondaryData) = remember(useExampleData, dataVersion) {
-    if (useExampleData) generateExampleData(5, 25) else generateData(100, 5, 25)
+  val (xSecondaryData, ySecondaryData) = remember {
+    generateExampleData(5, 25)
   }
 
-  var showSecondaryLine by rememberSaveable { mutableStateOf(false) }
+  val showSecondaryLine = true
   var animateIn by remember { mutableStateOf(false) }
   var secondaryMinY by rememberSaveable { mutableIntStateOf(5) }
   var secondaryMaxY by rememberSaveable { mutableIntStateOf(25) }
-  var markerValue by rememberSaveable { mutableStateOf(100.0) }
+  val markerValue = 100.0
 
 
-  LaunchedEffect(showSecondaryLine) {
+  LaunchedEffect(Unit) {
     animateIn = false
     modelProducer.runTransaction {
         lineSeries {
           series(x = xData, y = yData)
         }
-      if(showSecondaryLine)
         lineSeries {
           series(x = xSecondaryData, y = ySecondaryData)
         }
@@ -182,6 +182,7 @@ fun SaveableStateDemo(
         .debounce(300)
         .distinctUntilChanged()
         .collect { (start, end) ->
+          Log.i("CHECKING" , scrollState.getVisibleAxisLabels().toString())
           // Calculate the actual Y range from the visible data
           // Find data points where x values fall within the visible range
           val visibleData = yData.filterIndexed { index, _ ->
@@ -197,26 +198,22 @@ fun SaveableStateDemo(
              minY = calculatedMinY - 2
              maxY = calculatedMaxY + 2
 
-             // Calculate secondary range if secondary line is shown
-             if (showSecondaryLine) {
-               val secondaryVisibleData = ySecondaryData.filterIndexed { index, _ ->
-                 val xValue = xSecondaryData[index]
-                 xValue >= start && xValue <= end
-               }
+             // Calculate secondary range
+             val secondaryVisibleData = ySecondaryData.filterIndexed { index, _ ->
+               val xValue = xSecondaryData[index]
+               xValue >= start && xValue <= end
+             }
 
-               if (secondaryVisibleData.isNotEmpty()) {
-                 val secondaryCalculatedMinY = secondaryVisibleData.minOrNull()?.toInt() ?: 5
-                 val secondaryCalculatedMaxY = secondaryVisibleData.maxOrNull()?.toInt() ?: 25
+             if (secondaryVisibleData.isNotEmpty()) {
+               val secondaryCalculatedMinY = secondaryVisibleData.minOrNull()?.toInt() ?: 5
+               val secondaryCalculatedMaxY = secondaryVisibleData.maxOrNull()?.toInt() ?: 25
 
-                 secondaryMinY = secondaryCalculatedMinY - 2
-                 secondaryMaxY = secondaryCalculatedMaxY + 2
-               }
+               secondaryMinY = secondaryCalculatedMinY - 2
+               secondaryMaxY = secondaryCalculatedMaxY + 2
              }
 
              Log.i("VisibleRange", "Updated Y range: Min=$minY, Max=$maxY for visible data range")
-             if (showSecondaryLine) {
-               Log.i("VisibleRange", "Updated Secondary Y range: Min=$secondaryMinY, Max=$secondaryMaxY")
-             }
+             Log.i("VisibleRange", "Updated Secondary Y range: Min=$secondaryMinY, Max=$secondaryMaxY")
            }
         }
     }
@@ -245,7 +242,7 @@ fun SaveableStateDemo(
     }
 
     Text(
-      text = "This chart's data AND scroll position persist across configuration changes and navigation.",
+      text = "This chart's data AND scroll position persist across configuration changes and navigation. The chart shows example data with a secondary line.",
       style = MaterialTheme.typography.bodyMedium
     )
 
@@ -254,20 +251,6 @@ fun SaveableStateDemo(
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-
-    Button(
-      onClick = { dataVersion++ },
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Text("Generate New Data (Version: $dataVersion)")
-    }
-
-    Button(
-      onClick = { useExampleData = !useExampleData },
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Text(if (useExampleData) "Switch to Random Data" else "Switch to Example Data (1,5,7,9,11,12,15,16,18...)")
-    }
 
     Button(
       onClick = {
@@ -287,20 +270,6 @@ fun SaveableStateDemo(
       modifier = Modifier.fillMaxWidth()
     ) {
       Text("Reset Y Range")
-    }
-
-    Button(
-      onClick = { showSecondaryLine = !showSecondaryLine },
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Text(if (showSecondaryLine) "Hide Secondary Line" else "Show Secondary Line")
-    }
-
-    Button(
-      onClick = { markerValue = (0..10).random().toDouble() },
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Text("Randomize Marker Value (Current: $markerValue)")
     }
 
     Text(
@@ -365,7 +334,11 @@ fun SaveableStateDemo(
       }
     )
     val fill = fill(Color(0xFF458239))
-
+val marker = rememberDefaultCartesianMarker(
+  guideline = rememberAxisLineComponent(),
+  contentPadding = insets(horizontal = 40.dp),
+  label = rememberTextComponent()
+)
     CartesianChartHost(
       chart = rememberCartesianChart(
         primaryLayer,
@@ -385,12 +358,14 @@ fun SaveableStateDemo(
           tickLength = 20.dp,
           horizontalLabelPosition = Position.Horizontal.End
         ),
-        marker = rememberDefaultCartesianMarker(
-          guideline = rememberAxisLineComponent(),
-          contentPadding = insets(horizontal = 40.dp),
-          label = rememberTextComponent()
-        ),
-        visibleLabelsCount = 6
+        marker = marker,
+        visibleLabelsCount = 6,
+        onChartClick = { targets , click ->
+          Log.i("CHECKING" , targets.toString() + "  " + click.toString())
+        },
+        persistentMarkers = {
+          marker at 5.0
+        }
       ),
       animateIn = true,
       modelProducer = modelProducer,

@@ -40,6 +40,7 @@ import com.patrykandpatrick.vico.core.cartesian.getDelta
 import com.patrykandpatrick.vico.core.cartesian.getMaxScrollDistance
 import com.patrykandpatrick.vico.core.cartesian.getFullXRange
 import com.patrykandpatrick.vico.core.cartesian.getVisibleXRange
+import com.patrykandpatrick.vico.core.cartesian.getVisibleAxisLabels
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
 import com.patrykandpatrick.vico.core.common.rangeWith
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -232,6 +233,25 @@ public class VicoScrollState {
         scroll.getDelta(context, layerDimensions, bounds, maxValue, value),
         animationSpec,
       )
+    }
+  }
+
+  /**
+   * Returns a list of x-axis label values that are currently visible in the chart.
+   * This is a convenience method that uses the scroll state's current context.
+   *
+   * @param stepMultiplier optional multiplier for the step size (defaults to 1.0)
+   * @return List of Double values representing the x-coordinates of visible axis labels, or empty list if context is not available
+   */
+  public fun getVisibleAxisLabels(stepMultiplier: Double = 1.0): List<Double> {
+    val context = this.context
+    val layerDimensions = this.layerDimensions
+    val bounds = this.bounds
+
+    return if (context != null && layerDimensions != null && bounds != null) {
+      context.getVisibleAxisLabels(bounds, layerDimensions, value, stepMultiplier)
+    } else {
+      emptyList()
     }
   }
 

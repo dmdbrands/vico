@@ -62,6 +62,26 @@ internal fun CartesianDrawingContext.getVisibleXRange(): ClosedFloatingPointRang
   return start..end
 }
 
+/**
+ * Returns the exact x value at the given click position.
+ * This converts pixel x coordinate to the actual data x value, accounting for scroll.
+ */
+internal fun CartesianDrawingContext.getExactXValue(clickXPosition: Double): Double? {
+  val visibleXRange = getVisibleXRange()
+
+  // Convert pixel x coordinate to data x coordinate, accounting for scroll
+  // This uses the same logic as getVisibleXRange() but in reverse
+  val relativeX = (clickXPosition - layerBounds.left) / layerDimensions.xSpacing
+  val dataX = visibleXRange.start + relativeX * ranges.xStep
+
+  // Return the exact data x value if it's within the visible range
+  return if (dataX >= visibleXRange.start && dataX <= visibleXRange.endInclusive) {
+    dataX
+  } else {
+    null
+  }
+}
+
 /** @suppress */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 public fun CartesianDrawingContext(
