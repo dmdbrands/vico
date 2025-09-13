@@ -16,10 +16,13 @@
 
 package com.patrykandpatrick.vico.sample.compose
 
+import android.R.id.input
 import android.graphics.Typeface
 import android.text.Layout
 import android.util.Log
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,11 +32,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextFieldDefaults.contentPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +71,7 @@ import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 import com.patrykandpatrick.vico.compose.common.component.shapeComponent
 import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.compose.common.insets
+import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.axis.Axis
 import com.patrykandpatrick.vico.core.cartesian.axis.BaseAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
@@ -74,7 +80,10 @@ import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
+import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarker
+import com.patrykandpatrick.vico.core.cartesian.marker.DefaultCartesianMarker
 import com.patrykandpatrick.vico.core.common.Position
+import com.patrykandpatrick.vico.core.common.component.ShapeComponent
 import com.patrykandpatrick.vico.core.common.component.TextComponent
 import com.patrykandpatrick.vico.core.common.shape.CorneredShape
 import kotlinx.coroutines.delay
@@ -172,6 +181,12 @@ fun SaveableStateDemo(
     }
   }
 
+  var markerIndex: Double by remember { mutableStateOf(5.0) }
+
+  // State to display click results
+  var clickResult by remember { mutableStateOf("Click on chart to see results") }
+
+
 
   LaunchedEffect(visibleRange) {
     visibleRange?.let { range ->
@@ -264,8 +279,7 @@ fun SaveableStateDemo(
 
     Button(
       onClick = {
-        minY = 0
-        maxY = 20
+        markerIndex = 4.0
       },
       modifier = Modifier.fillMaxWidth()
     ) {
@@ -276,6 +290,22 @@ fun SaveableStateDemo(
       text = "Scroll Threshold: ${scrollThreshold.toInt()}px (Higher = Less Sensitive)",
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    // Click Results Display
+    Text(
+      text = "Click Results:",
+      style = MaterialTheme.typography.titleMedium,
+      fontWeight = FontWeight.Bold
+    )
+
+    Text(
+      text = clickResult,
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(8.dp)
     )
 
     Button(
@@ -333,11 +363,21 @@ fun SaveableStateDemo(
         }
       }
     )
-    val fill = fill(Color(0xFF458239))
 val marker = rememberDefaultCartesianMarker(
-  guideline = rememberAxisLineComponent(),
+  label = rememberTextComponent(),
+  guideline = rememberAxisLineComponent(
+    fill = fill(Color.Green),
+    thickness = 2.dp
+  ),
   contentPadding = insets(horizontal = 40.dp),
-  label = rememberTextComponent()
+  indicator = { color ->
+    ShapeComponent(
+      fill = fill(color),
+      strokeFill = fill(color),
+      shape = CorneredShape.Pill,
+      strokeThicknessDp = 0f,
+    )
+  },
 )
     CartesianChartHost(
       chart = rememberCartesianChart(
@@ -358,13 +398,26 @@ val marker = rememberDefaultCartesianMarker(
           tickLength = 20.dp,
           horizontalLabelPosition = Position.Horizontal.End
         ),
-        marker = marker,
+        marker = rememberDefaultCartesianMarker(label = rememberTextComponent(color = Color.Transparent ) , valueFormatter = emptyFormatter()),
         visibleLabelsCount = 6,
         onChartClick = { targets , click ->
-          Log.i("CHECKING" , targets.toString() + "  " + click.toString())
+          val targetMarkerIndex = getTargetPoints(scrollState.getVisibleAxisLabels() , targets , click)
+          markerIndex = targetMarkerIndex.first()
+
+          // Update click result display
+          clickResult = """
+            Click Results:
+            • Click X Value: $click
+            • Marker Targets: ${targets.joinToString(", ")}
+            • Visible Axis Labels: ${scrollState.getVisibleAxisLabels().joinToString(", ")}
+            • Target Marker Index: ${targetMarkerIndex.joinToString(", ")}
+            • Selected Marker: $markerIndex
+          """.trimIndent()
+
+          Log.i("CHECKING" , markerIndex.toString())
         },
-        persistentMarkers = {
-          marker at 5.0
+        persistentMarkers = remember(markerIndex) {
+          { marker at markerIndex.toDouble() }
         }
       ),
       animateIn = true,
@@ -375,6 +428,72 @@ val marker = rememberDefaultCartesianMarker(
     )
   }
 }
+
+/**
+ * Internal helper to remember the empty value formatter for the marker.
+ */
+@Composable
+private fun emptyFormatter(): DefaultCartesianMarker.ValueFormatter =
+  remember {
+    object : DefaultCartesianMarker.ValueFormatter {
+      override fun format(
+        context: CartesianDrawingContext,
+        targets: List<CartesianMarker.Target>,
+      ): String {
+        return ""
+      }
+    }
+  }
+
+
+fun getTargetPoints(fullList: List<Double>, points: List<Double>, input: Double): List<Double> {
+  if (fullList.isEmpty()) return emptyList()
+
+  // find lower and upper bound from full list
+  val lower = fullList.filter { it <= input }.maxOrNull()
+  val upper = fullList.filter { it >= input }.minOrNull()
+
+  // edge case: if input is outside range
+  if (lower == null && upper == null) return emptyList()
+  if (lower == null) return listOfNotNull(upper)
+  if (upper == null) return listOfNotNull(lower)
+
+  // filter targets within the upper and lower bound
+  val filteredTargets = points.filter { it in lower..upper }
+
+
+  return when {
+    filteredTargets.isEmpty() -> {
+      val halfway = (lower + upper) / 2.0
+
+      // check halfway condition to return lower or upper
+      if (input < halfway) {
+        listOf(lower)
+      } else {
+        listOf(upper)
+      }
+    }
+    filteredTargets.size == 1 -> {
+      val target = filteredTargets.first()
+      val halfway = (upper - lower) / 2.0
+
+      // check if rounding of the point meets the target
+      if (kotlin.math.abs(target - input) < halfway) {
+        listOf(target)
+      } else if(target > input){
+        listOf(lower)
+      } else {
+        listOf(upper)
+      }
+    }
+    else -> {
+      // return the nearest target to the point
+      val nearestTarget = filteredTargets.minByOrNull { kotlin.math.abs(it - input) }
+      listOfNotNull(nearestTarget)
+    }
+  }
+}
+
 
 @Composable
 private fun rememberMarkerDecoration(markerValue: Double): VerticalAxis.MarkerDecoration {

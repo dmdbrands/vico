@@ -451,12 +451,19 @@ private constructor(
     persistentMarkerMap.forEach { (x, marker) ->
       // Only show persistent marker if its x value is within the visible range
       if (x >= visibleXRange.start && x <= visibleXRange.endInclusive) {
-        // Create a LineCartesianLayerMarkerTarget for the persistent marker
-        val target = MutableLineCartesianLayerMarkerTarget(
-          x = x,
-          canvasX = context.layerBounds.left + ((x - visibleXRange.start) / context.ranges.xStep * context.layerDimensions.xSpacing).toFloat()
-        )
-        block(marker, listOf(target))
+        // First try to use existing marker targets at this x value
+        val existingTargets = markerTargets[x]
+        if (existingTargets != null && existingTargets.isNotEmpty()) {
+          // Use existing marker targets if available
+          block(marker, existingTargets)
+        } else {
+          // Fallback: Create a LineCartesianLayerMarkerTarget for the persistent marker
+          val target = MutableLineCartesianLayerMarkerTarget(
+            x = x,
+            canvasX = context.layerBounds.left + ((x - visibleXRange.start) / context.ranges.xStep * context.layerDimensions.xSpacing).toFloat()
+          )
+          block(marker, listOf(target))
+        }
       }
     }
   }
