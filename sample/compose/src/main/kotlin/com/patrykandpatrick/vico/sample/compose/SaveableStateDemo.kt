@@ -378,6 +378,10 @@ val marker = rememberDefaultCartesianMarker(
       strokeThicknessDp = 0f,
     )
   },
+  yLabelCallback = { yLabelText ->
+    // Handle the formatted Y label text
+    Log.i("Y_LABEL", "Received: $yLabelText")
+  }
 )
     CartesianChartHost(
       chart = rememberCartesianChart(

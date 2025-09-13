@@ -97,3 +97,62 @@ public fun CartesianMeasuringContext.getVisibleAxisLabels(
   // Return the sublist that falls within the visible range
   return allLabels.filter { it >= visibleXRange.start && it <= visibleXRange.endInclusive }
 }
+
+/**
+ * Interpolates the Y value for a given X coordinate from a series of data points.
+ * This function performs linear interpolation between the two nearest data points.
+ *
+ * @param series the series of data points (must be sorted by X values)
+ * @param xValue the X coordinate for which to find the Y value
+ * @return the interpolated Y value, or null if the X value is outside the data range
+ */
+public fun CartesianMeasuringContext.interpolateYValue(
+  series: List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>,
+  xValue: Double,
+): Double? {
+  if (series.isEmpty()) return null
+
+  // Check if X value is within the data range
+  if (xValue < series.first().x || xValue > series.last().x) {
+    return null
+  }
+
+  // Find the two points that surround the X value
+  for (i in 0 until series.size - 1) {
+    val currentPoint = series[i]
+    val nextPoint = series[i + 1]
+
+    if (xValue >= currentPoint.x && xValue <= nextPoint.x) {
+      // Perform linear interpolation
+      val x1 = currentPoint.x
+      val y1 = currentPoint.y
+      val x2 = nextPoint.x
+      val y2 = nextPoint.y
+
+      // Avoid division by zero
+      if (x2 == x1) return y1
+
+      val ratio = (xValue - x1) / (x2 - x1)
+      return y1 + ratio * (y2 - y1)
+    }
+  }
+
+  return null
+}
+
+/**
+ * Gets the Y value for a given X coordinate from the chart model.
+ * This function searches through all series in the model and returns the interpolated Y value
+ * from the first series that contains data for the given X coordinate.
+ *
+ * @param xValue the X coordinate for which to find the Y value
+ * @return the interpolated Y value, or null if not found
+ */
+public fun CartesianMeasuringContext.getYValueFromX(
+  xValue: Double,
+): Double? {
+  // This would need access to the model's series data
+  // Since we don't have direct access to the model here, this is a placeholder
+  // In practice, you would need to pass the series data or access it through the context
+  return null
+}

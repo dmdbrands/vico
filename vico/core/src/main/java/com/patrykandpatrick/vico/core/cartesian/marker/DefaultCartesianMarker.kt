@@ -20,11 +20,14 @@ import android.graphics.RectF
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
+import android.util.Log
 import com.patrykandpatrick.vico.core.cartesian.CartesianChart
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModel
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerModel
+import com.patrykandpatrick.vico.core.cartesian.getExactXValue
+import com.patrykandpatrick.vico.core.cartesian.interpolateYValue
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerMargins
 import com.patrykandpatrick.vico.core.common.Defaults
@@ -55,6 +58,7 @@ import kotlin.math.min
  * @property indicatorSizeDp the indicator size (in dp).
  * @property guideline drawn vertically through the marked points.
  * @property contentPadding additional padding around the label content that doesn't affect chart margins.
+ * @property yLabelCallback callback invoked when Y label is needed, receives the formatted Y value as CharSequence.
  */
 public open class DefaultCartesianMarker(
   protected val label: TextComponent,
@@ -64,6 +68,7 @@ public open class DefaultCartesianMarker(
   protected val indicatorSizeDp: Float = Defaults.MARKER_INDICATOR_SIZE,
   protected val guideline: LineComponent? = null,
   protected val contentPadding: Insets = Insets.Zero,
+  protected val yLabelCallback: ((CharSequence) -> Unit)? = null,
 ) : CartesianMarker {
 
   protected val markerCorneredShape: MarkerCorneredShape? =
@@ -184,7 +189,15 @@ public open class DefaultCartesianMarker(
     targets: List<CartesianMarker.Target>,
   ): Unit =
     with(context) {
-      val text = valueFormatter.format(context, targets)
+      var text = valueFormatter.format(context, targets)
+
+      // If text is blank and we have a callback, use interpolation as fallback
+      if (text.isBlank() && targets.isNotEmpty() && yLabelCallback != null) {
+        text = getInterpolatedText(context, targets) ?: text
+      }
+
+      // Invoke Y label callback with the formatted text
+      yLabelCallback?.invoke(text)
       val targetX = targets.averageOf { it.canvasX }
       val labelBounds = label.getBounds(context, text, layerBounds.width().toInt())
       val halfOfTextWidth = labelBounds.width().half
@@ -239,6 +252,53 @@ public open class DefaultCartesianMarker(
         maxWidth = ceil(min(layerBounds.right + contentPadding.endDp.pixels - x, x - (layerBounds.left - contentPadding.startDp.pixels)).doubled).toInt(),
       )
     }
+
+  /**
+   * Private helper function to get interpolated text for multiple targets.
+   * Each target's X value is interpolated and results are joined with commas.
+   *
+   * @param context the drawing context containing chart data
+   * @param targets the list of marker targets
+   * @return formatted interpolated text with comma-separated Y values, or null if interpolation fails
+   */
+  private fun getInterpolatedText(
+    context: CartesianDrawingContext,
+    targets: List<CartesianMarker.Target>
+  ): String? {
+    // Get all LineCartesianLayerModel from the chart model
+    val lineModels = context.model.models.filterIsInstance<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel>()
+
+    if (lineModels.isNotEmpty()) {
+      val interpolatedValues = mutableListOf<String>()
+
+      // For each target, try to interpolate from each layer
+      targets.forEachIndexed { targetIndex, target ->
+        val targetValues = mutableListOf<String>()
+
+        lineModels.forEach { lineModel ->
+          if (lineModel.series.isNotEmpty()) {
+            val series = lineModel.series.first()
+            val interpolatedY = context.interpolateYValue(series, target.x)
+            if (interpolatedY != null) {
+              targetValues.add(String.format("%.2f", interpolatedY))
+              Log.d("INTERPOLATION", "Target $targetIndex, X: ${target.x}, Interpolated Y: $interpolatedY")
+            }
+          }
+        }
+
+        // Join values for this target with "/" separator
+        if (targetValues.isNotEmpty()) {
+          interpolatedValues.add(targetValues.joinToString("/"))
+        }
+      }
+
+      if (interpolatedValues.isNotEmpty()) {
+        return "Y: ${interpolatedValues.joinToString(", ")}"
+      }
+    }
+
+    return null
+  }
 
   protected fun overrideXPositionToFit(
     xPosition: Float,
@@ -296,7 +356,8 @@ public open class DefaultCartesianMarker(
         indicator == other.indicator &&
         indicatorSizeDp == other.indicatorSizeDp &&
         guideline == other.guideline &&
-        contentPadding == other.contentPadding
+        contentPadding == other.contentPadding &&
+        yLabelCallback == other.yLabelCallback
 
   override fun hashCode(): Int {
     var result = label.hashCode()
@@ -306,6 +367,7 @@ public open class DefaultCartesianMarker(
     result = 31 * result + indicatorSizeDp.hashCode()
     result = 31 * result + guideline.hashCode()
     result = 31 * result + contentPadding.hashCode()
+    result = 31 * result + yLabelCallback.hashCode()
     return result
   }
 
@@ -370,24 +432,27 @@ public open class DefaultCartesianMarker(
      * @param indicatorSizeDp the indicator size (in dp).
      * @param guideline drawn vertically through the marked points.
      * @param contentPadding additional padding around the label content that doesn't affect chart margins.
-     */
-    public fun withContentPadding(
-      label: TextComponent,
-      valueFormatter: ValueFormatter = ValueFormatter.default(),
-      labelPosition: LabelPosition = LabelPosition.Top,
-      indicator: ((Int) -> Component)? = null,
-      indicatorSizeDp: Float = Defaults.MARKER_INDICATOR_SIZE,
-      guideline: LineComponent? = null,
-      contentPadding: Insets,
-    ): DefaultCartesianMarker = DefaultCartesianMarker(
-      label = label,
-      valueFormatter = valueFormatter,
-      labelPosition = labelPosition,
-      indicator = indicator,
-      indicatorSizeDp = indicatorSizeDp,
-      guideline = guideline,
-      contentPadding = contentPadding,
-    )
+   * @param yLabelCallback callback invoked when Y label is needed, receives the formatted Y value as CharSequence.
+   */
+  public fun withContentPadding(
+    label: TextComponent,
+    valueFormatter: ValueFormatter = ValueFormatter.default(),
+    labelPosition: LabelPosition = LabelPosition.Top,
+    indicator: ((Int) -> Component)? = null,
+    indicatorSizeDp: Float = Defaults.MARKER_INDICATOR_SIZE,
+    guideline: LineComponent? = null,
+    contentPadding: Insets,
+    yLabelCallback: ((CharSequence) -> Unit)? = null,
+  ): DefaultCartesianMarker = DefaultCartesianMarker(
+    label = label,
+    valueFormatter = valueFormatter,
+    labelPosition = labelPosition,
+    indicator = indicator,
+    indicatorSizeDp = indicatorSizeDp,
+    guideline = guideline,
+    contentPadding = contentPadding,
+    yLabelCallback = yLabelCallback,
+  )
   }
 }
 
