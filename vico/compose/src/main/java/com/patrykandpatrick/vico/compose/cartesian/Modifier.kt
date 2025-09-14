@@ -34,36 +34,53 @@ internal fun Modifier.pointerInput(
   onPointerPositionChange: ((Point?) -> Unit)?,
   onZoom: ((Float, Offset) -> Unit)?,
   consumeMoveEvents: Boolean,
+  isPointerSelectionInProgress: Boolean,
+  onSelectionStateChange: (Boolean) -> Unit,
 ) =
   scrollable(
       state = scrollState.scrollableState,
       orientation = Orientation.Horizontal,
-      enabled = scrollState.scrollEnabled,
+      enabled = scrollState.scrollEnabled && !isPointerSelectionInProgress,
       reverseDirection = true,
     )
     .pointerInput(onZoom, onPointerPositionChange) {
-      awaitPointerEventScope {
-        while (true) {
-          val event = awaitPointerEvent()
-          when {
-            event.type == PointerEventType.Scroll && scrollState.scrollEnabled && onZoom != null ->
-              onZoom(
-                1 - event.changes.first().scrollDelta.y * BASE_SCROLL_ZOOM_DELTA,
-                event.changes.first().position,
-              )
-            onPointerPositionChange == null -> continue
-            event.type == PointerEventType.Press ->
-              onPointerPositionChange(event.changes.first().position.toPoint())
-            event.type == PointerEventType.Release -> onPointerPositionChange(null)
-            event.type == PointerEventType.Move && !scrollState.scrollEnabled -> {
-              val changes = event.changes.first()
-              if (consumeMoveEvents) changes.consume()
-              onPointerPositionChange(changes.position.toPoint())
+    var hasMoved = false
+    var pressPosition: Point? = null
+
+    awaitPointerEventScope {
+      while (true) {
+        val event = awaitPointerEvent()
+        when {
+          event.type == PointerEventType.Scroll && scrollState.scrollEnabled && onZoom != null ->
+            onZoom(
+              1 - event.changes.first().scrollDelta.y * BASE_SCROLL_ZOOM_DELTA,
+              event.changes.first().position,
+            )
+          onPointerPositionChange == null -> continue
+          event.type == PointerEventType.Press -> {
+            hasMoved = false
+            pressPosition = event.changes.first().position.toPoint()
+          }
+          event.type == PointerEventType.Release -> {
+            // Only call onPointerPositionChange on release if there was movement after press
+            if (!hasMoved) {
+              onPointerPositionChange(pressPosition)
             }
+            hasMoved = false
+            pressPosition = null
+            onSelectionStateChange(false)
+          }
+          event.type == PointerEventType.Move -> {
+            hasMoved = true
+            val changes = event.changes.first()
+            if (consumeMoveEvents) changes.consume()
+            onPointerPositionChange(null)
+
           }
         }
       }
     }
+  }
     .then(
       if (scrollState.scrollEnabled && onZoom != null) {
         Modifier.pointerInput(onPointerPositionChange, onZoom) {

@@ -41,7 +41,7 @@ public fun rememberDefaultCartesianMarker(
   indicatorSize: Dp = Defaults.MARKER_INDICATOR_SIZE.dp,
   guideline: LineComponent? = null,
   contentPadding: Insets = insets(),
-  yLabelCallback: ((CharSequence) -> Unit)? = null,
+  yLabelCallback: ((List<CharSequence>) -> Unit)? = null,
 ): DefaultCartesianMarker =
   remember(label, valueFormatter, labelPosition, indicator, indicatorSize, guideline, yLabelCallback) {
     DefaultCartesianMarker(

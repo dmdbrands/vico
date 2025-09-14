@@ -59,7 +59,7 @@ public fun rememberCartesianChart(
   persistentMarkers: (CartesianChart.PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
   visibleLabelsCount: Int = 0,
   getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
-  onChartClick: ((List<Double>, Double) -> Unit)? = null,
+  onChartClick: ((List<Double>, Double?) -> Unit)? = null,
 ): CartesianChart {
   val wrapper = remember { ValueWrapper<CartesianChart?>(null) }
   return remember(

@@ -181,7 +181,7 @@ fun SaveableStateDemo(
     }
   }
 
-  var markerIndex: Double by remember { mutableStateOf(5.0) }
+  var markerIndex: Double? by remember { mutableStateOf(null) }
 
   // State to display click results
   var clickResult by remember { mutableStateOf("Click on chart to see results") }
@@ -402,14 +402,21 @@ val marker = rememberDefaultCartesianMarker(
           tickLength = 20.dp,
           horizontalLabelPosition = Position.Horizontal.End
         ),
-        marker = rememberDefaultCartesianMarker(label = rememberTextComponent(color = Color.Transparent ) , valueFormatter = emptyFormatter()),
+        marker = rememberDefaultCartesianMarker(
+          label = rememberTextComponent(color = Color.Transparent),
+          valueFormatter = emptyFormatter()
+        ),
         visibleLabelsCount = 6,
-        onChartClick = { targets , click ->
-          val targetMarkerIndex = getTargetPoints(scrollState.getVisibleAxisLabels() , targets , click)
-          markerIndex = targetMarkerIndex.first()
+        onChartClick = { targets, click ->
+          if (click == null) {
+            markerIndex = null
+          } else {
+            val targetMarkerIndex =
+              getTargetPoints(scrollState.getVisibleAxisLabels(), targets, click)
+            markerIndex = targetMarkerIndex.first()
 
-          // Update click result display
-          clickResult = """
+            // Update click result display
+            clickResult = """
             Click Results:
             • Click X Value: $click
             • Marker Targets: ${targets.joinToString(", ")}
@@ -418,17 +425,19 @@ val marker = rememberDefaultCartesianMarker(
             • Selected Marker: $markerIndex
           """.trimIndent()
 
-          Log.i("CHECKING" , markerIndex.toString())
+          }
         },
         persistentMarkers = remember(markerIndex) {
-          { marker at markerIndex.toDouble() }
-        }
+          {
+            markerIndex?.let { marker at it.toDouble() }
+          }
+        },
       ),
       animateIn = true,
       modelProducer = modelProducer,
       scrollState = scrollState,
       zoomState = zoomState,
-      modifier = Modifier.fillMaxWidth()
+      modifier = Modifier.fillMaxWidth(),
     )
   }
 }

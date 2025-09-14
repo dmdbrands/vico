@@ -16,6 +16,7 @@
 
 package com.patrykandpatrick.vico.core.cartesian.marker
 
+import android.R.attr.label
 import android.graphics.RectF
 import android.text.Spannable
 import android.text.SpannableStringBuilder
@@ -68,7 +69,7 @@ public open class DefaultCartesianMarker(
   protected val indicatorSizeDp: Float = Defaults.MARKER_INDICATOR_SIZE,
   protected val guideline: LineComponent? = null,
   protected val contentPadding: Insets = Insets.Zero,
-  protected val yLabelCallback: ((CharSequence) -> Unit)? = null,
+  protected val yLabelCallback: ((List<CharSequence>) -> Unit)? = null,
 ) : CartesianMarker {
 
   protected val markerCorneredShape: MarkerCorneredShape? =
@@ -197,7 +198,7 @@ public open class DefaultCartesianMarker(
       }
 
       // Invoke Y label callback with the formatted text
-      yLabelCallback?.invoke(text)
+      yLabelCallback?.invoke(text.split(", "))
       val targetX = targets.averageOf { it.canvasX }
       val labelBounds = label.getBounds(context, text, layerBounds.width().toInt())
       val halfOfTextWidth = labelBounds.width().half
@@ -288,12 +289,12 @@ public open class DefaultCartesianMarker(
 
         // Join values for this target with "/" separator
         if (targetValues.isNotEmpty()) {
-          interpolatedValues.add(targetValues.joinToString("/"))
+          interpolatedValues.add(targetValues.joinToString(", "))
         }
       }
 
       if (interpolatedValues.isNotEmpty()) {
-        return "Y: ${interpolatedValues.joinToString(", ")}"
+        return interpolatedValues.joinToString(", ")
       }
     }
 
@@ -435,14 +436,14 @@ public open class DefaultCartesianMarker(
    * @param yLabelCallback callback invoked when Y label is needed, receives the formatted Y value as CharSequence.
    */
   public fun withContentPadding(
-    label: TextComponent,
-    valueFormatter: ValueFormatter = ValueFormatter.default(),
-    labelPosition: LabelPosition = LabelPosition.Top,
-    indicator: ((Int) -> Component)? = null,
-    indicatorSizeDp: Float = Defaults.MARKER_INDICATOR_SIZE,
-    guideline: LineComponent? = null,
-    contentPadding: Insets,
-    yLabelCallback: ((CharSequence) -> Unit)? = null,
+      label: TextComponent,
+      valueFormatter: ValueFormatter = ValueFormatter.default(),
+      labelPosition: LabelPosition = LabelPosition.Top,
+      indicator: ((Int) -> Component)? = null,
+      indicatorSizeDp: Float = Defaults.MARKER_INDICATOR_SIZE,
+      guideline: LineComponent? = null,
+      contentPadding: Insets,
+      yLabelCallback: ((List<CharSequence>) -> Unit)? = null,
   ): DefaultCartesianMarker = DefaultCartesianMarker(
     label = label,
     valueFormatter = valueFormatter,

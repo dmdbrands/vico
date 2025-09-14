@@ -85,7 +85,7 @@ private constructor(
   private val persistentMarkerMap: MutableMap<Double, CartesianMarker>,
   private var previousPersistentMarkerHashCode: Int?,
   /** Callback invoked when the chart is clicked with marker x values and exact x value */
-  public val onChartClick: ((List<Double>, Double) -> Unit)? = null,
+  public val onChartClick: ((List<Double>, Double?) -> Unit)? = null,
 ) : CartesianLayerMarginUpdater<CartesianChartModel> {
   private val persistentMarkerScope = PersistentMarkerScope {
     persistentMarkerMap[it.toDouble()] = this
@@ -228,7 +228,7 @@ private constructor(
     persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
     getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
     visibleLabelsCount: Int = 0,
-    onChartClick: ((List<Double>, Double) -> Unit)? = null,
+    onChartClick: ((List<Double>, Double?) -> Unit)? = null,
   ) : this(
     layers = layers,
     startAxis = startAxis,
@@ -478,6 +478,8 @@ private constructor(
       val exactXValue = context.getExactXValue(clickXPosition.toDouble())
       val markerXValues = markerTargets.keys.toList()
       exactXValue?.let { onChartClick?.invoke(markerXValues, it) }
+    } else {
+      onChartClick?.invoke(emptyList(), null)
     }
 
     val marker = marker ?: return emptyList()
@@ -535,7 +537,7 @@ private constructor(
     persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = this.persistentMarkers,
     getXStep: ((CartesianChartModel) -> Double) = this.getXStep,
     visibleLabelsCount: Int = this.visibleLabelsCount,
-    onChartClick: ((List<Double>, Double) -> Unit)? = this.onChartClick,
+    onChartClick: ((List<Double>, Double?) -> Unit)? = this.onChartClick,
   ): CartesianChart =
     CartesianChart(
       layers = layers,

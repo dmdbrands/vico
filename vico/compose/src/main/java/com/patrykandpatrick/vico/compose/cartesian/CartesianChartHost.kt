@@ -165,6 +165,7 @@ internal fun CartesianChartHostImpl(
 ) {
   val canvasBounds = remember { RectF() }
   val pointerPosition = remember { mutableStateOf<Point?>(null) }
+  var isPointerSelectionInProgress by remember { mutableStateOf(false) }
   val measuringContext =
     rememberCartesianMeasuringContext(
       canvasBounds = canvasBounds,
@@ -202,6 +203,8 @@ internal fun CartesianChartHostImpl(
         .pointerInput(
           scrollState = scrollState,
           consumeMoveEvents = consumeMoveEvents,
+          isPointerSelectionInProgress = isPointerSelectionInProgress,
+          onSelectionStateChange = { isPointerSelectionInProgress = it },
           onPointerPositionChange =
             remember(chart.marker == null) {
               if (chart.marker != null) pointerPosition.component2() else null
