@@ -38,7 +38,7 @@ public interface CartesianLayerRangeProvider {
 
   /** Returns the minimum _y_ value. */
   public fun getMinY(minY: Double, maxY: Double, extraStore: ExtraStore): Double =
-    minY.coerceAtMost(0.0)
+    minY.coerceAtLeast(0.0)
 
   /** Returns the maximum _y_ value. */
   public fun getMaxY(minY: Double, maxY: Double, extraStore: ExtraStore): Double =

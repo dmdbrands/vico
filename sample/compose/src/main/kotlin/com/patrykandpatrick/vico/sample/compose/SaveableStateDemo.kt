@@ -77,6 +77,9 @@ import com.patrykandpatrick.vico.core.cartesian.axis.BaseAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianRangeValues
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
@@ -164,19 +167,36 @@ fun SaveableStateDemo(
 
   val showSecondaryLine = true
   var animateIn by remember { mutableStateOf(false) }
-  var secondaryMinY by rememberSaveable { mutableIntStateOf(5) }
-  var secondaryMaxY by rememberSaveable { mutableIntStateOf(25) }
+  var secondaryMinY : Int? by remember { mutableStateOf(null) }
+  var secondaryMaxY: Int? by remember { mutableStateOf(null) }
   val markerValue = 100.0
-
 
   LaunchedEffect(Unit) {
     animateIn = false
     modelProducer.runTransaction {
         lineSeries {
-          series(x = xData, y = yData)
+          series(
+            x = xData,
+            y = yData,
+            ranges = CartesianRangeValues(
+              minX = 0.0,      // Hardcoded for testing
+              maxX = 50.0,     // Hardcoded for testing
+              minY = 10.0,     // Hardcoded for testing
+              maxY = 20.0      // Hardcoded for testing
+            )
+          )
         }
         lineSeries {
-          series(x = xSecondaryData, y = ySecondaryData)
+          series(
+            x = xSecondaryData,
+            y = ySecondaryData,
+            ranges = CartesianRangeValues(
+              minX = 0.0,      // Hardcoded for testing
+              maxX = 50.0,     // Hardcoded for testing
+              minY = 70.0,      // Hardcoded for testing
+              maxY = 90.0      // Hardcoded for testing
+            )
+          )
         }
     }
   }
@@ -325,43 +345,24 @@ fun SaveableStateDemo(
 
     val primaryLayer = rememberLineCartesianLayer(
       verticalAxisPosition = Axis.Position.Vertical.Start,
-      rangeProvider = remember(rangeUpdateTrigger, minY, maxY) {
-        val currentMinY = minY
-        val currentMaxY = maxY
-        object : com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider {
-          override fun getMinY(minY: Double, maxY: Double, extraStore: com.patrykandpatrick.vico.core.common.data.ExtraStore): Double {
-            return currentMinY.toDouble()
-          }
-          override fun getMaxY(minY: Double, maxY: Double, extraStore: com.patrykandpatrick.vico.core.common.data.ExtraStore): Double {
-            return currentMaxY.toDouble()
-          }
-        }
-      }
     )
 
     val colorList = listOf(Color.Red)
 
     val secondaryLayer = rememberLineCartesianLayer(
       verticalAxisPosition = Axis.Position.Vertical.End,
+      rangeProvider = CartesianLayerRangeProvider.fixed(
+        minY = secondaryMinY?.toDouble(),
+        maxY = secondaryMaxY?.toDouble(),
+
+      ),
       lineProvider = LineCartesianLayer.LineProvider.series(
         listOf(colorList).map {
           LineCartesianLayer.rememberLine(
         fill = LineCartesianLayer.LineFill.single(fill(it.first()))
         )
         },
-      ),
-      rangeProvider = remember(rangeUpdateTrigger, secondaryMinY, secondaryMaxY) {
-        val currentSecondaryMinY = secondaryMinY
-        val currentSecondaryMaxY = secondaryMaxY
-        object : com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider {
-          override fun getMinY(minY: Double, maxY: Double, extraStore: com.patrykandpatrick.vico.core.common.data.ExtraStore): Double {
-            return currentSecondaryMinY.toDouble()
-          }
-          override fun getMaxY(minY: Double, maxY: Double, extraStore: com.patrykandpatrick.vico.core.common.data.ExtraStore): Double {
-            return currentSecondaryMaxY.toDouble()
-          }
-        }
-      }
+      )
     )
 val marker = rememberDefaultCartesianMarker(
   label = rememberTextComponent(),
@@ -536,21 +537,4 @@ private fun rememberMarkerDecoration(markerValue: Double): VerticalAxis.MarkerDe
       verticalLabelPosition = Position.Vertical.Center,
     )
   }
-}
-
-
-@Composable
-@Preview
-private fun SaveableStateDemoPreview() {
-  val modelProducer = remember { CartesianChartModelProducer() }
-  // Use `runBlocking` only for previews, which don't support asynchronous execution.
-  runBlocking {
-    val (xData, yData) = generateData(100, 0, 20)
-    val (xSecondaryData, ySecondaryData) = generateData(100, 0, 15)
-    modelProducer.runTransaction {
-      columnSeries { series(x = xData, y = yData) }
-      lineSeries { series(x = xSecondaryData, y = ySecondaryData) }
-    }
-  }
-  PreviewBox { SaveableStateDemo() }
 }

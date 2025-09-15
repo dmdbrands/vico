@@ -21,7 +21,15 @@ import com.patrykandpatrick.vico.core.common.data.ExtraStore
 import com.patrykandpatrick.vico.core.common.rangeOf
 import com.patrykandpatrick.vico.core.common.rangeOfPair
 
-/** Stores a [LineCartesianLayer]’s data. */
+/** Data class for storing min/max X and Y values with default null values. */
+public data class CartesianRangeValues(
+  public val minX: Double? = null,
+  public val maxX: Double? = null,
+  public val minY: Double? = null,
+  public val maxY: Double? = null,
+)
+
+/** Stores a [LineCartesianLayer]'s data. */
 public class LineCartesianLayerModel : CartesianLayerModel {
   private val entries: List<Entry>
 
@@ -42,21 +50,28 @@ public class LineCartesianLayerModel : CartesianLayerModel {
 
   public constructor(series: List<List<Entry>>) : this(series, ExtraStore.Empty)
 
-  private constructor(series: List<List<Entry>>, extraStore: ExtraStore) {
+  public constructor(series: List<List<Entry>>, ranges: CartesianRangeValues?) : this(series, ExtraStore.Empty, ranges)
+
+  public constructor(series: List<List<Entry>>, extraStore: ExtraStore) : this(series, extraStore, null)
+
+  private constructor(series: List<List<Entry>>, extraStore: ExtraStore, ranges: CartesianRangeValues?) {
     require(series.isNotEmpty()) { "At least one series should be added." }
     this.series =
       series.map { entries ->
-        require(entries.isNotEmpty()) { "Series can’t be empty." }
+        require(entries.isNotEmpty()) { "Series can't be empty." }
         entries.sortedBy { entry -> entry.x }
       }
     this.entries = this.series.flatten()
     val xRange = this.series.rangeOfPair { it.first().x to it.last().x }
     val yRange = entries.rangeOf { it.y }
     this.id = this.series.hashCode()
-    this.minX = xRange.start
-    this.maxX = xRange.endInclusive
-    this.minY = yRange.start
-    this.maxY = yRange.endInclusive
+
+    // Use ranges if provided, otherwise use calculated ranges
+    this.minX = ranges?.minX ?: xRange.start
+    this.maxX = ranges?.maxX ?: xRange.endInclusive
+    this.minY = ranges?.minY ?: yRange.start
+    this.maxY = ranges?.maxY ?: yRange.endInclusive
+
     this.extraStore = extraStore
   }
 
@@ -122,26 +137,28 @@ public class LineCartesianLayerModel : CartesianLayerModel {
    * Stores the minimum amount of data required to create a [LineCartesianLayerModel] and
    * facilitates this creation.
    */
-  public class Partial(private val series: List<List<Entry>>) : CartesianLayerModel.Partial {
+  public class Partial(private val series: List<List<Entry>>, private val ranges: CartesianRangeValues? = null) : CartesianLayerModel.Partial {
     override fun complete(extraStore: ExtraStore): CartesianLayerModel =
-      LineCartesianLayerModel(series, extraStore)
+      LineCartesianLayerModel(series, extraStore, ranges)
 
     override fun equals(other: Any?): Boolean =
-      this === other || other is Partial && series == other.series
+      this === other || other is Partial && series == other.series && ranges == other.ranges
 
-    override fun hashCode(): Int = series.hashCode()
+    override fun hashCode(): Int = 31 * series.hashCode() + (ranges?.hashCode() ?: 0)
   }
 
   /** Facilitates the creation of [LineCartesianLayerModel]s and [Partial]s. */
   public class BuilderScope internal constructor() {
     internal val series = mutableListOf<List<Entry>>()
+    internal var ranges: CartesianRangeValues? = null
 
     /**
      * Adds a series with the provided _x_ values ([x]) and _y_ values ([y]). [x] and [y] should
      * have the same size.
      */
-    public fun series(x: Collection<Number>, y: Collection<Number>) {
+    public fun series(x: Collection<Number>, y: Collection<Number>, ranges: CartesianRangeValues? = null) {
       series.add(x.zip(y, LineCartesianLayerModel::Entry))
+      this@BuilderScope.ranges = ranges
     }
 
     /** Adds a series with the provided _y_ values ([y]), using their indices as the _x_ values. */
@@ -157,12 +174,16 @@ public class LineCartesianLayerModel : CartesianLayerModel {
 
   public companion object {
     /** Creates a [LineCartesianLayerModel]. */
-    public fun build(block: BuilderScope.() -> Unit): LineCartesianLayerModel =
-      LineCartesianLayerModel(BuilderScope().apply(block).series)
+    public fun build(block: BuilderScope.() -> Unit): LineCartesianLayerModel {
+      val builderScope = BuilderScope().apply(block)
+      return LineCartesianLayerModel(builderScope.series, builderScope.ranges)
+    }
 
     /** Creates a [Partial]. */
-    public fun partial(block: BuilderScope.() -> Unit): Partial =
-      Partial(BuilderScope().apply(block).series)
+    public fun partial(block: BuilderScope.() -> Unit): Partial {
+      val builderScope = BuilderScope().apply(block)
+      return Partial(builderScope.series, builderScope.ranges)
+    }
   }
 }
 

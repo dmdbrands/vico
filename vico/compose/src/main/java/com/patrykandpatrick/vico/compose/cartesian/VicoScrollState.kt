@@ -202,8 +202,6 @@ public class VicoScrollState {
       value = initialScroll.getValue(context, layerDimensions, bounds, maxValue)
       initialScrollHandled = true
     }
-    // Emit initial visible range
-    emitVisibleRange()
   }
 
   internal suspend fun autoScroll(model: CartesianChartModel, oldModel: CartesianChartModel?) {
