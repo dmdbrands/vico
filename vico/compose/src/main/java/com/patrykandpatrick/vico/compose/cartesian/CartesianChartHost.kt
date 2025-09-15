@@ -209,6 +209,7 @@ internal fun CartesianChartHostImpl(
             remember(chart.marker == null) {
               if (chart.marker != null) pointerPosition.component2() else null
             },
+          scope = rememberCoroutineScope(),
           onZoom =
             remember(zoomState, scrollState, coroutineScope) {
               if (zoomState.zoomEnabled) {
