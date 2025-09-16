@@ -61,6 +61,7 @@ import com.patrykandpatrick.vico.core.common.set
 import com.patrykandpatrick.vico.core.common.setValue
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
@@ -206,7 +207,7 @@ internal fun CartesianChartHostImpl(
 
   // Monitor scroll changes and trigger callback when scrolling stops
   LaunchedEffect(Unit) {
-    snapshotFlow { scrollState.currentVisibleRange }
+  scrollState.visibleRange
       .debounce(300) // Wait 300ms after scroll stops
       .distinctUntilChanged()
       .collect { scrollValue ->
