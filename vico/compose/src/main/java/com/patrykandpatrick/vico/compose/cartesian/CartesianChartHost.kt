@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,7 @@ import com.patrykandpatrick.vico.compose.cartesian.data.component3
 import com.patrykandpatrick.vico.compose.cartesian.data.component4
 import com.patrykandpatrick.vico.core.cartesian.CartesianChart
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
+import com.patrykandpatrick.vico.core.cartesian.VisibleRange
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModel
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges
@@ -57,6 +59,8 @@ import com.patrykandpatrick.vico.core.common.data.ExtraStore
 import com.patrykandpatrick.vico.core.common.getValue
 import com.patrykandpatrick.vico.core.common.set
 import com.patrykandpatrick.vico.core.common.setValue
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -74,6 +78,7 @@ import kotlinx.coroutines.launch
  *   composition. The animation is skipped for previews.
  * @param consumeMoveEvents whether to consume move touch events when scroll is disabled and
  *   [CartesianChart.marker] is not null.
+ * @param onScrollStopped callback invoked when scrolling stops, providing the current visible range.
  * @param placeholder shown when no [CartesianChartModel] is available.
  */
 @Composable
@@ -86,6 +91,7 @@ public fun CartesianChartHost(
   animationSpec: AnimationSpec<Float>? = defaultCartesianDiffAnimationSpec,
   animateIn: Boolean = true,
   consumeMoveEvents: Boolean = false,
+  onScrollStopped: ((VisibleRange?) -> Unit)? = null,
   placeholder: @Composable BoxScope.() -> Unit = {},
 ) {
   val mutableRanges = remember { MutableCartesianChartRanges() }
@@ -101,6 +107,7 @@ public fun CartesianChartHost(
         zoomState,
         ranges,
         consumeMoveEvents,
+        onScrollStopped,
         previousModel,
         extraStore,
       )
@@ -123,6 +130,7 @@ public fun CartesianChartHost(
  *   customization.
  * @param consumeMoveEvents whether to consume move touch events when scroll is disabled and
  *   [CartesianChart.marker] is not null.
+ * @param onScrollStopped callback invoked when scrolling stops, providing the current visible range.
  */
 @Composable
 @SuppressLint("RememberReturnType")
@@ -133,6 +141,7 @@ public fun CartesianChartHost(
   scrollState: VicoScrollState = rememberVicoScrollState(),
   zoomState: VicoZoomState = rememberDefaultVicoZoomState(scrollState.scrollEnabled),
   consumeMoveEvents: Boolean = false,
+  onScrollStopped: ((VisibleRange?) -> Unit)? = null,
 ) {
   val ranges = remember { MutableCartesianChartRanges() }
   remember(chart, model) {
@@ -148,6 +157,7 @@ public fun CartesianChartHost(
       zoomState,
       ranges.toImmutable(),
       consumeMoveEvents,
+      onScrollStopped,
     )
   }
 }
@@ -160,6 +170,7 @@ internal fun CartesianChartHostImpl(
   zoomState: VicoZoomState,
   ranges: CartesianChartRanges,
   consumeMoveEvents: Boolean,
+  onScrollStopped: ((VisibleRange?) -> Unit)? = null,
   previousModel: CartesianChartModel? = null,
   extraStore: ExtraStore = ExtraStore.Empty,
 ) {
@@ -191,6 +202,17 @@ internal fun CartesianChartHostImpl(
 
   LaunchedEffect(zoomState, scrollState) {
     zoomState.pendingScroll.collect { scrollState.scroll(it) }
+  }
+
+  // Monitor scroll changes and trigger callback when scrolling stops
+  LaunchedEffect(Unit) {
+    snapshotFlow { scrollState.currentVisibleRange }
+      .debounce(300) // Wait 300ms after scroll stops
+      .distinctUntilChanged()
+      .collect { scrollValue ->
+        // Get the current visible range directly
+        onScrollStopped?.invoke(scrollState.currentVisibleRange)
+      }
   }
 
   DisposableEffect(scrollState) { onDispose { scrollState.clearUpdated() } }

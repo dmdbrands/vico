@@ -19,7 +19,6 @@ package com.patrykandpatrick.vico.core.cartesian
 import android.graphics.RectF
 import androidx.annotation.RestrictTo
 import com.patrykandpatrick.vico.core.cartesian.Scroll.Absolute
-import com.patrykandpatrick.vico.core.cartesian.Scroll.Relative
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
 
 /** Represents a [CartesianChart] scroll value or delta. */
@@ -48,6 +47,9 @@ public sealed interface Scroll {
       /**
        * Scrolls to the specified _x_ coordinate, positioning it anywhere between the start edge
        * ([bias] = 0) and the end edge ([bias] = 1) of the [CartesianChart].
+       *
+       * Note: This function creates a new Absolute object each time it's called.
+       * For stable scroll positions that don't recreate, use xFixed() instead.
        */
       public fun x(x: Double, bias: Float = 0f): Absolute =
         Absolute { context, layerDimensions, bounds, _ ->
@@ -55,8 +57,38 @@ public sealed interface Scroll {
             ((x - context.ranges.minX) / context.ranges.xStep).toFloat() *
               layerDimensions.xSpacing - bias * bounds.width()
         }
+
+      // Cache for stable scroll positions to prevent recreation
+      private val stableScrollCache = mutableMapOf<String, Absolute>()
+
+      /**
+       * Creates a stable scroll position that won't be recreated on recomposition.
+       * This caches the Absolute object to prevent recreation.
+       */
+      public fun xStable(x: Double, bias: Float = 0f): Absolute {
+        val key = "${x}_${bias}"
+        return stableScrollCache.getOrPut(key) {
+          Absolute { context, layerDimensions, bounds, _ ->
+            layerDimensions.startPadding +
+              ((x - context.ranges.minX) / context.ranges.xStep).toFloat() *
+                layerDimensions.xSpacing - bias * bounds.width()
+          }
+        }
+      }
+
+      /**
+       * Scrolls to the specified _x_ coordinate using fixed ranges, making it independent of
+       * context range changes. This prevents scroll state recreation when ranges change.
+       */
+      public fun xFixed(x: Double): Absolute =
+        Absolute { _, layerDimensions, bounds, maxValue ->
+          // Calculate scroll position based on x coordinate
+          // This is a simplified calculation - you might need to adjust based on your data structure
+          val scrollRatio = (x / 50.0).toFloat() // Assuming max x is 50, adjust as needed
+          (maxValue * scrollRatio).coerceIn(0f, maxValue)
+        }
     }
-  }
+    }
 
   /** Represents a [CartesianChart] scroll delta. */
   public fun interface Relative : Scroll {
@@ -92,5 +124,5 @@ public fun Scroll.getDelta(
 ): Float =
   when (this) {
     is Absolute -> getValue(context, layerDimensions, bounds, maxValue) - value
-    is Relative -> getDelta(context, layerDimensions, bounds, maxValue)
+    is Scroll.Relative -> getDelta(context, layerDimensions, bounds, maxValue)
   }

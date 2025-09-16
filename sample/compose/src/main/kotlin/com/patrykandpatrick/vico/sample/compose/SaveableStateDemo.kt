@@ -149,7 +149,9 @@ fun SaveableStateDemo(
   var scrollThreshold by rememberSaveable { mutableStateOf(5f) }
 
   // Also use saveable scroll and zoom states to preserve chart position
-  val scrollState = rememberVicoScrollState(initialScroll = Scroll.Absolute.x(30.0))
+  // Use xStable to prevent scroll state recreation when ranges change
+  val initialScroll = remember { Scroll.Absolute.xStable(4.0) }
+  val scrollState = rememberVicoScrollState(initialScroll = initialScroll)
   val zoomState = rememberVicoZoomState()
 
 
@@ -214,38 +216,7 @@ fun SaveableStateDemo(
 
 
 
-  LaunchedEffect(Unit) {
-    scrollState.visibleRange
-      .debounce(500)
-      .collect { ranges ->
-        Log.i("CHECKING", scrollState.getVisibleAxisLabels().toString())
-        scope.launch {
-          if (ranges != null) {
-            val start = ranges.visibleXRange.start
-            val end = ranges.visibleXRange.endInclusive
-            // Calculate the actual Y range from the visible data
-            // Find data points where x values fall within the visible range
-            val visibleData = yData.filterIndexed { index, _ ->
-              val xValue = xData[index]
-              xValue >= start && xValue <= end
-            }
-
-            if (visibleData.isNotEmpty()) {
-              val calculatedMinY = visibleData.minOrNull()?.toInt() ?: 0
-              val calculatedMaxY = visibleData.maxOrNull()?.toInt() ?: 20
-
-              // Update the Y range based on visible data
-              minY = calculatedMinY - 2
-              maxY = calculatedMaxY + 2
-
-
-            }
-          }
-
-        }
-
-  }
-  }
+  // Remove the manual scroll monitoring since we now have a callback
 
 
   Column(
@@ -342,13 +313,17 @@ fun SaveableStateDemo(
 
     val colorList = listOf(Color.Red)
 
-    val secondaryLayer = rememberLineCartesianLayer(
-      verticalAxisPosition = Axis.Position.Vertical.End,
-      rangeProvider = CartesianLayerRangeProvider.fixed(
-        minY = secondaryMinY?.toDouble(),
-        maxY = secondaryMaxY?.toDouble(),
+  val secondaryRangeProvider = remember(secondaryMinY, secondaryMaxY) {
+    CartesianLayerRangeProvider.fixed(
+      minY = secondaryMinY?.toDouble(),
+      maxY = secondaryMaxY?.toDouble(),
+    )
+  }
 
-      ),
+  val secondaryLayer =
+    rememberLineCartesianLayer(
+      verticalAxisPosition = Axis.Position.Vertical.End,
+      rangeProvider = secondaryRangeProvider,
       lineProvider = LineCartesianLayer.LineProvider.series(
         listOf(colorList).map {
           LineCartesianLayer.rememberLine(
@@ -357,6 +332,7 @@ fun SaveableStateDemo(
         },
       )
     )
+
 val marker = rememberDefaultCartesianMarker(
   label = rememberTextComponent(),
   guideline = rememberAxisLineComponent(
@@ -427,6 +403,32 @@ val marker = rememberDefaultCartesianMarker(
           }
         },
       ),
+      onScrollStopped = {visibleRange ->
+        Log.i("SCROLL_CALLBACK", "Scroll stopped! Visible range: $visibleRange")
+        // You can now safely use the visible range for calculations
+        // without causing circular dependency
+        visibleRange?.let { range ->
+          val start = range.visibleXRange.start
+          val end = range.visibleXRange.endInclusive
+          // Calculate the actual Y range from the visible data
+          // Find data points where x values fall within the visible range
+          val visibleData = yData.filterIndexed { index, _ ->
+            val xValue = xData[index]
+            xValue >= start && xValue <= end
+          }
+
+          if (visibleData.isNotEmpty()) {
+            val calculatedMinY = visibleData.minOrNull()?.toInt() ?: 0
+            val calculatedMaxY = visibleData.maxOrNull()?.toInt() ?: 20
+
+            // Update the Y range based on visible data
+            secondaryMinY = calculatedMinY - 2
+            secondaryMaxY = calculatedMaxY + 2
+
+
+          }
+        }
+      },
       animateIn = true,
       modelProducer = modelProducer,
       scrollState = scrollState,
