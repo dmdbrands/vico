@@ -16,6 +16,7 @@
 
 package com.patrykandpatrick.vico.compose.cartesian
 
+import android.R.attr.value
 import android.graphics.RectF
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.spring
@@ -30,6 +31,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.MutableLiveData
 import com.patrykandpatrick.vico.core.cartesian.AutoScrollCondition
 import com.patrykandpatrick.vico.core.cartesian.CartesianChart
 import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
@@ -37,15 +39,17 @@ import com.patrykandpatrick.vico.core.cartesian.Scroll
 import com.patrykandpatrick.vico.core.cartesian.VisibleRange
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModel
 import com.patrykandpatrick.vico.core.cartesian.getDelta
-import com.patrykandpatrick.vico.core.cartesian.getMaxScrollDistance
 import com.patrykandpatrick.vico.core.cartesian.getFullXRange
-import com.patrykandpatrick.vico.core.cartesian.getVisibleXRange
+import com.patrykandpatrick.vico.core.cartesian.getMaxScrollDistance
 import com.patrykandpatrick.vico.core.cartesian.getVisibleAxisLabels
+import com.patrykandpatrick.vico.core.cartesian.getVisibleXRange
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
 import com.patrykandpatrick.vico.core.common.rangeWith
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
@@ -64,32 +68,21 @@ public class VicoScrollState {
   private var layerDimensions: CartesianLayerDimensions? = null
   private var bounds: RectF? = null
   internal val scrollEnabled: Boolean
-  internal val scrollThreshold: Float
   internal val pointerXDeltas = MutableSharedFlow<Float>(extraBufferCapacity = 1)
 
-  private val _visibleRange = MutableStateFlow<VisibleRange?>(null)
+  private var _visibleRange : MutableSharedFlow<VisibleRange?> = MutableStateFlow(null)
   /** StateFlow that emits the current visible range when scrolling starts or during scroll. */
-  public val visibleRange: StateFlow<VisibleRange?> = _visibleRange.asStateFlow()
+  public val visibleRange: SharedFlow<VisibleRange?>
+    get() = _visibleRange.asSharedFlow()
 
   internal val scrollableState = ScrollableState { delta ->
-    // Apply scroll threshold to reduce sensitivity
-    val thresholdedDelta = if (kotlin.math.abs(delta) < scrollThreshold) {
-      0f
-    } else {
-      delta
-    }
-
-    if (thresholdedDelta == 0f) {
-      return@ScrollableState 0f
-    }
-
     val oldValue = value
-    value += thresholdedDelta
+    value += delta
     val consumedValue = value - oldValue
-    if (oldValue + thresholdedDelta == value) {
-      thresholdedDelta
+    if (oldValue + delta == value) {
+      delta
     } else {
-      pointerXDeltas.tryEmit(consumedValue - thresholdedDelta)
+      pointerXDeltas.tryEmit(consumedValue - delta)
       consumedValue
     }
   }
@@ -100,11 +93,7 @@ public class VicoScrollState {
     private set(newValue) {
       val oldValue = value
       _value.floatValue = newValue.coerceIn(0f.rangeWith(maxValue))
-      if (value != oldValue) {
-        pointerXDeltas.tryEmit(oldValue - value)
-        // Emit visible range when scroll value changes
-        emitVisibleRange()
-      }
+      if (value != oldValue) pointerXDeltas.tryEmit(oldValue - value)
     }
 
   /** The maximum scroll value (in pixels). */
@@ -122,7 +111,6 @@ public class VicoScrollState {
     autoScroll: Scroll,
     autoScrollCondition: AutoScrollCondition,
     autoScrollAnimationSpec: AnimationSpec<Float>,
-    scrollThreshold: Float,
     value: Float,
     initialScrollHandled: Boolean,
   ) {
@@ -131,13 +119,12 @@ public class VicoScrollState {
     this.autoScroll = autoScroll
     this.autoScrollCondition = autoScrollCondition
     this.autoScrollAnimationSpec = autoScrollAnimationSpec
-    this.scrollThreshold = scrollThreshold
     _value = mutableFloatStateOf(value)
     this.initialScrollHandled = initialScrollHandled
   }
 
   /**
-   * Houses information on a [CartesianChart]'s scroll value. Allows for scroll customization and
+   * Houses information on a [CartesianChart]’s scroll value. Allows for scroll customization and
    * programmatic scrolling.
    *
    * @param scrollEnabled whether scroll is enabled.
@@ -145,7 +132,6 @@ public class VicoScrollState {
    * @param autoScroll represents the scroll value or delta for automatic scrolling.
    * @param autoScrollCondition defines when an automatic scroll should occur.
    * @param autoScrollAnimationSpec the [AnimationSpec] for automatic scrolling.
-   * @param scrollThreshold minimum scroll delta required to trigger scrolling (in pixels).
    */
   public constructor(
     scrollEnabled: Boolean,
@@ -153,14 +139,12 @@ public class VicoScrollState {
     autoScroll: Scroll,
     autoScrollCondition: AutoScrollCondition,
     autoScrollAnimationSpec: AnimationSpec<Float>,
-    scrollThreshold: Float = 5f,
   ) : this(
     scrollEnabled = scrollEnabled,
     initialScroll = initialScroll,
     autoScroll = autoScroll,
     autoScrollCondition = autoScrollCondition,
     autoScrollAnimationSpec = autoScrollAnimationSpec,
-    scrollThreshold = scrollThreshold,
     value = 0f,
     initialScrollHandled = false,
   )
@@ -176,17 +160,16 @@ public class VicoScrollState {
     }
   }
 
-  private fun emitVisibleRange() {
-    withUpdated { context, layerDimensions, bounds ->
+  private fun emitVisibleRange(context: CartesianMeasuringContext, layerDimensions: CartesianLayerDimensions, bounds: RectF) {
       val fullXRange = context.getFullXRange(layerDimensions)
       val visibleXRange = context.getVisibleXRange(bounds, layerDimensions, value)
-      _visibleRange.value = VisibleRange(
+      _visibleRange.tryEmit(VisibleRange(
         visibleXRange = visibleXRange,
         fullXRange = fullXRange,
         scrollValue = value,
         maxScrollValue = maxValue
       )
-    }
+      )
   }
 
   internal fun update(
@@ -201,6 +184,8 @@ public class VicoScrollState {
     if (!initialScrollHandled) {
       value = initialScroll.getValue(context, layerDimensions, bounds, maxValue)
       initialScrollHandled = true
+    } else {
+      emitVisibleRange(context, layerDimensions, bounds)
     }
   }
 
@@ -260,7 +245,6 @@ public class VicoScrollState {
       autoScroll: Scroll,
       autoScrollCondition: AutoScrollCondition,
       autoScrollAnimationSpec: AnimationSpec<Float>,
-      scrollThreshold: Float,
     ) =
       Saver<VicoScrollState, Pair<Float, Boolean>>(
         save = { it.value to it.initialScrollHandled },
@@ -271,7 +255,6 @@ public class VicoScrollState {
             autoScroll,
             autoScrollCondition,
             autoScrollAnimationSpec,
-            scrollThreshold,
             value,
             initialScrollHandled,
           )
@@ -288,7 +271,6 @@ public fun rememberVicoScrollState(
   autoScroll: Scroll = initialScroll,
   autoScrollCondition: AutoScrollCondition = AutoScrollCondition.Never,
   autoScrollAnimationSpec: AnimationSpec<Float> = spring(),
-  scrollThreshold: Float = 5f,
 ): VicoScrollState =
   rememberSaveable(
     scrollEnabled,
@@ -296,16 +278,14 @@ public fun rememberVicoScrollState(
     autoScroll,
     autoScrollCondition,
     autoScrollAnimationSpec,
-    scrollThreshold,
     saver =
-      remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec, scrollThreshold) {
+      remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec) {
         VicoScrollState.Saver(
           scrollEnabled,
           initialScroll,
           autoScroll,
           autoScrollCondition,
           autoScrollAnimationSpec,
-          scrollThreshold,
         )
       },
   ) {
@@ -315,6 +295,5 @@ public fun rememberVicoScrollState(
       autoScroll,
       autoScrollCondition,
       autoScrollAnimationSpec,
-      scrollThreshold,
     )
   }

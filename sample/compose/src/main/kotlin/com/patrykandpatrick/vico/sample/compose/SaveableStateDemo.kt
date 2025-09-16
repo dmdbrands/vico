@@ -16,6 +16,8 @@
 
 package com.patrykandpatrick.vico.sample.compose
 
+import android.R.attr.endX
+import android.R.attr.startX
 import android.R.id.input
 import android.graphics.Typeface
 import android.text.Layout
@@ -42,6 +44,7 @@ import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -72,6 +75,7 @@ import com.patrykandpatrick.vico.compose.common.component.shapeComponent
 import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.compose.common.insets
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
+import com.patrykandpatrick.vico.core.cartesian.Scroll
 import com.patrykandpatrick.vico.core.cartesian.axis.Axis
 import com.patrykandpatrick.vico.core.cartesian.axis.BaseAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
@@ -93,6 +97,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.math.max
 import kotlin.math.min
@@ -144,7 +149,7 @@ fun SaveableStateDemo(
   var scrollThreshold by rememberSaveable { mutableStateOf(5f) }
 
   // Also use saveable scroll and zoom states to preserve chart position
-  val scrollState = rememberVicoScrollState(scrollThreshold = scrollThreshold)
+  val scrollState = rememberVicoScrollState(initialScroll = Scroll.Absolute.x(30.0))
   val zoomState = rememberVicoZoomState()
 
 
@@ -156,7 +161,6 @@ fun SaveableStateDemo(
   var maxY by rememberSaveable { mutableIntStateOf(15) }
 
   var rangeUpdateTrigger by remember { mutableIntStateOf(0) }
-  val visibleRange by scrollState.visibleRange.collectAsState()
 
   val (xData, yData) = remember {
     generateExampleData(0, 15)
@@ -206,52 +210,41 @@ fun SaveableStateDemo(
   // State to display click results
   var clickResult by remember { mutableStateOf("Click on chart to see results") }
 
+  val scope = rememberCoroutineScope()
 
 
-  LaunchedEffect(visibleRange) {
-    visibleRange?.let { range ->
-      val startX = range.visibleXRange.start
-      val endX = range.visibleXRange.endInclusive
 
-      snapshotFlow { startX to endX }
-        .debounce(300)
-        .distinctUntilChanged()
-        .collect { (start, end) ->
-          Log.i("CHECKING" , scrollState.getVisibleAxisLabels().toString())
-          // Calculate the actual Y range from the visible data
-          // Find data points where x values fall within the visible range
-          val visibleData = yData.filterIndexed { index, _ ->
-            val xValue = xData[index]
-            xValue >= start && xValue <= end
+  LaunchedEffect(Unit) {
+    scrollState.visibleRange
+      .debounce(500)
+      .collect { ranges ->
+        Log.i("CHECKING", scrollState.getVisibleAxisLabels().toString())
+        scope.launch {
+          if (ranges != null) {
+            val start = ranges.visibleXRange.start
+            val end = ranges.visibleXRange.endInclusive
+            // Calculate the actual Y range from the visible data
+            // Find data points where x values fall within the visible range
+            val visibleData = yData.filterIndexed { index, _ ->
+              val xValue = xData[index]
+              xValue >= start && xValue <= end
+            }
+
+            if (visibleData.isNotEmpty()) {
+              val calculatedMinY = visibleData.minOrNull()?.toInt() ?: 0
+              val calculatedMaxY = visibleData.maxOrNull()?.toInt() ?: 20
+
+              // Update the Y range based on visible data
+              minY = calculatedMinY - 2
+              maxY = calculatedMaxY + 2
+
+
+            }
           }
 
-           if (visibleData.isNotEmpty()) {
-             val calculatedMinY = visibleData.minOrNull()?.toInt() ?: 0
-             val calculatedMaxY = visibleData.maxOrNull()?.toInt() ?: 20
-
-             // Update the Y range based on visible data
-             minY = calculatedMinY - 2
-             maxY = calculatedMaxY + 2
-
-             // Calculate secondary range
-             val secondaryVisibleData = ySecondaryData.filterIndexed { index, _ ->
-               val xValue = xSecondaryData[index]
-               xValue >= start && xValue <= end
-             }
-
-             if (secondaryVisibleData.isNotEmpty()) {
-               val secondaryCalculatedMinY = secondaryVisibleData.minOrNull()?.toInt() ?: 5
-               val secondaryCalculatedMaxY = secondaryVisibleData.maxOrNull()?.toInt() ?: 25
-
-               secondaryMinY = secondaryCalculatedMinY - 2
-               secondaryMaxY = secondaryCalculatedMaxY + 2
-             }
-
-             Log.i("VisibleRange", "Updated Y range: Min=$minY, Max=$maxY for visible data range")
-             Log.i("VisibleRange", "Updated Secondary Y range: Min=$secondaryMinY, Max=$secondaryMaxY")
-           }
         }
-    }
+
+  }
   }
 
 
