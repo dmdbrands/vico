@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.common.insets
+import com.patrykandpatrick.vico.core.cartesian.InterpolationType
 import com.patrykandpatrick.vico.core.cartesian.marker.DefaultCartesianMarker
 import com.patrykandpatrick.vico.core.common.Defaults
 import com.patrykandpatrick.vico.core.common.Insets
@@ -41,9 +42,11 @@ public fun rememberDefaultCartesianMarker(
   indicatorSize: Dp = Defaults.MARKER_INDICATOR_SIZE.dp,
   guideline: LineComponent? = null,
   contentPadding: Insets = insets(),
-  yLabelCallback: ((List<CharSequence>) -> Unit)? = null,
+  yLabelCallback: ((List<List<Double>>) -> Unit)? = null,
+  interpolationType: InterpolationType = InterpolationType.LINEAR,
+  curvature: Float = 0.5f,
 ): DefaultCartesianMarker =
-  remember(label, valueFormatter, labelPosition, indicator, indicatorSize, guideline, yLabelCallback) {
+  remember(label, valueFormatter, labelPosition, indicator, indicatorSize, guideline, yLabelCallback, interpolationType, curvature) {
     DefaultCartesianMarker(
       label = label,
       valueFormatter = valueFormatter,
@@ -53,5 +56,7 @@ public fun rememberDefaultCartesianMarker(
       guideline = guideline,
       contentPadding = contentPadding,
       yLabelCallback = yLabelCallback,
+      interpolationType = interpolationType,
+      curvature = curvature,
     )
   }

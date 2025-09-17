@@ -69,7 +69,9 @@ public open class DefaultCartesianMarker(
   protected val indicatorSizeDp: Float = Defaults.MARKER_INDICATOR_SIZE,
   protected val guideline: LineComponent? = null,
   protected val contentPadding: Insets = Insets.Zero,
-  protected val yLabelCallback: ((List<CharSequence>) -> Unit)? = null,
+  protected val yLabelCallback: ((List<List<Double>>) -> Unit)? = null,
+  protected val interpolationType: com.patrykandpatrick.vico.core.cartesian.InterpolationType = com.patrykandpatrick.vico.core.cartesian.InterpolationType.LINEAR,
+  protected val curvature: Float = 0.5f,
 ) : CartesianMarker {
 
   protected val markerCorneredShape: MarkerCorneredShape? =
@@ -190,15 +192,12 @@ public open class DefaultCartesianMarker(
     targets: List<CartesianMarker.Target>,
   ): Unit =
     with(context) {
-      var text = valueFormatter.format(context, targets)
-
-      // If text is blank and we have a callback, use interpolation as fallback
-      if (text.isBlank() && targets.isNotEmpty() && yLabelCallback != null) {
-        text = getInterpolatedText(context, targets) ?: text
-      }
+      val text = valueFormatter.format(context, targets)
 
       // Invoke Y label callback with the formatted text
-      yLabelCallback?.invoke(text.split(", "))
+      // TODO: Determine the correct vertical axis position based on the layer
+      val interpolatedValues = getInterpolatedText(context, targets, interpolationType, curvature)
+      yLabelCallback?.invoke(interpolatedValues)
       val targetX = targets.averageOf { it.canvasX }
       val labelBounds = label.getBounds(context, text, layerBounds.width().toInt())
       val halfOfTextWidth = labelBounds.width().half
@@ -250,55 +249,56 @@ public open class DefaultCartesianMarker(
         x = x,
         y = y,
         verticalPosition = verticalPosition,
-        maxWidth = ceil(min(layerBounds.right + contentPadding.endDp.pixels - x, x - (layerBounds.left - contentPadding.startDp.pixels)).doubled).toInt(),
+        maxWidth = ceil(min(layerBounds.right - x, x - layerBounds.left).doubled).toInt(),
       )
     }
 
   /**
-   * Private helper function to get interpolated text for multiple targets.
-   * Each target's X value is interpolated and results are joined with commas.
+   * Private helper function to get interpolated values for multiple models.
+   * Each model gets one interpolated Y value based on the average X position of targets.
    *
    * @param context the drawing context containing chart data
    * @param targets the list of marker targets
-   * @return formatted interpolated text with comma-separated Y values, or null if interpolation fails
+   * @param interpolationType the type of interpolation to use (default: LINEAR)
+   * @param curvature the curvature parameter for cubic interpolation (default: 0.5f)
+   * @param verticalAxisPosition the vertical axis position to use for Y range lookup
+   * @return list of lists of doubles where each outer list represents a model and each inner list contains one interpolated Y value for that model
    */
   private fun getInterpolatedText(
     context: CartesianDrawingContext,
-    targets: List<CartesianMarker.Target>
-  ): String? {
+    targets: List<CartesianMarker.Target>,
+    interpolationType: com.patrykandpatrick.vico.core.cartesian.InterpolationType = com.patrykandpatrick.vico.core.cartesian.InterpolationType.LINEAR,
+    curvature: Float = 0.5f,
+    verticalAxisPosition: com.patrykandpatrick.vico.core.cartesian.axis.Axis.Position.Vertical? = null
+  ): List<List<Double>> {
     // Get all LineCartesianLayerModel from the chart model
     val lineModels = context.model.models.filterIsInstance<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel>()
 
-    if (lineModels.isNotEmpty()) {
-      val interpolatedValues = mutableListOf<String>()
+    if (lineModels.isEmpty()) {
+      return emptyList()
+    }
 
-      // For each target, try to interpolate from each layer
-      targets.forEachIndexed { targetIndex, target ->
-        val targetValues = mutableListOf<String>()
+    val result = mutableListOf<List<Double>>()
 
-        lineModels.forEach { lineModel ->
-          if (lineModel.series.isNotEmpty()) {
-            val series = lineModel.series.first()
-            val interpolatedY = context.interpolateYValue(series, target.x)
-            if (interpolatedY != null) {
-              targetValues.add(String.format("%.2f", interpolatedY))
-              Log.d("INTERPOLATION", "Target $targetIndex, X: ${target.x}, Interpolated Y: $interpolatedY")
-            }
-          }
+    // Calculate average X position of all targets
+    val averageX = targets.map { it.x }.average()
+
+    // For each model, interpolate one Y value based on the average X position
+    lineModels.forEach { lineModel ->
+
+      if (lineModel.series.isNotEmpty()) {
+        val series = lineModel.series.first()
+        val interpolatedY = context.interpolateYValue(series, averageX, interpolationType, curvature, lineModel.minY , lineModel.maxY)
+
+        if (interpolatedY != null) {
+          val roundedY = kotlin.math.round(interpolatedY * 100.0) / 100.0
+          result.add(listOf(roundedY))
+          Log.d("INTERPOLATION", "Model: ${lineModel}, Average X: $averageX, Interpolated Y: $roundedY, Type: $interpolationType, Axis: $verticalAxisPosition")
         }
-
-        // Join values for this target with "/" separator
-        if (targetValues.isNotEmpty()) {
-          interpolatedValues.add(targetValues.joinToString(", "))
-        }
-      }
-
-      if (interpolatedValues.isNotEmpty()) {
-        return interpolatedValues.joinToString(", ")
       }
     }
 
-    return null
+    return result
   }
 
   protected fun overrideXPositionToFit(
@@ -318,11 +318,87 @@ public open class DefaultCartesianMarker(
       .toSet()
       .forEach { x ->
         val guidelineTop = when (labelPosition) {
-          LabelPosition.Top, LabelPosition.AbovePoint -> layerBounds.top - contentPadding.topDp.pixels
+          LabelPosition.Top -> {
+            // For Top, extend to the actual label position
+            layerBounds.top - tickSizeDp.pixels - contentPadding.bottomDp.pixels
+          }
+          LabelPosition.AbovePoint -> {
+            // For AbovePoint, extend to the actual label position
+            val topPointY = targets.minOf { target ->
+              when (target) {
+                is CandlestickCartesianLayerMarkerTarget -> target.highCanvasY
+                is ColumnCartesianLayerMarkerTarget ->
+                  target.columns.minOf(ColumnCartesianLayerMarkerTarget.Column::canvasY)
+                is LineCartesianLayerMarkerTarget ->
+                  target.points.minOf(LineCartesianLayerMarkerTarget.Point::canvasY)
+                else -> error("Unexpected `CartesianMarker.Target` implementation.")
+              }
+            }
+            topPointY - tickSizeDp.pixels - contentPadding.topDp.pixels
+          }
+          LabelPosition.AroundPoint -> {
+            // For AroundPoint, check if label is flipped to above or below
+            val labelBounds = label.getBounds(this, null, layerBounds.width().toInt())
+            val topPointY = targets.minOf { target ->
+              when (target) {
+                is CandlestickCartesianLayerMarkerTarget -> target.highCanvasY
+                is ColumnCartesianLayerMarkerTarget ->
+                  target.columns.minOf(ColumnCartesianLayerMarkerTarget.Column::canvasY)
+                is LineCartesianLayerMarkerTarget ->
+                  target.points.minOf(LineCartesianLayerMarkerTarget.Point::canvasY)
+                else -> error("Unexpected `CartesianMarker.Target` implementation.")
+              }
+            }
+            val flip = topPointY - labelBounds.height() - tickSizeDp.pixels - contentPadding.topDp.pixels < layerBounds.top
+            if (flip) layerBounds.top else topPointY - tickSizeDp.pixels - contentPadding.topDp.pixels
+          }
           else -> layerBounds.top
         }
         val guidelineBottom = when (labelPosition) {
-          LabelPosition.Bottom, LabelPosition.BelowPoint -> layerBounds.bottom + contentPadding.bottomDp.pixels
+          LabelPosition.Bottom -> {
+            // For Bottom, extend to the actual label position
+            layerBounds.bottom + tickSizeDp.pixels + contentPadding.bottomDp.pixels
+          }
+          LabelPosition.BelowPoint -> {
+            // For BelowPoint, extend to the actual label position
+            val bottomPointY = targets.maxOf { target ->
+              when (target) {
+                is CandlestickCartesianLayerMarkerTarget -> target.lowCanvasY
+                is ColumnCartesianLayerMarkerTarget ->
+                  target.columns.maxOf(ColumnCartesianLayerMarkerTarget.Column::canvasY)
+                is LineCartesianLayerMarkerTarget ->
+                  target.points.maxOf(LineCartesianLayerMarkerTarget.Point::canvasY)
+                else -> error("Unexpected `CartesianMarker.Target` implementation.")
+              }
+            }
+            bottomPointY + tickSizeDp.pixels + contentPadding.bottomDp.pixels
+          }
+          LabelPosition.AroundPoint -> {
+            // For AroundPoint, check if label is flipped to above or below
+            val labelBounds = label.getBounds(this, null, layerBounds.width().toInt())
+            val topPointY = targets.minOf { target ->
+              when (target) {
+                is CandlestickCartesianLayerMarkerTarget -> target.highCanvasY
+                is ColumnCartesianLayerMarkerTarget ->
+                  target.columns.minOf(ColumnCartesianLayerMarkerTarget.Column::canvasY)
+                is LineCartesianLayerMarkerTarget ->
+                  target.points.minOf(LineCartesianLayerMarkerTarget.Point::canvasY)
+                else -> error("Unexpected `CartesianMarker.Target` implementation.")
+              }
+            }
+            val bottomPointY = targets.maxOf { target ->
+              when (target) {
+                is CandlestickCartesianLayerMarkerTarget -> target.lowCanvasY
+                is ColumnCartesianLayerMarkerTarget ->
+                  target.columns.maxOf(ColumnCartesianLayerMarkerTarget.Column::canvasY)
+                is LineCartesianLayerMarkerTarget ->
+                  target.points.maxOf(LineCartesianLayerMarkerTarget.Point::canvasY)
+                else -> error("Unexpected `CartesianMarker.Target` implementation.")
+              }
+            }
+            val flip = topPointY - labelBounds.height() - tickSizeDp.pixels - contentPadding.topDp.pixels < layerBounds.top
+            if (flip) bottomPointY + tickSizeDp.pixels + contentPadding.bottomDp.pixels else layerBounds.bottom
+          }
           else -> layerBounds.bottom
         }
         guideline?.drawVertical(this, x, guidelineTop, guidelineBottom)
@@ -358,7 +434,9 @@ public open class DefaultCartesianMarker(
         indicatorSizeDp == other.indicatorSizeDp &&
         guideline == other.guideline &&
         contentPadding == other.contentPadding &&
-        yLabelCallback == other.yLabelCallback
+        yLabelCallback == other.yLabelCallback &&
+        interpolationType == other.interpolationType &&
+        curvature == other.curvature
 
   override fun hashCode(): Int {
     var result = label.hashCode()
@@ -369,6 +447,8 @@ public open class DefaultCartesianMarker(
     result = 31 * result + guideline.hashCode()
     result = 31 * result + contentPadding.hashCode()
     result = 31 * result + yLabelCallback.hashCode()
+    result = 31 * result + interpolationType.hashCode()
+    result = 31 * result + curvature.hashCode()
     return result
   }
 
@@ -443,7 +523,9 @@ public open class DefaultCartesianMarker(
       indicatorSizeDp: Float = Defaults.MARKER_INDICATOR_SIZE,
       guideline: LineComponent? = null,
       contentPadding: Insets,
-      yLabelCallback: ((List<CharSequence>) -> Unit)? = null,
+      yLabelCallback: ((List<List<Double>>) -> Unit)? = null,
+      interpolationType: com.patrykandpatrick.vico.core.cartesian.InterpolationType = com.patrykandpatrick.vico.core.cartesian.InterpolationType.LINEAR,
+      curvature: Float = 0.5f,
   ): DefaultCartesianMarker = DefaultCartesianMarker(
     label = label,
     valueFormatter = valueFormatter,
@@ -453,6 +535,8 @@ public open class DefaultCartesianMarker(
     guideline = guideline,
     contentPadding = contentPadding,
     yLabelCallback = yLabelCallback,
+    interpolationType = interpolationType,
+    curvature = curvature,
   )
   }
 }

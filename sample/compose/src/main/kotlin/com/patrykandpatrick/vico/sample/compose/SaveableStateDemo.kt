@@ -69,6 +69,7 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.rememberSaveableCartesianChartModelProducer
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
+import com.patrykandpatrick.vico.core.cartesian.InterpolationType
 import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 import com.patrykandpatrick.vico.compose.common.component.shapeComponent
@@ -154,53 +155,27 @@ fun SaveableStateDemo(
   val scrollState = rememberVicoScrollState(initialScroll = initialScroll)
   val zoomState = rememberVicoZoomState()
 
-
-  // Static values - no longer dynamic
-  val dataVersion = 0
-  val useExampleData = true
-
-  var minY by rememberSaveable { mutableIntStateOf(0) }
-  var maxY by rememberSaveable { mutableIntStateOf(15) }
-
-  var rangeUpdateTrigger by remember { mutableIntStateOf(0) }
+  // Y range state - these affect both chart display and interpolation
+  var minY: Int? by remember { mutableStateOf(0) }
+  var maxY: Int? by remember { mutableStateOf(15) }
 
   val (xData, yData) = remember {
     generateExampleData(0, 15)
   }
-  val (xSecondaryData, ySecondaryData) = remember {
-    generateExampleData(5, 25)
-  }
-
-  val showSecondaryLine = true
-  var animateIn by remember { mutableStateOf(false) }
-  var secondaryMinY : Int? by remember { mutableStateOf(null) }
-  var secondaryMaxY: Int? by remember { mutableStateOf(null) }
   val markerValue = 100.0
 
-  LaunchedEffect(Unit) {
-    animateIn = false
+  // Update chart when Y ranges change
+  LaunchedEffect(minY, maxY) {
     modelProducer.runTransaction {
         lineSeries {
           series(
             x = xData,
             y = yData,
             ranges = CartesianRangeValues(
-              minX = 0.0,      // Hardcoded for testing
-              maxX = 50.0,     // Hardcoded for testing
-              minY = 10.0,     // Hardcoded for testing
-              maxY = 20.0      // Hardcoded for testing
-            )
-          )
-        }
-        lineSeries {
-          series(
-            x = xSecondaryData,
-            y = ySecondaryData,
-            ranges = CartesianRangeValues(
-              minX = 0.0,      // Hardcoded for testing
-              maxX = 50.0,     // Hardcoded for testing
-              minY = 70.0,      // Hardcoded for testing
-              maxY = 90.0      // Hardcoded for testing
+              minX = 0.0,
+              maxX = 50.0,
+              minY = minY?.toDouble() ?: 0.0,
+              maxY = maxY?.toDouble() ?: 15.0
             )
           )
         }
@@ -211,13 +186,6 @@ fun SaveableStateDemo(
 
   // State to display click results
   var clickResult by remember { mutableStateOf("Click on chart to see results") }
-
-  val scope = rememberCoroutineScope()
-
-
-
-  // Remove the manual scroll monitoring since we now have a callback
-
 
   Column(
     modifier = modifier.padding(16.dp),
@@ -309,29 +277,17 @@ fun SaveableStateDemo(
 
     val primaryLayer = rememberLineCartesianLayer(
       verticalAxisPosition = Axis.Position.Vertical.Start,
-    )
-
-    val colorList = listOf(Color.Red)
-
-  val secondaryRangeProvider = remember(secondaryMinY, secondaryMaxY) {
-    CartesianLayerRangeProvider.fixed(
-      minY = secondaryMinY?.toDouble(),
-      maxY = secondaryMaxY?.toDouble(),
-    )
-  }
-
-  val secondaryLayer =
-    rememberLineCartesianLayer(
-      verticalAxisPosition = Axis.Position.Vertical.End,
-      rangeProvider = secondaryRangeProvider,
       lineProvider = LineCartesianLayer.LineProvider.series(
-        listOf(colorList).map {
-          LineCartesianLayer.rememberLine(
-        fill = LineCartesianLayer.LineFill.single(fill(it.first()))
+        LineCartesianLayer.rememberLine(
+          pointConnector = LineCartesianLayer.PointConnector.cubic(curvature = 0.5f)
         )
-        },
+      ),
+      rangeProvider = CartesianLayerRangeProvider.fixed(
+        minY = minY?.toDouble(),
+        maxY = maxY?.toDouble()
       )
     )
+
 
 val marker = rememberDefaultCartesianMarker(
   label = rememberTextComponent(),
@@ -339,7 +295,7 @@ val marker = rememberDefaultCartesianMarker(
     fill = fill(Color.Green),
     thickness = 2.dp
   ),
-  contentPadding = insets(horizontal = 40.dp),
+  contentPadding = insets(bottom = 20.dp),
   indicator = { color ->
     ShapeComponent(
       fill = fill(color),
@@ -351,12 +307,13 @@ val marker = rememberDefaultCartesianMarker(
   yLabelCallback = { yLabelText ->
     // Handle the formatted Y label text
     Log.i("Y_LABEL", "Received: $yLabelText")
-  }
+  },
+  interpolationType = InterpolationType.CUBIC,
+  curvature = 0.5f
 )
     CartesianChartHost(
       chart = rememberCartesianChart(
         primaryLayer,
-        secondaryLayer,
         endAxis = VerticalAxis.rememberEnd(
           label = rememberTextComponent(
             textSize = 14.sp,
@@ -384,17 +341,6 @@ val marker = rememberDefaultCartesianMarker(
             val targetMarkerIndex =
               getTargetPoints(scrollState.getVisibleAxisLabels(), targets, click)
             markerIndex = targetMarkerIndex.first()
-
-            // Update click result display
-            clickResult = """
-            Click Results:
-            • Click X Value: $click
-            • Marker Targets: ${targets.joinToString(", ")}
-            • Visible Axis Labels: ${scrollState.getVisibleAxisLabels().joinToString(", ")}
-            • Target Marker Index: ${targetMarkerIndex.joinToString(", ")}
-            • Selected Marker: $markerIndex
-          """.trimIndent()
-
           }
         },
         persistentMarkers = remember(markerIndex) {
@@ -422,10 +368,8 @@ val marker = rememberDefaultCartesianMarker(
             val calculatedMaxY = visibleData.maxOrNull()?.toInt() ?: 20
 
             // Update the Y range based on visible data
-            secondaryMinY = calculatedMinY - 2
-            secondaryMaxY = calculatedMaxY + 2
-
-
+            minY = calculatedMinY - 2
+            maxY = calculatedMaxY + 2
           }
         }
       },

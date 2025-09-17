@@ -49,6 +49,11 @@ private enum class InteractionMode {
 
 private fun Offset.toPoint() = Point(x, y)
 
+/**
+ * Internal modifier that handles pointer input for chart interactions.
+ * Provides access to scroll state through the scrollState parameter.
+ * Use scrollState.isScrollInProgress to check if scrolling is active.
+ */
 internal fun Modifier.pointerInput(
   scrollState: VicoScrollState,
   onPointerPositionChange: ((Point?) -> Unit)?,
@@ -99,6 +104,7 @@ internal fun Modifier.pointerInput(
       }
     }
 
+
     fun enterMarkerScrubbingMode() {
       if (interactionMode == InteractionMode.MARKER_SELECTION) {
         interactionMode = InteractionMode.MARKER_SCRUBBING
@@ -126,6 +132,9 @@ internal fun Modifier.pointerInput(
             )
           onPointerPositionChange == null -> continue
           event.type == PointerEventType.Press -> {
+            if(scrollState.isScrollInProgress){
+              continue
+            }
             hasMoved = false
             val position = event.changes.first().position
             pressPosition = position.toPoint()
@@ -180,8 +189,13 @@ internal fun Modifier.pointerInput(
             when (interactionMode) {
               InteractionMode.MARKER_SELECTION -> {
                 // Touch and hold, then release - marker selection
-                onPointerPositionChange(pressPosition)
-                Log.i("PointerEvent", "MARKER_SELECTION - selected and cleared")
+                if(!scrollState.isScrollInProgress) {
+                  onPointerPositionChange(pressPosition)
+                  Log.i("PointerEvent", "MARKER_SELECTION - selected and cleared")
+                } else {
+                  onPointerPositionChange(null)
+                  Log.i("PointerEvent", "MARKER_SELECTION - scroll in progress")
+                }
               }
               InteractionMode.MARKER_SCRUBBING -> {
                 // Touch, hold, drag, then release - clear scrubbing

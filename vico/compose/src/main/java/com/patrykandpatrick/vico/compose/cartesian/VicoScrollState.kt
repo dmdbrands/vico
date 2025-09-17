@@ -17,6 +17,7 @@
 package com.patrykandpatrick.vico.compose.cartesian
 
 import android.graphics.RectF
+import android.util.Log
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.MutatePriority
@@ -66,6 +67,9 @@ public class VicoScrollState {
   internal val scrollEnabled: Boolean
   internal val pointerXDeltas = MutableSharedFlow<Float>(extraBufferCapacity = 1)
 
+  private var boundaryDelayStartTime: Long = 0L
+  private val boundaryDelayMs = 300L
+
   private var _visibleRange : MutableSharedFlow<VisibleRange?> = MutableStateFlow(null)
   /** StateFlow that emits the current visible range when scrolling starts or during scroll. */
   public val visibleRange: SharedFlow<VisibleRange?>
@@ -74,6 +78,31 @@ public class VicoScrollState {
   /** The current visible range (for direct access). */
   public var currentVisibleRange: VisibleRange? = null
     private set
+
+  /** Whether scrolling is currently in progress. */
+  internal val isScrollInProgress: Boolean
+    get() {
+      val baseScrollInProgress = scrollableState.isScrollInProgress
+      val currentTime = System.currentTimeMillis()
+      // If scroll is at boundaries (0f or maxValue) and not actively scrolling
+      if (!baseScrollInProgress && (value == 0f || value == maxValue)) {
+        Log.i("PointerXDeltas", "isScrollInProgress: $baseScrollInProgress , value: $value, maxValue: $maxValue")
+        // Start the delay timer if not already started
+        if (boundaryDelayStartTime == 0L ) {
+          boundaryDelayStartTime = currentTime
+          return true
+        } else {
+          if(currentTime - boundaryDelayStartTime < boundaryDelayMs) {
+            return true
+          }
+        }
+      } else {
+        // Reset delay timer if not at boundaries or actively scrolling
+        boundaryDelayStartTime = 0L
+      }
+
+      return baseScrollInProgress
+    }
 
   internal val scrollableState = ScrollableState { delta ->
     val oldValue = value
