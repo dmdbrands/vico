@@ -271,10 +271,10 @@ protected constructor(
           // If outside range, position at top or bottom with offset
           if (markerY < yRange.minY) {
             // Below range - position at bottom with offset
-            bounds.bottom + 40f
+            bounds.bottom + marker.outsideRangeOffset
           } else {
             // Above range - position at top with offset
-            bounds.bottom - bounds.height() - 40f
+            bounds.bottom - bounds.height() - marker.outsideRangeOffset
           }
         }
 
@@ -799,6 +799,7 @@ protected constructor(
    * @property horizontalLabelPosition defines the horizontal position of the marker label.
    * @property verticalLabelPosition defines the vertical position of the marker label.
    * @property labelRotationDegrees the rotation of the marker label (in degrees).
+   * @property outsideRangeOffset the offset in pixels when the marker is positioned outside the visible range.
    */
   public data class MarkerDecoration(
     public val y: (ExtraStore) -> Double,
@@ -808,6 +809,7 @@ protected constructor(
     public val horizontalLabelPosition: HorizontalLabelPosition = HorizontalLabelPosition.Outside,
     public val verticalLabelPosition: Position.Vertical = Position.Vertical.Center,
     public val labelRotationDegrees: Float = 0f,
+    public val outsideRangeOffset: Float = 60f,
   ) {
     /** @suppress */
     @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)

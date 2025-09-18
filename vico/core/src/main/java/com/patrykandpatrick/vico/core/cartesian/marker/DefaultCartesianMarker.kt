@@ -414,11 +414,19 @@ public open class DefaultCartesianMarker(
     with(context) {
       when (labelPosition) {
         LabelPosition.Top,
-        LabelPosition.AbovePoint ->
-          layerMargins.ensureValuesAtLeast(top = label.getHeight(context) + tickSizeDp.pixels)
+        LabelPosition.AbovePoint -> {
+          // Use a reasonable fixed height calculation instead of dynamic label height to prevent chart shrinking
+          // This ensures the chart doesn't shrink when text size changes
+          val fixedLabelHeight = 24f.pixels // Reasonable fixed height for label (24dp)
+          layerMargins.ensureValuesAtLeast(top = fixedLabelHeight + tickSizeDp.pixels)
+        }
         LabelPosition.Bottom,
-        LabelPosition.BelowPoint ->
-          layerMargins.ensureValuesAtLeast(bottom = label.getHeight(context) + tickSizeDp.pixels)
+        LabelPosition.BelowPoint -> {
+          // Use a reasonable fixed height calculation instead of dynamic label height to prevent chart shrinking
+          // This ensures the chart doesn't shrink when text size changes
+          val fixedLabelHeight = 24f.pixels // Reasonable fixed height for label (24dp)
+          layerMargins.ensureValuesAtLeast(bottom = fixedLabelHeight + tickSizeDp.pixels)
+        }
         LabelPosition.AroundPoint -> Unit // Will be inside the chart
       }
     }
