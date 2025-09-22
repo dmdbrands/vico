@@ -77,6 +77,7 @@ import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.compose.common.insets
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.Scroll
+import com.patrykandpatrick.vico.core.cartesian.Zoom
 import com.patrykandpatrick.vico.core.cartesian.axis.Axis
 import com.patrykandpatrick.vico.core.cartesian.axis.BaseAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
@@ -100,8 +101,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /**
@@ -146,18 +150,59 @@ fun SaveableStateDemo(
   // Using rememberSaveableCartesianChartModelProducer preserves data across configuration changes AND navigation
   val modelProducer = rememberSaveableCartesianChartModelProducer()
 
-  // Scroll threshold to control scroll sensitivity (higher values = less sensitive)
-  var scrollThreshold by rememberSaveable { mutableStateOf(5f) }
+  // Snap behavior toggle
+  var snapEnabled by rememberSaveable { mutableStateOf(true) }
 
   // Also use saveable scroll and zoom states to preserve chart position
   // Use xStable to prevent scroll state recreation when ranges change
   val initialScroll = remember { Scroll.Absolute.xStable(4.0) }
-  val scrollState = rememberVicoScrollState(initialScroll = initialScroll)
-  val zoomState = rememberVicoZoomState()
+  val scrollState = rememberVicoScrollState(
+    initialScroll = initialScroll,
+    snapToLabelFunction = { currentXLabel, isDrag, isForward ->
+      // Return the previous 6 multiples based on current X label
+      if (currentXLabel == null) return@rememberVicoScrollState 0.0
+
+      // Round down to the nearest multiple of 6
+      return@rememberVicoScrollState if (!isDrag) {
+        // For fling: snap to next/previous multiple of 6 based on direction
+        val requiredMultiple = if (isForward) {
+          // Forward fling: snap to next multiple of 6
+          ceil(currentXLabel / 6.0) * 6.0
+        } else {
+          // Backward fling: snap to previous multiple of 6
+          floor(currentXLabel / 6.0) * 6.0
+        }
+
+        Log.i(
+          "SnapFunction",
+          "Fling - Current X Label: $currentXLabel, Direction: ${if (isForward) "Forward" else "Backward"}, Target: $requiredMultiple"
+        )
+
+        requiredMultiple
+      } else {
+        // For drag: snap to nearest multiple of 6
+        val nearestMultiple = (currentXLabel / 6.0).roundToInt() * 6.0
+
+        Log.i(
+          "SnapFunction",
+          "Drag - Current X Label: $currentXLabel, Nearest Multiple: $nearestMultiple"
+        )
+
+        nearestMultiple
+      }
+    }
+  )
+
+  val zoomState = rememberVicoZoomState(
+    zoomEnabled = false,
+  )
 
   // Y range state - these affect both chart display and interpolation
   var minY: Int? by remember { mutableStateOf(0) }
   var maxY: Int? by remember { mutableStateOf(15) }
+
+  // Coroutine scope for programmatic scrolling
+  val coroutineScope = rememberCoroutineScope()
 
   val (xData, yData) = remember {
     generateExampleData(0, 15)
@@ -173,7 +218,7 @@ fun SaveableStateDemo(
             y = yData,
             ranges = CartesianRangeValues(
               minX = 0.0,
-              maxX = 50.0,
+              maxX = 80.0,
               minY = minY?.toDouble() ?: 0.0,
               maxY = maxY?.toDouble() ?: 15.0
             )
@@ -209,14 +254,10 @@ fun SaveableStateDemo(
     }
 
     Text(
-      text = "This chart's data AND scroll position persist across configuration changes and navigation. The chart shows example data with a secondary line.",
-      style = MaterialTheme.typography.bodyMedium
-    )
-
-    Text(
-      text = "Use the scroll threshold control below to adjust scroll sensitivity. Higher values make scrolling less sensitive to small movements.",
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant
+      text = "✨ Smart Snap Behavior - Drag to snap to nearest data point, fling to jump to next/previous data point!",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.primary,
+      fontWeight = FontWeight.Medium
     )
 
     Button(
@@ -238,11 +279,17 @@ fun SaveableStateDemo(
       Text("Reset Y Range")
     }
 
-    Text(
-      text = "Scroll Threshold: ${scrollThreshold.toInt()}px (Higher = Less Sensitive)",
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    Button(
+      onClick = {
+        coroutineScope.launch {
+          // Programmatically scroll to 0.0 using VicoScrollState's animateScroll
+          scrollState.animateScroll(Scroll.Absolute.xStable(0.0))
+        }
+      },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text("Scroll to 0.0 (Programmatic)")
+    }
 
     // Click Results Display
     Text(
@@ -259,19 +306,6 @@ fun SaveableStateDemo(
         .fillMaxWidth()
         .padding(8.dp)
     )
-
-    Button(
-      onClick = {
-        scrollThreshold = when {
-          scrollThreshold < 2f -> 5f
-          scrollThreshold < 10f -> 15f
-          else -> 2f
-        }
-      },
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Text("Change Scroll Sensitivity (Current: ${scrollThreshold.toInt()}px)")
-    }
 
     val markerDecoration = rememberMarkerDecoration(markerValue)
 
@@ -324,6 +358,7 @@ val marker = rememberDefaultCartesianMarker(
           tickLength = 0.dp,
           tick = null
         ),
+        visibleLabelsCount = 6,
         bottomAxis = HorizontalAxis.rememberBottom(
           tick = rememberAxisGuidelineComponent(),
           tickLength = 20.dp,
@@ -333,7 +368,6 @@ val marker = rememberDefaultCartesianMarker(
           label = rememberTextComponent(color = Color.Transparent),
           valueFormatter = emptyFormatter()
         ),
-        visibleLabelsCount = 6,
         onChartClick = { targets, click ->
           if (click == null) {
             markerIndex = null

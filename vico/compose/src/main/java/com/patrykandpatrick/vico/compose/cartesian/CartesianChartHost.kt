@@ -21,6 +21,8 @@ import android.graphics.RectF
 import android.util.Log
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -219,7 +221,6 @@ internal fun CartesianChartHostImpl(
   DisposableEffect(scrollState) { onDispose { scrollState.clearUpdated() } }
 
   val layerBounds = rememberUpdatedState(chart.layerBounds)
-
   Canvas(
     modifier =
       Modifier.fillMaxSize()

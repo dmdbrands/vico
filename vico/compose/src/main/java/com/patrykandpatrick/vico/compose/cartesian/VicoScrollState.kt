@@ -61,11 +61,14 @@ public class VicoScrollState {
   private val _value: MutableFloatState
   private val _maxValue = mutableFloatStateOf(0f)
   private var initialScrollHandled: Boolean
-  private var context: CartesianMeasuringContext? = null
-  private var layerDimensions: CartesianLayerDimensions? = null
-  private var bounds: RectF? = null
+  internal var context: CartesianMeasuringContext? = null
+  internal var layerDimensions: CartesianLayerDimensions? = null
+  internal var bounds: RectF? = null
   internal val scrollEnabled: Boolean
   internal val pointerXDeltas = MutableSharedFlow<Float>(extraBufferCapacity = 1)
+
+  /** Function for custom snap behavior - takes current X label and returns snapped X label */
+  public var snapToLabelFunction: ((Double?, Boolean , Boolean) -> Double)? = null
 
   private var boundaryDelayStartTime: Long = 0L
   private val boundaryDelayMs = 300L
@@ -78,6 +81,18 @@ public class VicoScrollState {
   /** The current visible range (for direct access). */
   public var currentVisibleRange: VisibleRange? = null
     private set
+
+  /** The current measuring context (for snap calculations). */
+  public val measuringContext: CartesianMeasuringContext?
+    get() = this.context
+
+  /** The current layer dimensions (for snap calculations). */
+  public val currentLayerDimensions: CartesianLayerDimensions?
+    get() = this.layerDimensions
+
+  /** The current bounds (for snap calculations). */
+  public val currentBounds: RectF?
+    get() = this.bounds
 
   /** Whether scrolling is currently in progress. */
   internal val isScrollInProgress: Boolean
@@ -106,6 +121,7 @@ public class VicoScrollState {
 
   internal val scrollableState = ScrollableState { delta ->
     val oldValue = value
+    Log.i("VicoScroll", "delta: $delta, oldValue: $oldValue, value: $value")
     value += delta
     val consumedValue = value - oldValue
     if (oldValue + delta == value) {
@@ -304,6 +320,7 @@ public fun rememberVicoScrollState(
   autoScroll: Scroll = initialScroll,
   autoScrollCondition: AutoScrollCondition = AutoScrollCondition.Never,
   autoScrollAnimationSpec: AnimationSpec<Float> = spring(),
+  snapToLabelFunction: ((Double?, Boolean , Boolean) -> Double)? = null,
 ): VicoScrollState =
   rememberSaveable(
     scrollEnabled,
@@ -311,6 +328,7 @@ public fun rememberVicoScrollState(
     autoScroll,
     autoScrollCondition,
     autoScrollAnimationSpec,
+    snapToLabelFunction,
     saver =
       remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec) {
         VicoScrollState.Saver(
@@ -328,5 +346,7 @@ public fun rememberVicoScrollState(
       autoScroll,
       autoScrollCondition,
       autoScrollAnimationSpec,
-    )
+    ).apply {
+      this.snapToLabelFunction = snapToLabelFunction
+    }
   }
