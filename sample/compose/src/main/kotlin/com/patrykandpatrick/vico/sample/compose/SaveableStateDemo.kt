@@ -158,37 +158,23 @@ fun SaveableStateDemo(
   val initialScroll = remember { Scroll.Absolute.xStable(4.0) }
   val scrollState = rememberVicoScrollState(
     initialScroll = initialScroll,
-    snapToLabelFunction = { currentXLabel, isDrag, isForward ->
+    snapToLabelFunction = { currentXLabel, isDrag , isForward->
       // Return the previous 6 multiples based on current X label
       if (currentXLabel == null) return@rememberVicoScrollState 0.0
 
       // Round down to the nearest multiple of 6
       return@rememberVicoScrollState if (!isDrag) {
-        // For fling: snap to next/previous multiple of 6 based on direction
-        val requiredMultiple = if (isForward) {
-          // Forward fling: snap to next multiple of 6
-          ceil(currentXLabel / 6.0) * 6.0
-        } else {
-          // Backward fling: snap to previous multiple of 6
-          floor(currentXLabel / 6.0) * 6.0
-        }
+
+        val requiredMultiple = if (isForward) ceil(currentXLabel / 6.0) * 6.0 else floor(currentXLabel / 6.0) * 6.0
 
         Log.i(
           "SnapFunction",
-          "Fling - Current X Label: $currentXLabel, Direction: ${if (isForward) "Forward" else "Backward"}, Target: $requiredMultiple"
+          "Current X Label: $currentXLabel, Next 6 multiples: $requiredMultiple"
         )
 
         requiredMultiple
       } else {
-        // For drag: snap to nearest multiple of 6
-        val nearestMultiple = (currentXLabel / 6.0).roundToInt() * 6.0
-
-        Log.i(
-          "SnapFunction",
-          "Drag - Current X Label: $currentXLabel, Nearest Multiple: $nearestMultiple"
-        )
-
-        nearestMultiple
+        currentXLabel.roundToInt().toDouble()
       }
     }
   )

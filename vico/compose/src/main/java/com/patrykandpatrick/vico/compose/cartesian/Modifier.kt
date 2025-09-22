@@ -21,6 +21,12 @@ import android.view.ViewConfiguration
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.scrollable
@@ -56,9 +62,9 @@ private const val MARKER_DELAY_MS = 200L // 200ms delay for marker selection/scr
 private const val MOVEMENT_THRESHOLD = 10f // Minimum movement to consider as drag
 
 // Velocity thresholds for snap behavior (px/s)
-private const val LOW_FLING = 5000f
+private const val LOW_FLING = 1500f
 private const val MEDIUM_FLING = 12000f
-private const val HIGH_FLING = 20000f
+private const val HIGH_FLING = 22000f
 
 private enum class InteractionMode {
     NONE,
@@ -90,32 +96,48 @@ public typealias SnapToLabelFunction = (Double, Boolean, List<Double>) -> Double
 private fun createSnapBehavior(scrollState: VicoScrollState): FlingBehavior {
 
     val snapLayoutInfoProvider = object : SnapLayoutInfoProvider {
-      var isDrag = false
-        override fun calculateApproachOffset(velocity: Float, decayOffset: Float): Float {
+        private var isDrag = false
+        private var lastVelocity = 0f
+        private var lastApproachTime = 0L
+        private val velocityThreshold = 1000f // Minimum velocity change to consider new fling
 
-          // Phase 1: Calculate how far to approach before snapping
-            // For high velocity, we want to approach towards the target but not overshoot
-            // Get the current window width in pixels from bounds
+        override fun calculateApproachOffset(velocity: Float, decayOffset: Float): Float {
+            val currentTime = System.currentTimeMillis()
+
+            // Check if this is a new fling (significant velocity change or time gap)
+            val isNewFling = kotlin.math.abs(velocity - lastVelocity) > velocityThreshold ||
+                           (currentTime - lastApproachTime) > 100L // 100ms gap
+
+            if (isNewFling) {
+                Log.i("SnapTargetFunction", "New fling detected - velocity: $velocity, lastVelocity: $lastVelocity")
+                lastVelocity = velocity
+                lastApproachTime = currentTime
+                isDrag = false // Reset drag state for new fling
+            }
+
+            Log.i(
+                "SnapTargetFunction",
+                "calculateApproachOffset called with velocity: $velocity, decayOffset: $decayOffset, isNewFling: $isNewFling"
+            )
+
+            // Phase 1: Calculate how far to approach before snapping
             val bounds = scrollState.bounds?.width()
             val windowWidthPx = bounds ?: 0f
 
-          if (velocity.absoluteValue < LOW_FLING) {
-            isDrag = true
-            return 0f
-          }
-          Log.i("SnapTargetFunction", "calculateApproachOffset called with velocity: ${scrollState.getVisibleAxisLabels()}")
+            if (velocity.absoluteValue < LOW_FLING) {
+                isDrag = true
+                return 0f
+            }
 
             // Determine how many windows to move based on velocity
             val windowsToMove = when {
-                velocity.absoluteValue >= HIGH_FLING -> 2.0 // High velocity: move 3 windows
-                velocity.absoluteValue >= MEDIUM_FLING -> 1.0 // Medium velocity: move 2 windows
-                velocity.absoluteValue >= LOW_FLING -> 0.1 // Low velocity: move 1 window
-                else -> 2.0 // No movement for very low velocity
+                velocity.absoluteValue >= HIGH_FLING -> 2.0
+                velocity.absoluteValue >= MEDIUM_FLING -> 1.0
+                velocity.absoluteValue >= LOW_FLING -> 0.1
+                else -> 0.0
             }
 
-          val effectiveWindowsToMove = if(velocity.sign > 0f) windowsToMove else windowsToMove + 1
-
-
+            val effectiveWindowsToMove = if(velocity.sign > 0f) windowsToMove else windowsToMove + 1
 
             // Calculate the approach distance based on window width in pixels and velocity direction
             val approachDistance = windowWidthPx * effectiveWindowsToMove * velocity.sign
@@ -123,15 +145,14 @@ private fun createSnapBehavior(scrollState: VicoScrollState): FlingBehavior {
             Log.i("SnapBehavior", "Approach Phase - windowWidthPx: $windowWidthPx, windowsToMove: $windowsToMove, velocity: $velocity")
             Log.i("SnapBehavior", "Approach Phase - approachDistance: $approachDistance")
 
-
             return approachDistance.toFloat()
         }
 
         override fun calculateSnapOffset(velocity: Float): Float {
             // Phase 2: Calculate the final snap offset using Scroll.Absolute.x()
             val initialRange = scrollState.currentVisibleRange?.visibleXRange?.start
-            val approachedLabel = scrollState.snapToLabelFunction?.let { it(initialRange, isDrag , velocity.sign > 0f) }
-            Log.i("SnapBehavior", "isDrag: $isDrag")
+            val approachedLabel = scrollState.snapToLabelFunction?.let { it(initialRange, isDrag, velocity.sign > 0f) }
+            Log.i("SnapBehavior", "isDrag: $isDrag, velocity: $velocity")
 
             val layerDimensions = scrollState.currentLayerDimensions
             val context = scrollState.context
@@ -150,7 +171,7 @@ private fun createSnapBehavior(scrollState: VicoScrollState): FlingBehavior {
                     // Return the difference (offset to reach target)
                     val offset = targetScrollPosition - currentScrollPosition
 
-                    Log.i("SnapBehavior", "Snap Phase - approachedLabel: $approachedLabel, targetScrollPosition: $targetScrollPosition, currentScrollPosition: $currentScrollPosition, offset: $offset")
+                    Log.i("SnapTargetFunction", "Snap Phase - approachedLabel: $approachedLabel, targetScrollPosition: $targetScrollPosition, currentScrollPosition: $currentScrollPosition, offset: $offset")
 
                     offset
                 } else {
@@ -164,11 +185,11 @@ private fun createSnapBehavior(scrollState: VicoScrollState): FlingBehavior {
     return snapFlingBehavior(
         snapLayoutInfoProvider = snapLayoutInfoProvider,
         decayAnimationSpec = exponentialDecay(
-            frictionMultiplier = 0.8f,
+            frictionMultiplier = 0.1f // Very slow, ultra-smooth deceleration
         ),
-        snapAnimationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessVeryLow,
+        snapAnimationSpec = tween(
+            durationMillis = 1200, // Much slower snap for ultra-smooth transition
+            easing = LinearOutSlowInEasing // Linear easing for consistent smoothness
         )
     )
 }
