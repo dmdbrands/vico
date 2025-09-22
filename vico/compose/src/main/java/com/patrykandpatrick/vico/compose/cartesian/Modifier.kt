@@ -129,18 +129,19 @@ private fun createSnapBehavior(scrollState: VicoScrollState): FlingBehavior {
                 return 0f
             }
 
+          val isForward = velocity.sign > 0f
+
             // Determine how many windows to move based on velocity
             val windowsToMove = when {
-                velocity.absoluteValue >= HIGH_FLING -> 2.0
-                velocity.absoluteValue >= MEDIUM_FLING -> 1.0
-                velocity.absoluteValue >= LOW_FLING -> 0.1
+                velocity.absoluteValue >= HIGH_FLING -> if (isForward) 2.0 else 3.0
+                velocity.absoluteValue >= MEDIUM_FLING -> if (isForward) 1.0 else 2.0
+                velocity.absoluteValue >= LOW_FLING -> if (isForward) 0.01 else 1.0
                 else -> 0.0
             }
 
-            val effectiveWindowsToMove = if(velocity.sign > 0f) windowsToMove else windowsToMove + 1
 
             // Calculate the approach distance based on window width in pixels and velocity direction
-            val approachDistance = windowWidthPx * effectiveWindowsToMove * velocity.sign
+            val approachDistance = windowWidthPx * windowsToMove * velocity.sign
 
             Log.i("SnapBehavior", "Approach Phase - windowWidthPx: $windowWidthPx, windowsToMove: $windowsToMove, velocity: $velocity")
             Log.i("SnapBehavior", "Approach Phase - approachDistance: $approachDistance")
