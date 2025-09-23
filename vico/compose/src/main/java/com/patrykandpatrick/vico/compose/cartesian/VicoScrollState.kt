@@ -33,6 +33,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.patrykandpatrick.vico.core.cartesian.AutoScrollCondition
 import com.patrykandpatrick.vico.core.cartesian.CartesianChart
+import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
 import com.patrykandpatrick.vico.core.cartesian.Scroll
 import com.patrykandpatrick.vico.core.cartesian.VisibleRange
@@ -58,13 +59,14 @@ public class VicoScrollState {
   private val autoScroll: Scroll
   private val autoScrollCondition: AutoScrollCondition
   private val autoScrollAnimationSpec: AnimationSpec<Float>
-  internal var snapToLabelFunction: ((Double?, Boolean, Boolean) -> Double)? = null
+  internal var snapBehaviorConfig: SnapBehaviorConfig? = null
   private val _value: MutableFloatState
   private val _maxValue = mutableFloatStateOf(0f)
   private var initialScrollHandled: Boolean
   internal var context: CartesianMeasuringContext? = null
   internal var layerDimensions: CartesianLayerDimensions? = null
   internal var bounds: RectF? = null
+  internal var drawingContext: CartesianDrawingContext? = null
   internal val scrollEnabled: Boolean
   internal val pointerXDeltas = MutableSharedFlow<Float>(extraBufferCapacity = 1)
 
@@ -160,20 +162,20 @@ public class VicoScrollState {
     autoScrollAnimationSpec: AnimationSpec<Float>,
     value: Float,
     initialScrollHandled: Boolean,
-    snapToLabelFunction: ((Double?, Boolean, Boolean) -> Double)?
+    snapBehaviorConfig: SnapBehaviorConfig?
   ) {
     this.scrollEnabled = scrollEnabled
     this.initialScroll = initialScroll
     this.autoScroll = autoScroll
     this.autoScrollCondition = autoScrollCondition
-    this.snapToLabelFunction = snapToLabelFunction
+    this.snapBehaviorConfig = snapBehaviorConfig
     this.autoScrollAnimationSpec = autoScrollAnimationSpec
     _value = mutableFloatStateOf(value)
     this.initialScrollHandled = initialScrollHandled
   }
 
   /**
-   * Houses information on a [CartesianChart]’s scroll value. Allows for scroll customization and
+   * Houses information on a [CartesianChart]'s scroll value. Allows for scroll customization and
    * programmatic scrolling.
    *
    * @param scrollEnabled whether scroll is enabled.
@@ -181,6 +183,7 @@ public class VicoScrollState {
    * @param autoScroll represents the scroll value or delta for automatic scrolling.
    * @param autoScrollCondition defines when an automatic scroll should occur.
    * @param autoScrollAnimationSpec the [AnimationSpec] for automatic scrolling.
+   * @param snapBehaviorConfig configuration for snap behavior including snap function, velocity thresholds, window movement, and animation settings.
    */
   public constructor(
     scrollEnabled: Boolean,
@@ -188,7 +191,7 @@ public class VicoScrollState {
     autoScroll: Scroll,
     autoScrollCondition: AutoScrollCondition,
     autoScrollAnimationSpec: AnimationSpec<Float>,
-    snapToLabelFunction: ((Double?, Boolean, Boolean) -> Double)?
+    snapBehaviorConfig: SnapBehaviorConfig?
   ) : this(
     scrollEnabled = scrollEnabled,
     initialScroll = initialScroll,
@@ -197,7 +200,7 @@ public class VicoScrollState {
     autoScrollAnimationSpec = autoScrollAnimationSpec,
     value = 0f,
     initialScrollHandled = false,
-    snapToLabelFunction = snapToLabelFunction
+    snapBehaviorConfig = snapBehaviorConfig
   )
 
   private inline fun withUpdated(
@@ -242,6 +245,10 @@ public class VicoScrollState {
     }
   }
 
+  internal fun updateDrawingContext(drawingContext: CartesianDrawingContext) {
+    this.drawingContext = drawingContext
+  }
+
   internal suspend fun autoScroll(model: CartesianChartModel, oldModel: CartesianChartModel?) {
     if (!autoScrollCondition.shouldScroll(oldModel, model)) return
     if (scrollableState.isScrollInProgress)
@@ -253,6 +260,7 @@ public class VicoScrollState {
     context = null
     layerDimensions = null
     bounds = null
+    drawingContext = null
   }
 
   /** Triggers a scroll. */
@@ -274,21 +282,19 @@ public class VicoScrollState {
 
   /**
    * Returns a list of x-axis label values that are currently visible in the chart.
-   * This is a convenience method that uses the scroll state's current context.
+   * This is a convenience method that uses the scroll state's current drawing context.
    *
-   * @param stepMultiplier optional multiplier for the step size (defaults to 1.0)
-   * @return List of Double values representing the x-coordinates of visible axis labels, or empty list if context is not available
+   * @param itemPlacer optional ItemPlacer used by the HorizontalAxis for accurate label calculation
+   * @param maxLabelWidth the maximum label width for calculations (used with ItemPlacer)
+   * @param stepMultiplier optional multiplier for the step size when ItemPlacer is not provided (defaults to 1.0)
+   * @return List of Double values representing the x-coordinates of visible axis labels, or empty list if drawing context is not available
    */
-  public fun getVisibleAxisLabels(stepMultiplier: Double = 1.0): List<Double> {
-    val context = this.context
-    val layerDimensions = this.layerDimensions
-    val bounds = this.bounds
-
-    return if (context != null && layerDimensions != null && bounds != null) {
-      context.getVisibleAxisLabels(bounds, layerDimensions, value, stepMultiplier)
-    } else {
-      emptyList()
-    }
+  public fun getVisibleAxisLabels(
+    itemPlacer: com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis.ItemPlacer? = null,
+    maxLabelWidth: Float = 0f,
+    stepMultiplier: Double = 1.0
+  ): List<Double> {
+    return drawingContext?.getVisibleAxisLabels(itemPlacer, maxLabelWidth, stepMultiplier) ?: emptyList()
   }
 
 
@@ -299,7 +305,7 @@ public class VicoScrollState {
       autoScroll: Scroll,
       autoScrollCondition: AutoScrollCondition,
       autoScrollAnimationSpec: AnimationSpec<Float>,
-      snapToLabelFunction: ((Double?, Boolean, Boolean) -> Double)? = null
+      snapBehaviorConfig: SnapBehaviorConfig? = null
     ) =
       Saver<VicoScrollState, Pair<Float, Boolean>>(
         save = { it.value to it.initialScrollHandled },
@@ -312,7 +318,7 @@ public class VicoScrollState {
             autoScrollAnimationSpec,
             value,
             initialScrollHandled,
-            snapToLabelFunction
+            snapBehaviorConfig
           )
         },
       )
@@ -327,7 +333,7 @@ public fun rememberVicoScrollState(
   autoScroll: Scroll = initialScroll,
   autoScrollCondition: AutoScrollCondition = AutoScrollCondition.Never,
   autoScrollAnimationSpec: AnimationSpec<Float> = spring(),
-  snapToLabelFunction: ((Double?, Boolean , Boolean) -> Double)? = null,
+  snapBehaviorConfig: SnapBehaviorConfig? = null,
   key: Any? = null, // Add key parameter to force recreation
 ): VicoScrollState =
   rememberSaveable(
@@ -337,16 +343,16 @@ public fun rememberVicoScrollState(
     autoScroll,
     autoScrollCondition,
     autoScrollAnimationSpec,
-    snapToLabelFunction,
+    snapBehaviorConfig,
     saver =
-      remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec , snapToLabelFunction , key) {
+      remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec , snapBehaviorConfig , key) {
         VicoScrollState.Saver(
           scrollEnabled,
           initialScroll,
           autoScroll,
           autoScrollCondition,
           autoScrollAnimationSpec,
-          snapToLabelFunction
+          snapBehaviorConfig
         )
       },
   ) {
@@ -356,6 +362,6 @@ public fun rememberVicoScrollState(
       autoScroll,
       autoScrollCondition,
       autoScrollAnimationSpec,
-      snapToLabelFunction = snapToLabelFunction
+      snapBehaviorConfig = snapBehaviorConfig
     )
   }

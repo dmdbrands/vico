@@ -64,39 +64,7 @@ public fun CartesianMeasuringContext.getVisibleXRange(
   return start..end
 }
 
-/**
- * Returns a list of x-axis label values that are currently visible in the chart.
- * This function calculates which axis labels would be displayed based on the current
- * visible range and chart dimensions.
- *
- * @param bounds the chart bounds
- * @param layerDimensions the layer dimensions
- * @param scroll the current scroll value
- * @param stepMultiplier optional multiplier for the step size (defaults to 1.0)
- * @return List of Double values representing the x-coordinates of visible axis labels
- */
-public fun CartesianMeasuringContext.getVisibleAxisLabels(
-  bounds: android.graphics.RectF,
-  layerDimensions: CartesianLayerDimensions,
-  scroll: Float,
-  stepMultiplier: Double = 1.0,
-): List<Double> {
-  val fullXRange = getFullXRange(layerDimensions)
-  val visibleXRange = getVisibleXRange(bounds, layerDimensions, scroll)
-  val step = ranges.xStep * stepMultiplier
 
-  // Generate all possible label values for the full range
-  val allLabels = mutableListOf<Double>()
-  var currentValue = ranges.minX
-
-  while (currentValue <= ranges.maxX) {
-    allLabels.add(currentValue)
-    currentValue += step
-  }
-
-  // Return the sublist that falls within the visible range
-  return allLabels.filter { it >= visibleXRange.start && it <= visibleXRange.endInclusive }
-}
 
 /**
  * Interpolates the Y value for a given X coordinate from a series of data points.

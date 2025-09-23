@@ -264,16 +264,18 @@ private constructor(
     layerDimensions: MutableCartesianLayerDimensions
   ): Float {
     with(context) {
-      val availableWidth = canvasBounds.width() - layerDimensions.startPadding - layerDimensions.endPadding
+      // Use layerBounds which has the correct value and is now available
+      val availableWidth = layerBounds.width() + (layerDimensions.unscalablePadding * 0.25f)
       val currentSpacing = layerDimensions.xSpacing
 
       if (currentSpacing <= 0f || availableWidth <= 0f) return 1f
 
       // Calculate desired spacing based on visible labels count
-      val desiredSpacing = availableWidth / visibleLabelsCount
+      // We need spacing for (visibleLabelsCount - 1) intervals between the labels
+      val desiredSpacing = availableWidth / (visibleLabelsCount )
 
       // Return the scale factor needed to achieve desired spacing
-      return (desiredSpacing / currentSpacing).coerceIn(0.1f, 5.0f) // Reasonable limits
+      return (desiredSpacing / currentSpacing) // Reasonable limits
     }
   }
 
@@ -298,13 +300,7 @@ private constructor(
         }
       )
 
-      // Apply spacing adjustment for visible labels if specified
-      if (visibleLabelsCount > 0) {
-        val scaleFactor = calculateLabelSpacingScale(context, layerDimensions)
-        if (scaleFactor != 1f) {
-          layerDimensions.scale(scaleFactor)
-        }
-      }
+      // Note: Spacing adjustment will be applied after layerBounds is set
 
       startAxis?.updateLayerDimensions(context, layerDimensions)
       topAxis?.updateLayerDimensions(context, layerDimensions)
@@ -330,6 +326,15 @@ private constructor(
         canvasBounds.right - layerMargins.getRight(isLtr),
         canvasBounds.bottom - layerMargins.bottom - legendHeight,
       )
+
+      // Apply spacing adjustment for visible labels if specified (after layerBounds is set)
+      if (visibleLabelsCount > 0) {
+        val scaleFactor = calculateLabelSpacingScale(context, layerDimensions)
+        if (scaleFactor != 1f) {
+          layerDimensions.scale(scaleFactor)
+        }
+      }
+
       axisManager.setAxesBounds(context, canvasBounds, layerBounds, layerMargins)
       legend?.setBounds(
         left = canvasBounds.left,

@@ -27,6 +27,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.scrollable
@@ -55,16 +56,12 @@ import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
 import kotlin.math.sign
 
+
 private const val BASE_SCROLL_ZOOM_DELTA = 0.05f
 
 // Interaction delay constants
 private const val MARKER_DELAY_MS = 200L // 200ms delay for marker selection/scrubbing
 private const val MOVEMENT_THRESHOLD = 10f // Minimum movement to consider as drag
-
-// Velocity thresholds for snap behavior (px/s)
-private const val LOW_FLING = 1500f
-private const val MEDIUM_FLING = 12000f
-private const val HIGH_FLING = 22000f
 
 private enum class InteractionMode {
     NONE,
@@ -81,32 +78,33 @@ private fun Offset.toPoint() = Point(x, y)
  *
  * @param currentXLabel The current X label value (center of visible range)
  * @param isDrag Whether this is a drag (low velocity) or fling (high velocity) operation
- * @param availableLabels List of available X labels from getVisibleAxisLabels()
+ * @param isForward Whether the scroll direction is forward (positive velocity)
  * @return The snapped X label value
  */
-public typealias SnapToLabelFunction = (Double, Boolean, List<Double>) -> Double
+public typealias SnapToLabelFunction = (Double?, Boolean, Boolean) -> Double
 
 /**
  * Creates a snap behavior that uses the snap function from VicoScrollState.
  * Based on Compose's SnapFlingBehavior implementation with two-phase animation.
  *
  * @param scrollState The VicoScrollState instance
+ * @param config The snap behavior configuration (uses defaults if null)
  * @return FlingBehavior with label-based snapping
  */
-private fun createSnapBehavior(scrollState: VicoScrollState): FlingBehavior {
+private fun createSnapBehavior(scrollState: VicoScrollState, config: SnapBehaviorConfig? = null): FlingBehavior {
+    val snapConfig = config ?: SnapBehaviorConfig()
 
     val snapLayoutInfoProvider = object : SnapLayoutInfoProvider {
         private var isDrag = false
         private var lastVelocity = 0f
         private var lastApproachTime = 0L
-        private val velocityThreshold = 1000f // Minimum velocity change to consider new fling
 
         override fun calculateApproachOffset(velocity: Float, decayOffset: Float): Float {
             val currentTime = System.currentTimeMillis()
 
             // Check if this is a new fling (significant velocity change or time gap)
-            val isNewFling = kotlin.math.abs(velocity - lastVelocity) > velocityThreshold ||
-                           (currentTime - lastApproachTime) > 100L // 100ms gap
+            val isNewFling = kotlin.math.abs(velocity - lastVelocity) > snapConfig.velocityThresholds.velocityChangeThreshold ||
+                           (currentTime - lastApproachTime) > snapConfig.velocityThresholds.timeGapThreshold
 
             if (isNewFling) {
                 Log.i("SnapTargetFunction", "New fling detected - velocity: $velocity, lastVelocity: $lastVelocity")
@@ -124,21 +122,18 @@ private fun createSnapBehavior(scrollState: VicoScrollState): FlingBehavior {
             val bounds = scrollState.bounds?.width()
             val windowWidthPx = bounds ?: 0f
 
-            if (velocity.absoluteValue < LOW_FLING) {
+            if (velocity.absoluteValue < snapConfig.velocityThresholds.lowFling) {
                 isDrag = true
                 return 0f
             }
 
-          val isForward = velocity.sign > 0f
-
-            // Determine how many windows to move based on velocity
+            // Determine how many windows to move based on velocity using config values
             val windowsToMove = when {
-                velocity.absoluteValue >= HIGH_FLING -> if (isForward) 2.0 else 3.0
-                velocity.absoluteValue >= MEDIUM_FLING -> if (isForward) 1.0 else 2.0
-                velocity.absoluteValue >= LOW_FLING -> if (isForward) 0.01 else 1.0
-                else -> 0.0
+                velocity.absoluteValue >= snapConfig.velocityThresholds.highFling -> snapConfig.windowMovement.highFlingWindows
+                velocity.absoluteValue >= snapConfig.velocityThresholds.mediumFling -> snapConfig.windowMovement.mediumFlingWindows
+                velocity.absoluteValue >= snapConfig.velocityThresholds.lowFling -> snapConfig.windowMovement.lowFlingWindows
+                else -> snapConfig.windowMovement.dragWindows
             }
-
 
             // Calculate the approach distance based on window width in pixels and velocity direction
             val approachDistance = windowWidthPx * windowsToMove * velocity.sign
@@ -152,7 +147,7 @@ private fun createSnapBehavior(scrollState: VicoScrollState): FlingBehavior {
         override fun calculateSnapOffset(velocity: Float): Float {
             // Phase 2: Calculate the final snap offset using Scroll.Absolute.x()
             val initialRange = scrollState.currentVisibleRange?.visibleXRange?.start
-            val approachedLabel = scrollState.snapToLabelFunction?.let { it(initialRange, isDrag, velocity.sign > 0f) }
+            val approachedLabel = snapConfig.snapToLabelFunction?.let { it(initialRange, isDrag, velocity.sign > 0f) }
             Log.i("SnapBehavior", "isDrag: $isDrag, velocity: $velocity")
 
             val layerDimensions = scrollState.currentLayerDimensions
@@ -186,11 +181,11 @@ private fun createSnapBehavior(scrollState: VicoScrollState): FlingBehavior {
     return snapFlingBehavior(
         snapLayoutInfoProvider = snapLayoutInfoProvider,
         decayAnimationSpec = exponentialDecay(
-            frictionMultiplier = 0.1f // Very slow, ultra-smooth deceleration
+            frictionMultiplier = snapConfig.animation.decayFrictionMultiplier
         ),
         snapAnimationSpec = tween(
-            durationMillis = 1200, // Much slower snap for ultra-smooth transition
-            easing = LinearOutSlowInEasing // Linear easing for consistent smoothness
+            durationMillis = snapConfig.animation.snapDurationMillis,
+            easing = snapConfig.animation.snapEasing
         )
     )
 }
@@ -212,7 +207,7 @@ internal fun Modifier.pointerInput(
   scrollable(
       state = scrollState.scrollableState,
       orientation = Orientation.Horizontal,
-      flingBehavior = createSnapBehavior(scrollState),
+      flingBehavior = createSnapBehavior(scrollState, scrollState.snapBehaviorConfig),
       enabled = scrollState.scrollEnabled && !isPointerSelectionInProgress,
       reverseDirection = true,
     )

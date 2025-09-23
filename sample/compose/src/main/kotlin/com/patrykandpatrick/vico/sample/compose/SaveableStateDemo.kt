@@ -69,6 +69,7 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.rememberSaveableCartesianChartModelProducer
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
+import com.patrykandpatrick.vico.compose.cartesian.SnapBehaviorConfig
 import com.patrykandpatrick.vico.core.cartesian.InterpolationType
 import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
@@ -88,6 +89,7 @@ import com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianRangeValues
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
+import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerPadding
 import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.marker.CartesianMarker
 import com.patrykandpatrick.vico.core.cartesian.marker.DefaultCartesianMarker
@@ -158,25 +160,27 @@ fun SaveableStateDemo(
   val initialScroll = remember { Scroll.Absolute.xStable(4.0) }
   val scrollState = rememberVicoScrollState(
     initialScroll = initialScroll,
-    snapToLabelFunction = { currentXLabel, isDrag , isForward->
-      // Return the previous 6 multiples based on current X label
-      if (currentXLabel == null) return@rememberVicoScrollState 0.0
+    snapBehaviorConfig = SnapBehaviorConfig(
+      snapToLabelFunction = { currentXLabel, isDrag , isForward->
+        // Return the previous 6 multiples based on current X label
+        if (currentXLabel == null) return@SnapBehaviorConfig 0.0
 
-      // Round down to the nearest multiple of 6
-      return@rememberVicoScrollState if (!isDrag) {
+        // Round down to the nearest multiple of 6
+        return@SnapBehaviorConfig if (!isDrag) {
 
-        val requiredMultiple = if (isForward) ceil(currentXLabel / 6.0) * 6.0 else floor(currentXLabel / 6.0) * 6.0
+          val requiredMultiple = if (isForward) ceil(currentXLabel / 6.0) * 6.0 else floor(currentXLabel / 6.0) * 6.0
 
-        Log.i(
-          "SnapFunction",
-          "Current X Label: $currentXLabel, Next 6 multiples: $requiredMultiple"
-        )
+          Log.i(
+            "SnapFunction",
+            "Current X Label: $currentXLabel, Next 6 multiples: $requiredMultiple"
+          )
 
-        requiredMultiple
-      } else {
-        currentXLabel.roundToInt().toDouble()
+          requiredMultiple
+        } else {
+          currentXLabel.roundToInt().toDouble()
+        }
       }
-    }
+    )
   )
 
   val zoomState = rememberVicoZoomState(
@@ -308,6 +312,8 @@ fun SaveableStateDemo(
       )
     )
 
+    val horizontalItemPlacer = horizontalItemPlacer{_ , _ ->}
+
 
 val marker = rememberDefaultCartesianMarker(
   label = rememberTextComponent(),
@@ -333,6 +339,7 @@ val marker = rememberDefaultCartesianMarker(
 )
     CartesianChartHost(
       chart = rememberCartesianChart(
+
         primaryLayer,
         endAxis = VerticalAxis.rememberEnd(
           label = rememberTextComponent(
@@ -359,9 +366,14 @@ val marker = rememberDefaultCartesianMarker(
             markerIndex = null
           } else {
             val targetMarkerIndex =
-              getTargetPoints(scrollState.getVisibleAxisLabels(), targets, click)
+              getTargetPoints(scrollState.getVisibleAxisLabels(itemPlacer = horizontalItemPlacer), targets, click)
             markerIndex = targetMarkerIndex.first()
           }
+        },
+        layerPadding = {
+          CartesianLayerPadding(
+            unscalableStartDp = 0f
+          )
         },
         persistentMarkers = remember(markerIndex) {
           {

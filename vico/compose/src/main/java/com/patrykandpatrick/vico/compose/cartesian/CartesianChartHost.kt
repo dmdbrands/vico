@@ -275,6 +275,9 @@ internal fun CartesianChartHostImpl(
         zoomState.value,
       )
 
+    // Update the scroll state with the drawing context for getVisibleAxisLabels
+    scrollState.updateDrawingContext(drawingContext)
+
     chart.draw(drawingContext)
     measuringContext.reset()
   }

@@ -82,6 +82,43 @@ internal fun CartesianDrawingContext.getExactXValue(clickXPosition: Double): Dou
   }
 }
 
+/**
+ * Returns a list of x-axis label values that are currently visible in the chart.
+ * This function can use either the provided ItemPlacer (for accurate results) or fall back to
+ * simple step-based calculation.
+ *
+ * @param itemPlacer optional ItemPlacer used by the HorizontalAxis for accurate label calculation
+ * @param maxLabelWidth the maximum label width for calculations (used with ItemPlacer)
+ * @param stepMultiplier optional multiplier for the step size when ItemPlacer is not provided
+ * @return List of Double values representing the x-coordinates of visible axis labels
+ */
+public fun CartesianDrawingContext.getVisibleAxisLabels(
+  itemPlacer: com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis.ItemPlacer? = null,
+  maxLabelWidth: Float = 0f,
+  stepMultiplier: Double = 1.0,
+): List<Double> {
+  val fullXRange = getFullXRange(layerDimensions)
+  val visibleXRange = getVisibleXRange()
+
+  return if (itemPlacer != null) {
+    // Use ItemPlacer for accurate label calculation
+    itemPlacer.getLabelValues(this, visibleXRange, fullXRange, maxLabelWidth)
+  } else {
+    // Fall back to simple step-based calculation
+    val step = ranges.xStep * stepMultiplier
+    val allLabels = mutableListOf<Double>()
+    var currentValue = ranges.minX
+
+    while (currentValue <= ranges.maxX) {
+      allLabels.add(currentValue)
+      currentValue += step
+    }
+
+    // Return the sublist that falls within the visible range
+    allLabels.filter { it >= visibleXRange.start && it <= visibleXRange.endInclusive }
+  }
+}
+
 /** @suppress */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 public fun CartesianDrawingContext(
