@@ -32,9 +32,6 @@ public interface CartesianDrawingContext : DrawingContext, CartesianMeasuringCon
   /** Stores shared [CartesianLayer] dimensions. */
   public val layerDimensions: CartesianLayerDimensions
 
-  /** The scroll value (in pixels). */
-  public val scroll: Float
-
   /** The zoom factor. */
   public val zoom: Float
 }

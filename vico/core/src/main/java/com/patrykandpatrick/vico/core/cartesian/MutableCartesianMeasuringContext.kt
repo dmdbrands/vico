@@ -40,7 +40,8 @@ public class MutableCartesianMeasuringContext(
   override var zoomEnabled: Boolean,
   override var layerPadding: CartesianLayerPadding,
   override var pointerPosition: Point?,
+  override val scroll: Float,
   cacheStore: CacheStore = CacheStore(),
 ) :
-  MutableMeasuringContext(canvasBounds, density, extraStore, isLtr, spToPx, cacheStore),
+  MutableMeasuringContext(canvasBounds, density, extraStore, isLtr, spToPx , cacheStore),
   CartesianMeasuringContext

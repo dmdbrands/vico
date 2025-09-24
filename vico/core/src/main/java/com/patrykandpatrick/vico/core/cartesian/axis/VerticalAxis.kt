@@ -17,6 +17,7 @@
 package com.patrykandpatrick.vico.core.cartesian.axis
 
 import android.opengl.ETC1.getWidth
+import android.util.Log
 import androidx.annotation.RestrictTo
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
@@ -99,6 +100,7 @@ protected constructor(
       }
 
   protected var maxLabelWidth: Float? = null
+  private var maxScroll : Float = 0f
 
   /** @suppress */
   @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -194,13 +196,17 @@ protected constructor(
         )
       }
 
+      this@VerticalAxis.maxScroll = context.getMaxScrollDistance()
       val effectiveScroll = if (size is Size.Scroll) {
         if (position.isLeft(this))
          - scroll
         else
-          context.getMaxScrollDistance() - scroll
+          maxScroll - scroll
       } else
        0f
+
+
+
 
       line?.drawVertical(
         context = context,
@@ -494,9 +500,11 @@ protected constructor(
     model: CartesianChartModel,
   ) {
     val width = getWidth(context, layerHeight)
+    val effectiveScroll = if (size is Size.Scroll && size.isLabelScrollable){
+      if (position == Axis.Position.Vertical.Start) context.scroll else this.maxScroll - context.scroll } else 0f
     when (position) {
-      Axis.Position.Vertical.Start -> horizontalLayerMargins.ensureValuesAtLeast(start = width)
-      Axis.Position.Vertical.End -> horizontalLayerMargins.ensureValuesAtLeast(end = width)
+      Axis.Position.Vertical.Start -> horizontalLayerMargins.ensureValuesAtLeast(start = width - effectiveScroll)
+      Axis.Position.Vertical.End -> horizontalLayerMargins.ensureValuesAtLeast(end = width - effectiveScroll)
     }
   }
 

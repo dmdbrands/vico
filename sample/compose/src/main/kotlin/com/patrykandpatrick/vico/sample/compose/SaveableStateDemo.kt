@@ -224,7 +224,6 @@ fun SaveableStateDemo(
   var clickResult by remember { mutableStateOf("Click on chart to see results") }
 
   Column(
-    modifier = modifier.padding(16.dp),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
     Text(
@@ -350,7 +349,7 @@ val marker = rememberDefaultCartesianMarker(
           tick = null
         ),
         endAxis = VerticalAxis.rememberEnd(
-          size = BaseAxis.Size.scroll(40.dp , true),
+          size = BaseAxis.Size.scroll(40.dp , false),
           markerDecoration = markerDecoration,
           tickLength = 0.dp,
           tick = null

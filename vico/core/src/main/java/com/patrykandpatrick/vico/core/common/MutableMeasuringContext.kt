@@ -18,6 +18,7 @@ package com.patrykandpatrick.vico.core.common
 
 import android.graphics.RectF
 import androidx.annotation.RestrictTo
+import com.patrykandpatrick.vico.core.cartesian.axis.BaseAxis
 import com.patrykandpatrick.vico.core.common.data.CacheStore
 import com.patrykandpatrick.vico.core.common.data.ExtraStore
 

@@ -38,6 +38,8 @@ public interface CartesianMeasuringContext : MeasuringContext {
   /** Whether zoom is enabled. */
   public val zoomEnabled: Boolean
 
+  public val scroll : Float
+
   /** Stores the [CartesianLayer] padding values. */
   public val layerPadding: CartesianLayerPadding
 
