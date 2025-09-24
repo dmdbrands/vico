@@ -16,6 +16,7 @@
 
 package com.patrykandpatrick.vico.core.cartesian.axis
 
+import android.opengl.ETC1.getWidth
 import androidx.annotation.RestrictTo
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
@@ -24,6 +25,7 @@ import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis.HorizontalLabe
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModel
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.formatForAxis
+import com.patrykandpatrick.vico.core.cartesian.getMaxScrollDistance
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerMargins
@@ -133,6 +135,7 @@ protected constructor(
 
   override fun drawUnderLayers(context: CartesianDrawingContext) {
     with(context) {
+      val saveCount = canvas.save()
       var centerY: Float
       val yRange = ranges.getYRange(position)
       val maxLabelHeight = getMaxLabelHeight()
@@ -145,34 +148,67 @@ protected constructor(
           bounds.bottom - bounds.height() * ((lineValue - yRange.minY) / yRange.length).toFloat() +
             getLineCanvasYCorrection(guidelineThickness, lineValue)
 
-        guideline
-          ?.takeIf {
-            isNotInRestrictedBounds(
+        if (size !is Size.Scroll) {
+          // Enhanced clipping behavior for Scroll size type
+          guideline
+            ?.takeIf {
+              isNotInRestrictedBounds(
+                left = layerBounds.left,
+                top = centerY - guidelineThickness.half,
+                right = layerBounds.right,
+                bottom = centerY + guidelineThickness.half,
+              )
+            }
+            ?.drawHorizontal(
+              context = context,
               left = layerBounds.left,
-              top = centerY - guidelineThickness.half,
               right = layerBounds.right,
-              bottom = centerY + guidelineThickness.half,
+              y = centerY,
             )
-          }
-          ?.drawHorizontal(
+        } else {
+          // Normal behavior for other size types
+          guideline?.drawHorizontal(
             context = context,
             left = layerBounds.left,
             right = layerBounds.right,
             y = centerY,
           )
+        }
       }
+
+
+
       val lineExtensionLength = if (itemPlacer.getShiftTopLines(this)) tickThickness else 0f
+      val lineX = if (position.isLeft(this)) {
+        bounds.right - lineThickness.half
+      } else {
+        bounds.left - lineThickness.half
+      }
+      if (size is Size.Scroll) {
+        // Enhanced clipping for axis line
+        canvas.clipRect(
+          layerBounds.left - lineThickness,
+          bounds.top,
+          layerBounds.right + lineThickness,
+          bounds.bottom,
+        )
+      }
+
+      val effectiveScroll = if (size is Size.Scroll) {
+        if (position.isLeft(this))
+         - scroll
+        else
+          context.getMaxScrollDistance() - scroll
+      } else
+       0f
+
       line?.drawVertical(
         context = context,
-        x =
-          if (position.isLeft(this)) {
-            bounds.right - lineThickness.half
-          } else {
-            bounds.left + lineThickness.half
-          },
+        x = lineX + effectiveScroll,
         top = bounds.top - lineExtensionLength,
         bottom = bounds.bottom + lineExtensionLength,
       )
+      canvas.restoreToCount(saveCount)
     }
   }
 
@@ -190,6 +226,7 @@ protected constructor(
         is Size.Auto -> bounds.width()
         is Size.Fraction -> canvasBounds.width() * size.fraction
         is Size.Text -> bounds.width()
+        is Size.Scroll -> size.valueDp.pixels
       }
       // Calculate dynamic offset based on tick length and line thickness
       val offset = (tickLength + lineThickness).half
@@ -289,6 +326,7 @@ protected constructor(
             is Size.Auto -> bounds.width()
             is Size.Fraction -> canvasBounds.width() * size.fraction
             is Size.Text -> bounds.width()
+            is Size.Scroll -> size.valueDp.pixels
           }
           // Calculate dynamic offset based on tick length and line thickness
           val offset = (tickLength + lineThickness).half
@@ -329,6 +367,7 @@ protected constructor(
             is Size.Auto -> bounds.width()
             is Size.Fraction -> canvasBounds.width() * size.fraction
             is Size.Text -> bounds.width()
+            is Size.Scroll -> size.valueDp.pixels
           }
           // Calculate dynamic offset based on tick length and line thickness
           val offset = (tickLength + lineThickness).half
@@ -519,6 +558,7 @@ protected constructor(
           label
             ?.getWidth(context = this, text = size.text, rotationDegrees = labelRotationDegrees)
             .orZero + tickLength + lineThickness.half
+        is Size.Scroll -> size.valueDp.pixels
       }
     }
 

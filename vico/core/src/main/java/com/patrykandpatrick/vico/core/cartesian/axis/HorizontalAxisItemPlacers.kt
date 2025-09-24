@@ -44,7 +44,7 @@ private fun CartesianDrawingContext.getLabelValues(
   spacing: Int = 1,
 ): List<Double> {
   val remainder = ((visibleXRange.start - ranges.minX) / ranges.xStep - offset) % spacing
-  val firstValue = visibleXRange.start + (spacing - remainder) % spacing * ranges.xStep
+  val firstValue = visibleXRange.start  - remainder
   val minXOffset = ranges.minX % ranges.xStep
   val values = mutableListOf<Double>()
   var multiplier = -LABEL_OVERFLOW_SIZE
@@ -53,8 +53,8 @@ private fun CartesianDrawingContext.getLabelValues(
     var potentialValue = firstValue + multiplier++ * spacing * ranges.xStep
     potentialValue =
       ranges.xStep * ((potentialValue - minXOffset) / ranges.xStep).roundedToNearest + minXOffset
-    if (potentialValue < ranges.minX || potentialValue == fullXRange.start) continue
-    if (potentialValue > ranges.maxX || potentialValue == fullXRange.endInclusive) break
+    if (potentialValue < ranges.minX) continue
+    if (potentialValue > ranges.maxX) break
     values += potentialValue
     if (
       potentialValue > visibleXRange.endInclusive && hasEndOverflow.also { hasEndOverflow = true }

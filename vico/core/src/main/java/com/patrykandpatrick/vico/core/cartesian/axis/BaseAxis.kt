@@ -179,6 +179,23 @@ public abstract class BaseAxis<P : Axis.Position>(
       override fun hashCode(): Int = text.hashCode()
     }
 
+    /**
+     * The axis will use the given size (in dp) and enable scroll-based clipping behavior.
+     * This size type enables enhanced clipping for guidelines and axis lines when scrolling.
+     *
+     * @property valueDp the size (in dp).
+     * @property isLabelScrollable if true, applies scroll offset to labels and marker components; if false, normal behavior.
+     */
+    public class Scroll(
+      public val valueDp: Float,
+      public val isLabelScrollable: Boolean = false,
+    ) : Size() {
+      override fun equals(other: Any?): Boolean =
+        this === other || other is Scroll && valueDp == other.valueDp && isLabelScrollable == other.isLabelScrollable
+
+      override fun hashCode(): Int = 31 * valueDp.hashCode() + isLabelScrollable.hashCode()
+    }
+
     /** Provides access to [BaseAxis.Size] factory functions. */
     public companion object
   }

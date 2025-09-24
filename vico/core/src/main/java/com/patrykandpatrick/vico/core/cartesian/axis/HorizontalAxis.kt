@@ -176,10 +176,6 @@ protected constructor(
             ((x - ranges.minX) / ranges.xStep).toFloat() *
               layerDimensions.xSpacing *
               layoutDirectionMultiplier
-        val previousX = labelValues.getOrNull(index - 1) ?: (fullXRange.start.doubled - x)
-        val nextX = labelValues.getOrNull(index + 1) ?: (fullXRange.endInclusive.doubled - x)
-        val maxWidth =
-          ceil(min(x - previousX, nextX - x) / ranges.xStep * layerDimensions.xSpacing).toInt()
 
         label?.draw(
           context = this,
@@ -189,7 +185,6 @@ protected constructor(
           y = getLabelY(),
           horizontalPosition = textHorizontalPosition,
           verticalPosition = position.textVerticalPosition,
-          maxWidth = maxWidth,
           maxHeight = (bounds.height() - tickLength - lineThickness.half).toInt(),
           rotationDegrees = labelRotationDegrees,
         )
@@ -373,7 +368,6 @@ protected constructor(
         unscalableStartPadding -=
           (firstLabelValue - ranges.minX).toFloat() * layerDimensions.xSpacing
       }
-      layerDimensions.ensureValuesAtLeast(unscalableStartPadding = unscalableStartPadding )
     }
     if (lastLabelValue != null) {
       val text =
@@ -391,11 +385,7 @@ protected constructor(
             pad = true,
           )
           .half
-      if (!context.zoomEnabled) {
-        unscalableEndPadding -=
-          ((ranges.maxX - lastLabelValue) * layerDimensions.xSpacing).toFloat()
-      }
-      layerDimensions.ensureValuesAtLeast(unscalableEndPadding = unscalableEndPadding)
+
     }
   }
 
@@ -462,6 +452,7 @@ protected constructor(
             .coerceIn(size.minDp.pixels, size.maxDp.pixels)
         }
         is Size.Fixed -> size.valueDp.pixels
+        is Size.Scroll -> size.valueDp.pixels
         is Size.Fraction -> canvasBounds.height() * size.fraction
         is Size.Text ->
           label

@@ -70,6 +70,7 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberSaveableCartesianChar
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
 import com.patrykandpatrick.vico.compose.cartesian.SnapBehaviorConfig
+import com.patrykandpatrick.vico.compose.cartesian.axis.scroll
 import com.patrykandpatrick.vico.core.cartesian.InterpolationType
 import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
@@ -157,7 +158,7 @@ fun SaveableStateDemo(
 
   // Also use saveable scroll and zoom states to preserve chart position
   // Use xStable to prevent scroll state recreation when ranges change
-  val initialScroll = remember { Scroll.Absolute.xStable(4.0) }
+  val initialScroll = remember { Scroll.Absolute.xStable(70.0) }
   val scrollState = rememberVicoScrollState(
     initialScroll = initialScroll,
     snapBehaviorConfig = SnapBehaviorConfig(
@@ -208,7 +209,7 @@ fun SaveableStateDemo(
             y = yData,
             ranges = CartesianRangeValues(
               minX = 0.0,
-              maxX = 80.0,
+              maxX = 80.9,
               minY = minY?.toDouble() ?: 0.0,
               maxY = maxY?.toDouble() ?: 15.0
             )
@@ -341,12 +342,15 @@ val marker = rememberDefaultCartesianMarker(
       chart = rememberCartesianChart(
 
         primaryLayer,
+        startAxis = VerticalAxis.rememberStart(
+          guideline = null,
+          label = null,
+          size = BaseAxis.Size.scroll(20.dp , true),
+          tickLength = 0.dp,
+          tick = null
+        ),
         endAxis = VerticalAxis.rememberEnd(
-          label = rememberTextComponent(
-            textSize = 14.sp,
-            textAlignment = Layout.Alignment.ALIGN_CENTER,
-          ),
-          size = BaseAxis.Size.fixed(40.dp),
+          size = BaseAxis.Size.scroll(40.dp , true),
           markerDecoration = markerDecoration,
           tickLength = 0.dp,
           tick = null

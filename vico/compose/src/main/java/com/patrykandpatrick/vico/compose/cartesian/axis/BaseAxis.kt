@@ -30,6 +30,9 @@ public fun BaseAxis.Size.Companion.auto(
 public fun BaseAxis.Size.Companion.fixed(value: Dp): BaseAxis.Size.Fixed =
   BaseAxis.Size.Fixed(value.value)
 
+public fun BaseAxis.Size.Companion.scroll(value: Dp , isLabelsScrollable : Boolean = false) : BaseAxis.Size.Scroll =
+  BaseAxis.Size.Scroll(value.value , isLabelsScrollable)
+
 /** Creates a [BaseAxis.Size.Fraction] instance. */
 public fun BaseAxis.Size.Companion.fraction(fraction: Float): BaseAxis.Size.Fraction =
   BaseAxis.Size.Fraction(fraction)
