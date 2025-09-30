@@ -78,7 +78,7 @@ private constructor(
   protected val decorations: List<Decoration> = emptyList(),
   protected val persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
   protected val getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
-  public val visibleLabelsCount: Int = 0,
+  public val visibleLabelsCount: Double = 0.0,
   /** @suppress */
   @get:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP) public val id: UUID,
   private var previousMarkerTargetHashCode: Int?,
@@ -227,7 +227,7 @@ private constructor(
     decorations: List<Decoration> = emptyList(),
     persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
     getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
-    visibleLabelsCount: Int = 0,
+    visibleLabelsCount: Double = 0.0,
     onChartClick: ((List<Double>, Double?) -> Unit)? = null,
   ) : this(
     layers = layers,
@@ -265,7 +265,7 @@ private constructor(
   ): Float {
     with(context) {
       // Use layerBounds which has the correct value and is now available
-      val availableWidth = layerBounds.width() + (layerDimensions.unscalablePadding * 0.25f)
+      val availableWidth = layerBounds.width() + layerDimensions.unscalablePadding
       val currentSpacing = layerDimensions.xSpacing
 
       if (currentSpacing <= 0f || availableWidth <= 0f) return 1f
@@ -275,7 +275,7 @@ private constructor(
       val desiredSpacing = availableWidth / (visibleLabelsCount )
 
       // Return the scale factor needed to achieve desired spacing
-      return (desiredSpacing / currentSpacing) // Reasonable limits
+      return (desiredSpacing / currentSpacing).toFloat() // Reasonable limits
     }
   }
 
@@ -541,7 +541,7 @@ private constructor(
     decorations: List<Decoration> = this.decorations,
     persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = this.persistentMarkers,
     getXStep: ((CartesianChartModel) -> Double) = this.getXStep,
-    visibleLabelsCount: Int = this.visibleLabelsCount,
+    visibleLabelsCount: Double = this.visibleLabelsCount,
     onChartClick: ((List<Double>, Double?) -> Unit)? = this.onChartClick,
   ): CartesianChart =
     CartesianChart(

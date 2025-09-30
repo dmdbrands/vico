@@ -221,7 +221,7 @@ fun DynamicYRangeExample(
       itemPlacer = horizontalItemPlacer,
       horizontalLabelPosition = Position.Horizontal.Start
     ),
-    visibleLabelsCount = 5
+    visibleLabelsCount = 5.0
   )
 
   // Initialize chart data

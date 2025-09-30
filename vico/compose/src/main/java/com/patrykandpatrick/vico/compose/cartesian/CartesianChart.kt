@@ -57,7 +57,7 @@ public fun rememberCartesianChart(
   fadingEdges: FadingEdges? = null,
   decorations: List<Decoration> = emptyList(),
   persistentMarkers: (CartesianChart.PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
-  visibleLabelsCount: Int = 0,
+  visibleLabelsCount: Double = 0.0,
   getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
   onChartClick: ((List<Double>, Double?) -> Unit)? = null,
 ): CartesianChart {

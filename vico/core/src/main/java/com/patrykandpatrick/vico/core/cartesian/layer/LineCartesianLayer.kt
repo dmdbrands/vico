@@ -698,8 +698,8 @@ protected constructor(
         xSpacing = xSpacing,
         scalableStartPadding = layerPadding.scalableStartDp.pixels,
         scalableEndPadding = layerPadding.scalableEndDp.pixels,
-        unscalableStartPadding = maxPointSize.half + layerPadding.unscalableStartDp.pixels,
-        unscalableEndPadding = maxPointSize.half + layerPadding.unscalableEndDp.pixels,
+        unscalableStartPadding = layerPadding.unscalableStartDp.pixels,
+        unscalableEndPadding =  layerPadding.unscalableEndDp.pixels,
       )
     }
   }

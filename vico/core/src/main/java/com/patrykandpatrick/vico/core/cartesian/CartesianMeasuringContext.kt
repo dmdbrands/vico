@@ -49,8 +49,8 @@ public interface CartesianMeasuringContext : MeasuringContext {
 
 public fun CartesianMeasuringContext.getFullXRange(layerDimensions: CartesianLayerDimensions) =
   layerDimensions.run {
-    val start = ranges.minX - startPadding / xSpacing * ranges.xStep
-    val end = ranges.maxX + endPadding / xSpacing * ranges.xStep
+    val start = (ranges.minX - startPadding / xSpacing * ranges.xStep).coerceAtLeast(minimumValue = ranges.minX)
+    val end = (ranges.maxX + endPadding / xSpacing * ranges.xStep).coerceAtMost(maximumValue = ranges.maxX)
     start..end
   }
 
@@ -61,8 +61,8 @@ public fun CartesianMeasuringContext.getVisibleXRange(
 ): ClosedFloatingPointRange<Double> {
   val fullRange = getFullXRange(layerDimensions)
   val start =
-    fullRange.start + layoutDirectionMultiplier * scroll / layerDimensions.xSpacing * ranges.xStep
-  val end = start + bounds.width() / layerDimensions.xSpacing * ranges.xStep
+    (fullRange.start + layoutDirectionMultiplier * scroll / layerDimensions.xSpacing * ranges.xStep).coerceAtLeast(minimumValue = fullRange.start)
+  val end = (start + bounds.width() / layerDimensions.xSpacing * ranges.xStep).coerceAtMost(maximumValue = fullRange.endInclusive)
   return start..end
 }
 

@@ -158,7 +158,7 @@ fun SaveableStateDemo(
 
   // Also use saveable scroll and zoom states to preserve chart position
   // Use xStable to prevent scroll state recreation when ranges change
-  val initialScroll = remember { Scroll.Absolute.xStable(70.0) }
+  val initialScroll = remember { Scroll.Absolute.x(70.0) }
   val scrollState = rememberVicoScrollState(
     initialScroll = initialScroll,
     snapBehaviorConfig = SnapBehaviorConfig(
@@ -209,7 +209,7 @@ fun SaveableStateDemo(
             y = yData,
             ranges = CartesianRangeValues(
               minX = 0.0,
-              maxX = 80.9,
+              maxX = 85.9,
               minY = minY?.toDouble() ?: 0.0,
               maxY = maxY?.toDouble() ?: 15.0
             )
@@ -354,11 +354,11 @@ val marker = rememberDefaultCartesianMarker(
           tickLength = 0.dp,
           tick = null
         ),
-        visibleLabelsCount = 6,
+        visibleLabelsCount = 6.0,
         bottomAxis = HorizontalAxis.rememberBottom(
           tick = rememberAxisGuidelineComponent(),
           tickLength = 20.dp,
-          horizontalLabelPosition = Position.Horizontal.End
+          horizontalLabelPosition = Position.Horizontal.End,
         ),
         marker = rememberDefaultCartesianMarker(
           label = rememberTextComponent(color = Color.Transparent),
