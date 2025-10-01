@@ -16,8 +16,6 @@
 
 package com.patrykandpatrick.vico.core.cartesian.axis
 
-import android.opengl.ETC1.getWidth
-import android.util.Log
 import androidx.annotation.RestrictTo
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
@@ -101,6 +99,8 @@ protected constructor(
 
   protected var maxLabelWidth: Float? = null
   private var maxScroll : Float = 0f
+  private var scrollValue : Float = 0f
+  private var layerDimensions : CartesianLayerDimensions = MutableCartesianLayerDimensions()
 
   /** @suppress */
   @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
@@ -409,7 +409,16 @@ protected constructor(
   override fun updateLayerDimensions(
     context: CartesianMeasuringContext,
     layerDimensions: MutableCartesianLayerDimensions,
-  ): Unit = Unit
+  ): Unit {
+    this.layerDimensions = layerDimensions
+    maxScroll = context.getMaxScrollDistance(bounds.width() , layerDimensions)
+    scrollValue =  if (!context.isInitializedScroll) context.initialScroll.getValue(
+      context ,
+       layerDimensions,
+      bounds,
+      maxScroll
+    ) else context.scroll
+  }
 
   protected open fun drawLabel(
     context: CartesianDrawingContext,
@@ -501,7 +510,7 @@ protected constructor(
   ) {
     val width = getWidth(context, layerHeight)
     val effectiveScroll = if (size is Size.Scroll && size.isLabelScrollable){
-      if (position == Axis.Position.Vertical.Start) context.scroll else this.maxScroll - context.scroll } else 0f
+      if (position == Axis.Position.Vertical.Start) scrollValue else this.maxScroll - scrollValue} else 0f
     when (position) {
       Axis.Position.Vertical.Start -> horizontalLayerMargins.ensureValuesAtLeast(start = width - effectiveScroll)
       Axis.Position.Vertical.End -> horizontalLayerMargins.ensureValuesAtLeast(end = width - effectiveScroll)

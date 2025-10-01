@@ -90,7 +90,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
       zoomEnabled = false,
       layerPadding = CartesianLayerPadding(),
       pointerPosition = null,
-      scroll = 0f
+      scroll = 0f,
+      initialScroll = Scroll.Absolute.End,
+      isInitializedScroll = false
     )
 
   private val scaleGestureListener: ScaleGestureDetector.OnScaleGestureListener =

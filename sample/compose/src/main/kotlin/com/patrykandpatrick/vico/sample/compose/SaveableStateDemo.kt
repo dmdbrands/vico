@@ -209,7 +209,7 @@ fun SaveableStateDemo(
             y = yData,
             ranges = CartesianRangeValues(
               minX = 0.0,
-              maxX = 85.9,
+              maxX = 80.9,
               minY = minY?.toDouble() ?: 0.0,
               maxY = maxY?.toDouble() ?: 15.0
             )

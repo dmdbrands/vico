@@ -39,7 +39,10 @@ public class MutableCartesianMeasuringContext(
   override var scrollEnabled: Boolean,
   override var zoomEnabled: Boolean,
   override var layerPadding: CartesianLayerPadding,
+  override val initialScroll: Scroll.Absolute,
+  override val isInitializedScroll: Boolean,
   override var pointerPosition: Point?,
+
   override val scroll: Float,
   cacheStore: CacheStore = CacheStore(),
 ) :

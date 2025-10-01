@@ -40,6 +40,10 @@ public interface CartesianMeasuringContext : MeasuringContext {
 
   public val scroll : Float
 
+  public val initialScroll : Scroll.Absolute
+
+  public val isInitializedScroll : Boolean
+
   /** Stores the [CartesianLayer] padding values. */
   public val layerPadding: CartesianLayerPadding
 

@@ -55,14 +55,14 @@ import kotlinx.coroutines.flow.asSharedFlow
  * programmatic scrolling.
  */
 public class VicoScrollState {
-  private val initialScroll: Scroll.Absolute
+  public val initialScroll: Scroll.Absolute
   private val autoScroll: Scroll
   private val autoScrollCondition: AutoScrollCondition
   private val autoScrollAnimationSpec: AnimationSpec<Float>
   internal var snapBehaviorConfig: SnapBehaviorConfig? = null
   private val _value: MutableFloatState
   private val _maxValue = mutableFloatStateOf(0f)
-  private var initialScrollHandled: Boolean
+  public var initialScrollHandled: Boolean
   internal var context: CartesianMeasuringContext? = null
   internal var layerDimensions: CartesianLayerDimensions? = null
   internal var bounds: RectF? = null

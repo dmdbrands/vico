@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
 import com.patrykandpatrick.vico.core.cartesian.MutableCartesianMeasuringContext
+import com.patrykandpatrick.vico.core.cartesian.Scroll
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModel
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerPadding
@@ -42,6 +43,8 @@ internal fun rememberCartesianMeasuringContext(
   zoomEnabled: Boolean,
   layerPadding: CartesianLayerPadding,
   pointerPosition: Point?,
+  initialScroll : Scroll.Absolute,
+  isInitializedScroll : Boolean,
   scroll : Float
 ): CartesianMeasuringContext {
   val density = LocalDensity.current
@@ -59,6 +62,8 @@ internal fun rememberCartesianMeasuringContext(
     layerPadding,
     pointerPosition,
     cacheStore,
+    initialScroll,
+    isInitializedScroll,
     scroll
   ) {
     MutableCartesianMeasuringContext(
@@ -74,7 +79,9 @@ internal fun rememberCartesianMeasuringContext(
       layerPadding = layerPadding,
       pointerPosition = pointerPosition,
       cacheStore = cacheStore,
-      scroll = scroll
+      initialScroll = initialScroll,
+      scroll = scroll,
+      isInitializedScroll = isInitializedScroll
     )
   }
 }
