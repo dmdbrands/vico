@@ -388,6 +388,9 @@ val marker = rememberDefaultCartesianMarker(
         Log.i("SCROLL_CALLBACK", "Scroll stopped! Visible range: $visibleRange")
         // You can now safely use the visible range for calculations
         // without causing circular dependency
+        Log.i("testing" , scrollState.getInterpolatedYValues(
+          scrollState.getVisibleAxisLabels()
+        ).toString())
         visibleRange?.let { range ->
           val start = range.visibleXRange.start
           val end = range.visibleXRange.endInclusive

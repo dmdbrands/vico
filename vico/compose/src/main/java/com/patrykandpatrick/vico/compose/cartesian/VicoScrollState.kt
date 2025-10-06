@@ -43,6 +43,7 @@ import com.patrykandpatrick.vico.core.cartesian.getFullXRange
 import com.patrykandpatrick.vico.core.cartesian.getMaxScrollDistance
 import com.patrykandpatrick.vico.core.cartesian.getVisibleAxisLabels
 import com.patrykandpatrick.vico.core.cartesian.getVisibleXRange
+import com.patrykandpatrick.vico.core.cartesian.interpolateYValue
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
 import com.patrykandpatrick.vico.core.common.rangeWith
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -295,6 +296,57 @@ public class VicoScrollState {
     stepMultiplier: Double = 1.0
   ): List<Double> {
     return drawingContext?.getVisibleAxisLabels(itemPlacer, maxLabelWidth, stepMultiplier) ?: emptyList()
+  }
+
+  /**
+   * Gets interpolated Y values for given X positions using the current chart data.
+   * Each model gets interpolated Y values based on the provided X positions.
+   *
+   * @param xValues the collection of X values to interpolate for
+   * @param interpolationType the type of interpolation to use (default: LINEAR)
+   * @param curvature the curvature parameter for cubic interpolation (default: 0.5f)
+   * @return collection of collections of numbers where each outer collection represents a model and each inner collection contains interpolated Y values for the given X positions
+   */
+  public fun getInterpolatedYValues(
+    xValues: Collection<Number>,
+    interpolationType: com.patrykandpatrick.vico.core.cartesian.InterpolationType = com.patrykandpatrick.vico.core.cartesian.InterpolationType.LINEAR,
+    curvature: Float = 0.5f
+  ): Collection<Collection<Number>> {
+    val context = drawingContext ?: return emptyList()
+
+    // Get all LineCartesianLayerModel from the chart model
+    val lineModels = context.model.models.filterIsInstance<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel>()
+
+    if (lineModels.isEmpty()) {
+      return emptyList()
+    }
+
+    val result = mutableListOf<Collection<Number>>()
+
+    // For each model, interpolate Y values based on the provided X positions
+    lineModels.forEach { lineModel ->
+      if (lineModel.series.isNotEmpty()) {
+        val series = lineModel.series.first()
+        val interpolatedYValues = mutableListOf<Number>()
+
+        // Interpolate Y value for each X position
+        xValues.forEach { xValue ->
+          val interpolatedY = context.interpolateYValue(series, xValue.toDouble(), interpolationType, curvature, lineModel.minY, lineModel.maxY)
+
+          if (interpolatedY != null) {
+            val roundedY = kotlin.math.round(interpolatedY * 100.0) / 100.0
+            interpolatedYValues.add(roundedY)
+            Log.d("INTERPOLATION", "Model: ${lineModel}, X: $xValue, Interpolated Y: $roundedY, Type: $interpolationType")
+          }
+        }
+
+        if (interpolatedYValues.isNotEmpty()) {
+          result.add(interpolatedYValues)
+        }
+      }
+    }
+
+    return result
   }
 
 

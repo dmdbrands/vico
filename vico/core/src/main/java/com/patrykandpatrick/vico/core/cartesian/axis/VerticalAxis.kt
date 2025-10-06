@@ -509,7 +509,7 @@ protected constructor(
     model: CartesianChartModel,
   ) {
     val width = getWidth(context, layerHeight)
-    val effectiveScroll = if (size is Size.Scroll && size.isLabelScrollable){
+    val effectiveScroll = if (size is Size.Scroll && size.isLabelScrollable && context.scrollEnabled){
       if (position == Axis.Position.Vertical.Start) scrollValue else this.maxScroll - scrollValue} else 0f
     when (position) {
       Axis.Position.Vertical.Start -> horizontalLayerMargins.ensureValuesAtLeast(start = width - effectiveScroll)
