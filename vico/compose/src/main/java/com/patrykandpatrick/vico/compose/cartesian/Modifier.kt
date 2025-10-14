@@ -225,6 +225,9 @@ internal fun Modifier.pointerInput(
         delay(MARKER_DELAY_MS)
         if (interactionMode == InteractionMode.DECIDING) {
           interactionMode = InteractionMode.MARKER_SELECTION
+          pressPosition?.let { position ->
+            scrollState.emitInteractionEvent(ChartInteractionEvent.MarkerSelectionStarted(position))
+          }
           onPointerPositionChange?.invoke(pressPosition)
           onSelectionStateChange(true)
           Log.i("PointerEvent", "Entered MARKER_SELECTION mode")
@@ -240,6 +243,9 @@ internal fun Modifier.pointerInput(
     fun enterScrollMode() {
       if (interactionMode == InteractionMode.DECIDING) {
         interactionMode = InteractionMode.SCROLLING
+        pressPosition?.let { position ->
+          scrollState.emitInteractionEvent(ChartInteractionEvent.DragStarted(position))
+        }
         onSelectionStateChange(false)
         cancelDelayTimer()
         Log.i("PointerEvent", "Entered SCROLLING mode")
@@ -260,6 +266,7 @@ internal fun Modifier.pointerInput(
       cancelDelayTimer()
       pressPosition = null
       initialPressPosition = null
+      scrollState.resetInteractionEvents()
     }
 
     awaitPointerEventScope {
@@ -267,11 +274,12 @@ internal fun Modifier.pointerInput(
         val event = awaitPointerEvent()
         Log.i("PointerEvent", "event.type: ${event.type}, mode: $interactionMode")
         when {
-          event.type == PointerEventType.Scroll && scrollState.scrollEnabled && onZoom != null ->
-            onZoom(
-              1 - event.changes.first().scrollDelta.y * BASE_SCROLL_ZOOM_DELTA,
-              event.changes.first().position,
-            )
+          event.type == PointerEventType.Scroll && scrollState.scrollEnabled && onZoom != null -> {
+            val zoomFactor = 1 - event.changes.first().scrollDelta.y * BASE_SCROLL_ZOOM_DELTA
+            val centroid = event.changes.first().position
+            scrollState.emitInteractionEvent(ChartInteractionEvent.Zoom(zoomFactor, centroid))
+            onZoom(zoomFactor, centroid)
+          }
           onPointerPositionChange == null -> continue
           event.type == PointerEventType.Press -> {
             if(scrollState.isScrollInProgress){
@@ -310,12 +318,17 @@ internal fun Modifier.pointerInput(
               }
               InteractionMode.MARKER_SCRUBBING -> {
                 // Continue scrubbing - pass position to callback
-                if (consumeMoveEvents) changes.consume()
-                onPointerPositionChange(currentPosition.toPoint())
-                Log.i("PointerEvent", "MARKER_SCRUBBING - position: ${currentPosition.toPoint()}")
+                // Always consume move events when scrubbing to prevent external scroll interference
+                changes.consume()
+                val point = currentPosition.toPoint()
+                scrollState.emitInteractionEvent(ChartInteractionEvent.MarkerScrubbing(point))
+                onPointerPositionChange(point)
+                Log.i("PointerEvent", "MARKER_SCRUBBING - position: $point")
               }
               InteractionMode.SCROLLING -> {
-                // Let scroll system handle it
+                // Let scroll system handle it - don't consume to allow free flow scrolling
+                val point = currentPosition.toPoint()
+                scrollState.emitInteractionEvent(ChartInteractionEvent.Dragging(point))
                 onPointerPositionChange(null)
                 Log.i("PointerEvent", "SCROLLING - letting scroll handle")
               }
@@ -331,6 +344,7 @@ internal fun Modifier.pointerInput(
             when (interactionMode) {
               InteractionMode.MARKER_SELECTION -> {
                 // Touch and hold, then release - marker selection
+                scrollState.emitInteractionEvent(ChartInteractionEvent.MarkerInteractionEnded(pressPosition))
                 if(!scrollState.isScrollInProgress) {
                   onPointerPositionChange(pressPosition)
                   Log.i("PointerEvent", "MARKER_SELECTION - selected and cleared")
@@ -341,15 +355,20 @@ internal fun Modifier.pointerInput(
               }
               InteractionMode.MARKER_SCRUBBING -> {
                 // Touch, hold, drag, then release - clear scrubbing
+                scrollState.emitInteractionEvent(ChartInteractionEvent.MarkerInteractionEnded(pressPosition))
+                // Consume release event to prevent external scroll interference
+                event.changes.first().consume()
                 Log.i("PointerEvent", "MARKER_SCRUBBING - cleared")
               }
               InteractionMode.SCROLLING -> {
                 // Touch and drag without hold - scroll ended
+                scrollState.emitInteractionEvent(ChartInteractionEvent.DragEnded(pressPosition))
                 onPointerPositionChange(null)
                 Log.i("PointerEvent", "SCROLLING - ended")
               }
               InteractionMode.DECIDING -> {
                 // Quick tap - marker selection
+                scrollState.emitInteractionEvent(ChartInteractionEvent.MarkerInteractionEnded(pressPosition))
                 onPointerPositionChange(null)
                 Log.i("PointerEvent", "DECIDING - quick tap selection")
               }
@@ -368,6 +387,7 @@ internal fun Modifier.pointerInput(
       if (scrollState.scrollEnabled && onZoom != null) {
         Modifier.pointerInput(onPointerPositionChange, onZoom) {
           detectZoomGestures { centroid, zoom ->
+            scrollState.emitInteractionEvent(ChartInteractionEvent.Zoom(zoom, centroid))
             onPointerPositionChange?.invoke(null)
             onZoom(zoom, centroid)
           }

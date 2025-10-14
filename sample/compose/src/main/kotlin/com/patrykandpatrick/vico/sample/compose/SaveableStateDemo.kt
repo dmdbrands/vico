@@ -25,10 +25,14 @@ import android.util.Log
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
@@ -70,6 +74,7 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberSaveableCartesianChar
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
 import com.patrykandpatrick.vico.compose.cartesian.SnapBehaviorConfig
+import com.patrykandpatrick.vico.compose.cartesian.axis.rememberTop
 import com.patrykandpatrick.vico.compose.cartesian.axis.scroll
 import com.patrykandpatrick.vico.core.cartesian.InterpolationType
 import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
@@ -223,7 +228,49 @@ fun SaveableStateDemo(
   // State to display click results
   var clickResult by remember { mutableStateOf("Click on chart to see results") }
 
+  val markerDecoration = rememberMarkerDecoration(markerValue)
+
+  val primaryLayer = rememberLineCartesianLayer(
+    verticalAxisPosition = Axis.Position.Vertical.Start,
+    lineProvider = LineCartesianLayer.LineProvider.series(
+      LineCartesianLayer.rememberLine(
+        pointConnector = LineCartesianLayer.PointConnector.cubic(curvature = 0.5f)
+      )
+    ),
+    rangeProvider = CartesianLayerRangeProvider.fixed(
+      minY = minY?.toDouble(),
+      maxY = maxY?.toDouble()
+    )
+  )
+
+  val horizontalItemPlacer = horizontalItemPlacer{_ , _ ->}
+
+
+  val marker = rememberDefaultCartesianMarker(
+    label = rememberTextComponent(),
+    guideline = rememberAxisLineComponent(
+      fill = fill(Color.Green),
+      thickness = 2.dp
+    ),
+    contentPadding = insets(bottom = 20.dp),
+    indicator = { color ->
+      ShapeComponent(
+        fill = fill(color),
+        strokeFill = fill(color),
+        shape = CorneredShape.Pill,
+        strokeThicknessDp = 0f,
+      )
+    },
+    yLabelCallback = { yLabelText ->
+      // Handle the formatted Y label text
+      Log.i("Y_LABEL", "Received: $yLabelText")
+    },
+    interpolationType = InterpolationType.CUBIC,
+    curvature = 0.5f
+  )
+
   Column(
+    modifier = Modifier.verticalScroll(rememberScrollState()),
     verticalArrangement = Arrangement.spacedBy(16.dp)
   ) {
     Text(
@@ -296,48 +343,8 @@ fun SaveableStateDemo(
         .fillMaxWidth()
         .padding(8.dp)
     )
-
-    val markerDecoration = rememberMarkerDecoration(markerValue)
-
-    val primaryLayer = rememberLineCartesianLayer(
-      verticalAxisPosition = Axis.Position.Vertical.Start,
-      lineProvider = LineCartesianLayer.LineProvider.series(
-        LineCartesianLayer.rememberLine(
-          pointConnector = LineCartesianLayer.PointConnector.cubic(curvature = 0.5f)
-        )
-      ),
-      rangeProvider = CartesianLayerRangeProvider.fixed(
-        minY = minY?.toDouble(),
-        maxY = maxY?.toDouble()
-      )
-    )
-
-    val horizontalItemPlacer = horizontalItemPlacer{_ , _ ->}
-
-
-val marker = rememberDefaultCartesianMarker(
-  label = rememberTextComponent(),
-  guideline = rememberAxisLineComponent(
-    fill = fill(Color.Green),
-    thickness = 2.dp
-  ),
-  contentPadding = insets(bottom = 20.dp),
-  indicator = { color ->
-    ShapeComponent(
-      fill = fill(color),
-      strokeFill = fill(color),
-      shape = CorneredShape.Pill,
-      strokeThicknessDp = 0f,
-    )
-  },
-  yLabelCallback = { yLabelText ->
-    // Handle the formatted Y label text
-    Log.i("Y_LABEL", "Received: $yLabelText")
-  },
-  interpolationType = InterpolationType.CUBIC,
-  curvature = 0.5f
-)
     CartesianChartHost(
+      modifier = Modifier.background(Color.Red).fillMaxWidth().height(300.dp),
       chart = rememberCartesianChart(
 
         primaryLayer,
@@ -347,6 +354,11 @@ val marker = rememberDefaultCartesianMarker(
           size = BaseAxis.Size.scroll(20.dp , true),
           tickLength = 0.dp,
           tick = null
+        ),
+        topAxis = HorizontalAxis.rememberTop(
+          label = null,
+          tick = null,
+          tickLength = 0.dp
         ),
         endAxis = VerticalAxis.rememberEnd(
           size = BaseAxis.Size.scroll(40.dp , false),
@@ -415,8 +427,95 @@ val marker = rememberDefaultCartesianMarker(
       modelProducer = modelProducer,
       scrollState = scrollState,
       zoomState = zoomState,
-      modifier = Modifier.fillMaxWidth(),
     )
+
+    Text(
+      text = "Saveable Chart State Demo",
+      style = MaterialTheme.typography.headlineSmall,
+      fontWeight = FontWeight.Bold
+    )
+
+    Text(
+      text = "Screen 1 of 2",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Button(onClick = onNavigateToDynamicYRange) {
+      Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Navigate to Dynamic Y Range Example")
+      Text("Navigate to Dynamic Y Range Example")
+    }
+
+    Text(
+      text = "✨ Smart Snap Behavior - Drag to snap to nearest data point, fling to jump to next/previous data point!",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.primary,
+      fontWeight = FontWeight.Medium
+    )
+
+    Button(
+      onClick = {
+        minY = (0..10).random()
+        maxY = (15..30).random()
+      },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text("Change Y Range (Min: $minY, Max: $maxY)")
+    }
+
+    Button(
+      onClick = {
+        markerIndex = 4.0
+      },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text("Reset Y Range")
+    }
+
+
+    Text(
+      text = "Saveable Chart State Demo",
+      style = MaterialTheme.typography.headlineSmall,
+      fontWeight = FontWeight.Bold
+    )
+
+    Text(
+      text = "Screen 1 of 2",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Button(onClick = onNavigateToDynamicYRange) {
+      Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Navigate to Dynamic Y Range Example")
+      Text("Navigate to Dynamic Y Range Example")
+    }
+
+    Text(
+      text = "✨ Smart Snap Behavior - Drag to snap to nearest data point, fling to jump to next/previous data point!",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.primary,
+      fontWeight = FontWeight.Medium
+    )
+
+    Button(
+      onClick = {
+        minY = (0..10).random()
+        maxY = (15..30).random()
+      },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text("Change Y Range (Min: $minY, Max: $maxY)")
+    }
+
+    Button(
+      onClick = {
+        markerIndex = 4.0
+      },
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      Text("Reset Y Range")
+    }
+
   }
 }
 

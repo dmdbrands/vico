@@ -52,7 +52,42 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 /**
- * Houses information on a [CartesianChart]’s scroll value. Allows for scroll customization and
+ * Represents different types of chart interaction events.
+ */
+public sealed class ChartInteractionEvent {
+  /** Event when user starts dragging/scrolling */
+  public data class DragStarted(val position: com.patrykandpatrick.vico.core.common.Point) : ChartInteractionEvent()
+
+  /** Event when user is dragging/scrolling */
+  public data class Dragging(val position: com.patrykandpatrick.vico.core.common.Point) : ChartInteractionEvent()
+
+  /** Event when user stops dragging/scrolling */
+  public data class DragEnded(val position: com.patrykandpatrick.vico.core.common.Point?) : ChartInteractionEvent()
+
+  /** Event when user starts marker selection (touch and hold) */
+  public data class MarkerSelectionStarted(val position: com.patrykandpatrick.vico.core.common.Point) : ChartInteractionEvent()
+
+  /** Event when user is scrubbing markers */
+  public data class MarkerScrubbing(val position: com.patrykandpatrick.vico.core.common.Point) : ChartInteractionEvent()
+
+  /** Event when user ends marker interaction */
+  public data class MarkerInteractionEnded(val position: com.patrykandpatrick.vico.core.common.Point?) : ChartInteractionEvent()
+
+  /** Event when user performs zoom gesture */
+  public data class Zoom(val zoomFactor: Float, val centroid: androidx.compose.ui.geometry.Offset) : ChartInteractionEvent()
+
+  /** Event when scroll/fling animation starts */
+  public object ScrollAnimationStarted : ChartInteractionEvent()
+
+  /** Event when scroll/fling animation ends */
+  public object ScrollAnimationEnded : ChartInteractionEvent()
+
+  /** Event when chart state is reset */
+  public object Stable : ChartInteractionEvent()
+}
+
+/**
+ * Houses information on a [CartesianChart]'s scroll value. Allows for scroll customization and
  * programmatic scrolling.
  */
 public class VicoScrollState {
@@ -80,6 +115,11 @@ public class VicoScrollState {
   /** StateFlow that emits the current visible range when scrolling starts or during scroll. */
   public val visibleRange: SharedFlow<VisibleRange?>
     get() = _visibleRange.asSharedFlow()
+
+  private val _interactionEvents = MutableStateFlow<ChartInteractionEvent>(ChartInteractionEvent.Stable)
+  /** StateFlow that emits chart interaction events like dragging, scrubbing, zooming, etc. */
+  public val interactionEvents: kotlinx.coroutines.flow.StateFlow<ChartInteractionEvent?>
+    get() = _interactionEvents
 
   /** The current visible range (for direct access). */
   public var currentVisibleRange: VisibleRange? = null
@@ -264,6 +304,16 @@ public class VicoScrollState {
     drawingContext = null
   }
 
+  /** Internal method to emit interaction events from the modifier */
+  internal fun emitInteractionEvent(event: ChartInteractionEvent) {
+    _interactionEvents.value = event
+  }
+
+  /** Internal method to reset interaction events and emit reset event */
+  internal fun resetInteractionEvents() {
+    _interactionEvents.value = ChartInteractionEvent.Stable
+  }
+
   /** Triggers a scroll. */
   public suspend fun scroll(scroll: Scroll) {
     withUpdated { context, layerDimensions, bounds ->
@@ -273,12 +323,14 @@ public class VicoScrollState {
 
   /** Triggers an animated scroll. */
   public suspend fun animateScroll(scroll: Scroll, animationSpec: AnimationSpec<Float> = spring()) {
+    emitInteractionEvent(ChartInteractionEvent.ScrollAnimationStarted)
     withUpdated { context, layerDimensions, bounds ->
       scrollableState.animateScrollBy(
         scroll.getDelta(context, layerDimensions, bounds, maxValue, value),
         animationSpec,
       )
     }
+    emitInteractionEvent(ChartInteractionEvent.ScrollAnimationEnded)
   }
 
   /**

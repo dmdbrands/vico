@@ -59,9 +59,9 @@ public class CartesianLayerMargins : HorizontalCartesianLayerMargins {
     bottom: Float = this.bottom,
   ) {
     this.start = this.start.coerceAtLeast(start)
-    this.top = this.top.coerceAtLeast(top)
+    this.top = this.top.coerceAtLeast(top.div(2))
     this.end = this.end.coerceAtLeast(end)
-    this.bottom = this.bottom.coerceAtLeast(bottom)
+    this.bottom = this.bottom.coerceAtLeast(bottom.div(2))
   }
 
   /** Clears the stored values. */
