@@ -197,7 +197,7 @@ internal fun CartesianChartHostImpl(
     )
 
   val coroutineScope = rememberCoroutineScope()
-  var previousModelID by remember { ValueWrapper(model.id) }
+  var previousModelID by remember { ValueWrapper<Int?>(null) }
   val layerDimensions = remember { MutableCartesianLayerDimensions() }
 
   LaunchedEffect(scrollState.pointerXDeltas) {
@@ -212,12 +212,14 @@ internal fun CartesianChartHostImpl(
 
   // Monitor scroll changes and trigger callback when scrolling stops
   LaunchedEffect(Unit) {
-  scrollState.visibleRange
+    scrollState.visibleRange
       .debounce(300) // Wait 300ms after scroll stops
       .distinctUntilChanged()
       .collect { scrollValue ->
-        // Get the current visible range directly
-        onScrollStopped?.invoke(scrollState.currentVisibleRange)
+        // Only invoke callback after auto-scroll is complete (user-initiated scrolling)
+        if (scrollState.isAutoScrollComplete) {
+          onScrollStopped?.invoke(scrollState.currentVisibleRange)
+        }
       }
   }
 

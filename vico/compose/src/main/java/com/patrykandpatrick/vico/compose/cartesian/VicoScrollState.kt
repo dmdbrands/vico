@@ -99,6 +99,14 @@ public class VicoScrollState {
   private val _value: MutableFloatState
   private val _maxValue = mutableFloatStateOf(0f)
   public var initialScrollHandled: Boolean
+
+  /**
+   * Tracks whether the initial auto-scroll animation has completed.
+   * Used to skip onScrollStopped callback during initial chart load.
+   */
+  public var isAutoScrollComplete: Boolean = false
+    private set
+
   internal var context: CartesianMeasuringContext? = null
   internal var layerDimensions: CartesianLayerDimensions? = null
   internal var bounds: RectF? = null
@@ -291,10 +299,16 @@ public class VicoScrollState {
   }
 
   internal suspend fun autoScroll(model: CartesianChartModel, oldModel: CartesianChartModel?) {
-    if (!autoScrollCondition.shouldScroll(oldModel, model)) return
+    if (!autoScrollCondition.shouldScroll(oldModel, model)) {
+      // No auto-scroll needed, mark as complete immediately
+      isAutoScrollComplete = true
+      return
+    }
     if (scrollableState.isScrollInProgress)
       scrollableState.stopScroll(MutatePriority.PreventUserInput)
     animateScroll(autoScroll, autoScrollAnimationSpec)
+    // Mark auto-scroll as complete after animation finishes
+    isAutoScrollComplete = true
   }
 
   internal fun clearUpdated() {
