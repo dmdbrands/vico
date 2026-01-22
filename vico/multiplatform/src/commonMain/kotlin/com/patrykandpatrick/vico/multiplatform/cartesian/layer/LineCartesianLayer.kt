@@ -282,6 +282,20 @@ protected constructor(
       public fun cubic(
         @FloatRange(from = 0.0, to = 1.0, fromInclusive = false) curvature: Float = 0.5f
       ): PointConnector = CubicPointConnector(curvature)
+
+      /**
+       * Uses monotone cubic interpolation (Fritsch-Carlson algorithm).
+       *
+       * This produces iOS-style smooth curves similar to SwiftUI's `.monotone` interpolation:
+       * - No overshoot at local extrema (peaks and valleys are preserved)
+       * - Smooth, continuous first derivative
+       * - Data-driven tangents, not heuristic-based
+       * - GPU-friendly cubic Bézier output
+       *
+       * Ideal for health/fitness charts, stock charts, or any data where overshoots
+       * would misrepresent the data.
+       */
+      public fun monotone(): PointConnector = MonotonePointConnector()
     }
   }
 

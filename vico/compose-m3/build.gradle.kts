@@ -48,26 +48,28 @@ dependencies {
 
 publishing {
     publications {
-        create<MavenPublication>("gpr") {
-            run {
-                groupId = "com.dmdbrands.lib"
-                artifactId = "vico-compose-m3"
-                version = Versions.VICO
-                artifact("build/outputs/aar/compose-m3-debug.aar")
+        create<MavenPublication>("release") {
+            groupId = "com.dmdbrands.lib"
+            artifactId = "vico-compose-m3"
+            version = Versions.VICO
+            artifact("build/outputs/aar/compose-m3-debug.aar")
+            artifact(tasks.named("sourcesJar"))
 
-                // Add sources JAR
-                artifact(tasks.named("sourcesJar"))
+            pom {
+                name.set("Vico Compose M3")
+                description.set("Material 3 theming for Vico charts")
+                withXml {
+                    val deps = asNode().appendNode("dependencies")
+                    val dep = deps.appendNode("dependency")
+                    dep.appendNode("groupId", "com.dmdbrands.lib")
+                    dep.appendNode("artifactId", "vico-compose")
+                    dep.appendNode("version", Versions.VICO)
+                    dep.appendNode("scope", "compile")
+                }
             }
         }
     }
     repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/dmdbrands/vico")
-            credentials {
-                username = System.getenv("GITHUB_USERNAME") ?: "VivekGG"
-                password = System.getenv("GITHUB_TOKEN")
-            }
-        }
+        mavenLocal()
     }
 }

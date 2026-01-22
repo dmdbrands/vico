@@ -53,26 +53,28 @@ dependencies {
 
 publishing {
     publications {
-        create<MavenPublication>("gpr") {
-            run {
-                groupId = "com.dmdbrands.lib"
-                artifactId = "vico-compose"
-                version = Versions.VICO
-                artifact("build/outputs/aar/compose-debug.aar")
+        create<MavenPublication>("release") {
+            groupId = "com.dmdbrands.lib"
+            artifactId = "vico-compose"
+            version = Versions.VICO
+            artifact("build/outputs/aar/compose-debug.aar")
+            artifact(tasks.named("sourcesJar"))
 
-                // Add sources JAR
-                artifact(tasks.named("sourcesJar"))
+            pom {
+                name.set("Vico Compose")
+                description.set("Jetpack Compose chart library")
+                withXml {
+                    val deps = asNode().appendNode("dependencies")
+                    val dep = deps.appendNode("dependency")
+                    dep.appendNode("groupId", "com.dmdbrands.lib")
+                    dep.appendNode("artifactId", "vico-core")
+                    dep.appendNode("version", Versions.VICO)
+                    dep.appendNode("scope", "compile")
+                }
             }
         }
     }
     repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/dmdbrands/vico")
-            credentials {
-                username = System.getenv("GITHUB_USERNAME") ?: "VivekGG"
-                password = System.getenv("GITHUB_TOKEN")
-            }
-        }
+        mavenLocal()
     }
 }

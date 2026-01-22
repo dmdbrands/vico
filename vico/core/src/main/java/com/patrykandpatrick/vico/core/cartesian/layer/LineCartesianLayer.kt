@@ -278,6 +278,20 @@ protected constructor(
       ): PointConnector = CubicPointConnector(curvature)
 
       /**
+       * Uses monotone cubic interpolation (Fritsch-Carlson algorithm).
+       *
+       * This produces iOS-style smooth curves similar to SwiftUI's `.monotone` interpolation:
+       * - No overshoot at local extrema (peaks and valleys are preserved)
+       * - Smooth, continuous first derivative
+       * - Data-driven tangents, not heuristic-based
+       * - GPU-friendly cubic Bézier output
+       *
+       * Ideal for health/fitness charts, stock charts, or any data where overshoots
+       * would misrepresent the data.
+       */
+      public fun monotone(): PointConnector = MonotonePointConnector()
+
+      /**
        * Connects points only when the condition is met. If condition is false, moves to the new point instead of connecting.
        * @param condition Function that determines whether to connect two points based on their coordinates and context
        * @param fallbackConnector The connector to use when condition is true (defaults to Sharp)
