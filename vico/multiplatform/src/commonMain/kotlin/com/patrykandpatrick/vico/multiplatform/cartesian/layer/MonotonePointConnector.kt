@@ -35,7 +35,12 @@ import kotlin.math.sqrt
  *
  * This produces curves similar to SwiftUI's `.monotone` interpolation and iOS Health app charts.
  */
-internal class MonotonePointConnector : LineCartesianLayer.PointConnector {
+internal data class MonotonePointConnector(private val curvature: Float = 0.5f) :
+  LineCartesianLayer.PointConnector {
+  init {
+    require(curvature > 0 && curvature <= 1) { "`curvature` must be in (0, 1]." }
+  }
+
   override fun connect(
     context: CartesianDrawingContext,
     path: Path,

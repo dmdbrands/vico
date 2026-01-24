@@ -17,26 +17,17 @@
 package com.patrykandpatrick.vico.core.cartesian.layer
 
 import android.graphics.Path
-import android.util.Log
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel
 import kotlin.math.abs
 import kotlin.math.sqrt
 
-/**
- * Implements iOS-style monotone cubic interpolation using Fritsch-Carlson algorithm.
- *
- * Key properties:
- * - Works on raw data values (preserves monotonicity)
- * - Uses 6 neighboring points for proper tangent calculation
- * - Stateless design (no stored state, works during scrolling)
- * - Converts data-space tangents to screen-space for drawing
- * - Resulting curve is smooth and preserves monotonicity
- * - Converted into cubic Bézier segments (GPU friendly)
- *
- * This produces curves similar to SwiftUI's `.monotone` interpolation and iOS Health app charts.
- */
-internal class MonotonePointConnector : LineCartesianLayer.PointConnector {
+internal data class MonotonePointConnector(private val curvature: Float = 0.5f) :
+  LineCartesianLayer.PointConnector {
+  init {
+    require(curvature > 0 && curvature <= 1) { "`curvature` must be in (0, 1]." }
+  }
+
   override fun connect(
     context: CartesianDrawingContext,
     path: Path,
@@ -50,7 +41,7 @@ internal class MonotonePointConnector : LineCartesianLayer.PointConnector {
   ) {
     // Get 6 neighbors from series (2 before entry1, entry1, entry2, 2 after entry2)
     // Also get index2 and isFirstSegment flag
-    val (neighbors, index2, isFirstSegment) = getNeighbors(entry1, entry2, series)
+    val (neighbors, index2, _) = getNeighbors(entry1, entry2, series)
 
     // If we don't have enough neighbors, fall back to linear interpolation
     if (neighbors.size < 2) {
@@ -220,7 +211,7 @@ internal class MonotonePointConnector : LineCartesianLayer.PointConnector {
       } else {
         0.0
       }
-      
+
       if (abs(m1Data) < abs(minM1Data)) {
         // Preserve the sign of m1Data (or use s0's sign if m1Data is effectively zero)
         val targetSign = if (abs(m1Data) < 1e-10) {
@@ -235,7 +226,7 @@ internal class MonotonePointConnector : LineCartesianLayer.PointConnector {
     // Convert data-space tangents to screen-space tangents
     // Note: Y-axis is flipped in screen space (bottom is higher Y value)
     // Use actual dx0 for more accurate conversion
-    dx0
+    val dxData = dx0
     val dxScreen = x2 - x1
 
     // Calculate screen-space tangent: m_screen = (dy_screen / dx_screen)
@@ -264,22 +255,12 @@ internal class MonotonePointConnector : LineCartesianLayer.PointConnector {
     var c2x = x2 - dxScreen / 3f
     var c2y = y2 - m1Screen * dxScreen / 3f
 
-    // DEBUG: Log original control points before constraints
-    val c1yOriginal = c1y
-    val c2yOriginal = c2y
-    val segmentType = when {
-      y1 < y2 -> "INCREASING"
-      y1 > y2 -> "DECREASING"
-      else -> "FLAT"
-    }
-
     // Enforce Bézier monotonicity constraints
     // For a cubic Bézier curve to be monotone:
     // - If increasing (y1 < y2): y1 ≤ c1y ≤ c2y ≤ y2
     // - If decreasing (y1 > y2): y1 ≥ c1y ≥ c2y ≥ y2
     // This prevents overshoot by construction
-    // For last segment, be extra conservative to prevent any visual overshoot
-    val constraintApplied = when {
+    when {
       y1 < y2 -> {
         // Increasing segment: ensure c1y and c2y are between y1 and y2, and c1y ≤ c2y
         c1y = c1y.coerceIn(y1, y2)
@@ -290,9 +271,6 @@ internal class MonotonePointConnector : LineCartesianLayer.PointConnector {
           c1y = mid.coerceAtMost(y2)
           c2y = mid.coerceAtLeast(y1)
         }
-        // Endpoint margin logic (below) handles last segment endpoint positioning
-        // No need to force c2y = y2 here as endpoint margin provides better control
-        "coerceIn($y1,$y2)"
       }
 
       y1 > y2 -> {
@@ -305,20 +283,14 @@ internal class MonotonePointConnector : LineCartesianLayer.PointConnector {
           c1y = mid.coerceAtLeast(y2)
           c2y = mid.coerceAtMost(y1)
         }
-        // Endpoint margin logic (below) handles last segment endpoint positioning
-        // No need to force c2y = y2 here as endpoint margin provides better control
-        "coerceIn($y2,$y1)"
       }
 
       else -> {
         // Flat segment: both control points should equal y1 (and y2)
         c1y = y1
         c2y = y2
-        "flat"
       }
     }
-    val c1yAfterConstraints = c1y
-    val c2yAfterConstraints = c2y
 
     // Clamp control points to bounds to prevent drawing outside chart area
     // Account for stroke width: shrink bounds by half stroke width + anti-aliasing + safety buffer
@@ -330,107 +302,30 @@ internal class MonotonePointConnector : LineCartesianLayer.PointConnector {
     val effectiveBottom = bounds.bottom - strokeWidthMargin
     val effectiveLeft = bounds.left + strokeWidthMargin
     val effectiveRight = bounds.right - strokeWidthMargin
-    val c1yBeforeBounds = c1y
-    val c2yBeforeBounds = c2y
     c1x = c1x.coerceIn(effectiveLeft, effectiveRight)
     c1y = c1y.coerceIn(effectiveTop, effectiveBottom)
     c2x = c2x.coerceIn(effectiveLeft, effectiveRight)
     c2y = c2y.coerceIn(effectiveTop, effectiveBottom)
-    val boundsClamped = c1y != c1yBeforeBounds || c2y != c2yBeforeBounds
 
     // For last segment: ensure curve joins from right of p1 and approaches bottom of p2
-    // c1x is already positioned to the right of x1 (c1x = x1 + dxScreen / 3f)
-    val endpointMarginApplied: String
-    val c2yBeforeEndpointMargin = c2y
     if (isLastSegment) {
       // For last segment: preserve original c2y position from extrapolated neighbors
       // The original c2y already provides smooth approach based on m1Screen calculation
       // Don't override it - just ensure it's within bounds and maintains monotonicity
       if (y1 > y2) {
         // Decreasing segment: ensure c2y is between y2 and y1
-        c2y = c2yBeforeEndpointMargin.coerceIn(y2, y1).coerceIn(effectiveTop, effectiveBottom)
-        endpointMarginApplied =
-          "lastSegment: c2y=$c2yBeforeEndpointMargin->$c2y (preserve original from extrapolation)"
+        c2y = c2y.coerceIn(y2, y1).coerceIn(effectiveTop, effectiveBottom)
       } else if (y1 < y2) {
         // Increasing segment: ensure c2y is between y1 and y2
-        c2y = c2yBeforeEndpointMargin.coerceIn(y1, y2).coerceIn(effectiveTop, effectiveBottom)
-        endpointMarginApplied =
-          "lastSegment: c2y=$c2yBeforeEndpointMargin->$c2y (preserve original from extrapolation)"
+        c2y = c2y.coerceIn(y1, y2).coerceIn(effectiveTop, effectiveBottom)
       } else {
         // Flat segment: c2y = y2
         c2y = y2.coerceIn(effectiveTop, effectiveBottom)
-        endpointMarginApplied = "lastSegment: c2y=$c2yBeforeEndpointMargin->$c2y (flat segment)"
       }
-    } else {
-      endpointMarginApplied = "notLastSegment"
     }
-
-    // DEBUG: Sample Bézier curve to verify monotonicity
-    fun bezierY(t: Float): Float {
-      val mt = 1f - t
-      val mt2 = mt * mt
-      val mt3 = mt2 * mt
-      val t2 = t * t
-      val t3 = t2 * t
-      return mt3 * y1 + 3f * mt2 * t * c1y + 3f * mt * t2 * c2y + t3 * y2
-    }
-
-    // Sample curve VERY densely to detect any overshoot (1000 points for precision)
-    val denseSamplePoints = (0..1000).map { it / 1000f }
-    val denseSampleY = denseSamplePoints.map { bezierY(it) }
-    val minSampleY = denseSampleY.minOrNull() ?: y1
-    val maxSampleY = denseSampleY.maxOrNull() ?: y2
-    val minY = minOf(y1, y2)
-    val maxY = maxOf(y1, y2)
-    val overshootAbove = (maxSampleY - maxY).coerceAtLeast(0f)
-    val overshootBelow = (minY - minSampleY).coerceAtLeast(0f)
-    val hasOvershoot = overshootAbove > 1e-3f || overshootBelow > 1e-3f
-
-    // Find where overshoot occurs
-    val overshootTAbove = if (overshootAbove > 1e-3f) {
-      denseSamplePoints.zip(denseSampleY).firstOrNull { it.second > maxY + 1e-3f }?.first
-    } else null
-    val overshootTBelow = if (overshootBelow > 1e-3f) {
-      denseSamplePoints.zip(denseSampleY).firstOrNull { it.second < minY - 1e-3f }?.first
-    } else null
-
-    // Also sample at key points for logging
-    val keySamplePoints = listOf(0f, 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f, 1f)
-    val keySampleY = keySamplePoints.map { bezierY(it) }
-
-    // DEBUG: Log comprehensive information
-    Log.d(
-      "MonotonePointConnector",
-      "=== DEBUG Bézier Monotonicity ===\n" +
-        "entry1=${entry1.y} entry2=${entry2.y} isFirst=$isFirstSegment isLast=$isLastSegment\n" +
-        "NEIGHBORS: n0=(${neighbors[0].x},${neighbors[0].y}) n1=(${neighbors[1].x},${neighbors[1].y}) n2=(${neighbors[2].x},${neighbors[2].y}) n3=(${neighbors[3].x},${neighbors[3].y}) n4=(${neighbors[4].x},${neighbors[4].y}) n5=(${neighbors[5].x},${neighbors[5].y})${if (isFirstSegment) " [EXTRAPOLATED:0,1]" else ""}${if (isLastSegment) " [EXTRAPOLATED:4,5]" else ""}\n" +
-        "y1=$y1 y2=$y2 segmentType=$segmentType\n" +
-        "m0Data=$m0Data m1Data=$m1Data m0Screen=$m0Screen m1Screen=$m1Screen\n" +
-        "ORIGINAL: c1y=$c1yOriginal c2y=$c2yOriginal\n" +
-        "AFTER_CONSTRAINTS: c1y=$c1yAfterConstraints c2y=$c2yAfterConstraints constraint=$constraintApplied\n" +
-        "AFTER_BOUNDS: c1y=$c1y c2y=$c2y boundsClamped=$boundsClamped bounds=[${bounds.top},${bounds.bottom}] effectiveBounds=[$effectiveTop,$effectiveBottom] strokeMargin=$strokeWidthMargin\n" +
-        "ENDPOINT_MARGIN: y2=$y2 $endpointMarginApplied\n" +
-        "MONOTONICITY_CHECK: y1≤c1y≤c2y≤y2? ${if (y1 < y2) "$y1≤$c1y≤$c2y≤$y2 = ${y1 <= c1y && c1y <= c2y && c2y <= y2}" else "N/A"}\n" +
-        "MONOTONICITY_CHECK: y1≥c1y≥c2y≥y2? ${if (y1 > y2) "$y1≥$c1y≥$c2y≥$y2 = ${y1 >= c1y && c1y >= c2y && c2y >= y2}" else "N/A"}\n" +
-        "SAMPLED_CURVE: minSampleY=$minSampleY maxSampleY=$maxSampleY [minY=$minY, maxY=$maxY]\n" +
-        "OVERSHOOT: above=$overshootAbove below=$overshootBelow hasOvershoot=$hasOvershoot\n" +
-        "OVERSHOOT_LOCATION: tAbove=$overshootTAbove tBelow=$overshootTBelow\n" +
-        "KEY_SAMPLES: ${
-          keySamplePoints.zip(keySampleY)
-            .joinToString(", ") { "t=${it.first}=${"%.2f".format(it.second)}" }
-        }\n" +
-        "DENSE_CHECK: sampled ${denseSamplePoints.size} points, found min=$minSampleY max=$maxSampleY",
-    )
 
     // Use cubic Bézier for smooth curves
     // Bézier monotonicity constraints ensure no overshoot
-    // Note: y2 cannot be changed (it's the actual data point), but c2y has been adjusted for endpoint margin
-    Log.d(
-      "MonotonePointConnector",
-      "PATH_CUBIC_TO: c1x=$c1x c1y=$c1y c2x=$c2x c2y=$c2y x2=$x2 y2=$y2\n" +
-        "DATA_VALUES: entry1.y=${entry1.y} entry2.y=${entry2.y}\n" +
-        "SCREEN_COORDS: x1=$x1 y1=$y1 x2=$x2 y2=$y2",
-    )
     path.cubicTo(c1x, c1y, c2x, c2y, x2, y2)
   }
 

@@ -307,7 +307,7 @@ protected constructor(
        * Ideal for health/fitness charts, stock charts, or any data where overshoots
        * would misrepresent the data.
        */
-      public fun monotone(): PointConnector = MonotonePointConnector()
+      public fun monotone(): PointConnector = MonotonePointConnector(0.5f)
     }
   }
 
