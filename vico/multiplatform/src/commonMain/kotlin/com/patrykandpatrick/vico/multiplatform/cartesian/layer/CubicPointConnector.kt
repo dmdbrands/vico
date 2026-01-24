@@ -33,6 +33,9 @@ internal data class CubicPointConnector(private val curvature: Float) :
     y1: Float,
     x2: Float,
     y2: Float,
+    entry1: com.patrykandpatrick.vico.multiplatform.cartesian.data.LineCartesianLayerModel.Entry,
+    entry2: com.patrykandpatrick.vico.multiplatform.cartesian.data.LineCartesianLayerModel.Entry,
+    series: List<com.patrykandpatrick.vico.multiplatform.cartesian.data.LineCartesianLayerModel.Entry>,
   ) {
     val xDelta =
       (Y_MULTIPLIER * abs(y2 - y1) / context.layerBounds.height).coerceAtMost(1f) *

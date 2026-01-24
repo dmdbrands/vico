@@ -272,8 +272,20 @@ protected constructor(
     /** Houses a [PointConnector] factory function. */
     public companion object {
       /** Uses line segments. */
-      public val Sharp: PointConnector = PointConnector { _, path, _, _, x2, y2 ->
-        path.lineTo(x2, y2)
+      public val Sharp: PointConnector = object : PointConnector {
+        override fun connect(
+          context: CartesianDrawingContext,
+          path: Path,
+          x1: Float,
+          y1: Float,
+          x2: Float,
+          y2: Float,
+          entry1: LineCartesianLayerModel.Entry,
+          entry2: LineCartesianLayerModel.Entry,
+          series: List<LineCartesianLayerModel.Entry>,
+        ) {
+          path.lineTo(x2, y2)
+        }
       }
 
       /**
@@ -431,19 +443,22 @@ protected constructor(
         val drawingStart =
           layerBounds.getStart(isLtr = isLtr) + drawingStartAlignmentCorrection - scroll
 
+        var previousEntry: LineCartesianLayerModel.Entry? = null
+
         forEachPointInBounds(
           series = series,
           drawingStart = drawingStart,
           pointInfoMap = pointInfoMap,
           drawFullLineLength = line.stroke is LineStroke.Dashed,
-        ) { _, x, y, _, _ ->
+        ) { entry, x, y, _, _ ->
           if (linePath.isEmpty) {
             linePath.moveTo(x, y)
           } else {
-            line.pointConnector.connect(this, linePath, prevX, prevY, x, y)
+            line.pointConnector.connect(this, linePath, prevX, prevY, x, y, previousEntry!!, entry, series)
           }
           prevX = x
           prevY = y
+          previousEntry = entry
         }
 
                 saveLayer(opacity = drawingModel?.opacity ?: 1f)
@@ -615,7 +630,7 @@ protected constructor(
           layerBounds.height
     }
 
-    series.forEachIn(minX = minX, maxX = maxX, padding = 1) { entry, next ->
+    series.forEachIn(minX = minX, maxX = maxX, padding = 2) { entry, next ->
       val previousX = x
       val immutableX = nextX ?: getDrawX(entry)
       val immutableNextX = next?.let(::getDrawX)

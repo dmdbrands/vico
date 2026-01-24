@@ -252,8 +252,8 @@ protected constructor(
   }
 
   /** Connects a [LineCartesianLayer] line's points, thus defining its shape. */
-  public fun interface PointConnector {
-    /** Connects ([x1], [y2]) and ([x2], [y2]). */
+  public interface PointConnector {
+    /** Connects ([x1], [y1]) and ([x2], [y2]). */
     public fun connect(
       context: CartesianDrawingContext,
       path: Path,
@@ -261,13 +261,28 @@ protected constructor(
       y1: Float,
       x2: Float,
       y2: Float,
+      entry1: LineCartesianLayerModel.Entry,
+      entry2: LineCartesianLayerModel.Entry,
+      series: List<LineCartesianLayerModel.Entry>,
     )
 
     /** Houses a [PointConnector] factory function. */
     public companion object {
       /** Uses line segments. */
-      public val Sharp: PointConnector = PointConnector { _, path, _, _, x2, y2 ->
-        path.lineTo(x2, y2)
+      public val Sharp: PointConnector = object : PointConnector {
+        override fun connect(
+          context: CartesianDrawingContext,
+          path: Path,
+          x1: Float,
+          y1: Float,
+          x2: Float,
+          y2: Float,
+          entry1: LineCartesianLayerModel.Entry,
+          entry2: LineCartesianLayerModel.Entry,
+          series: List<LineCartesianLayerModel.Entry>,
+        ) {
+          path.lineTo(x2, y2)
+        }
       }
 
       /**
@@ -328,9 +343,12 @@ protected constructor(
       y1: Float,
       x2: Float,
       y2: Float,
+      entry1: LineCartesianLayerModel.Entry,
+      entry2: LineCartesianLayerModel.Entry,
+      series: List<LineCartesianLayerModel.Entry>,
     ) {
       if (condition(context, x1, y1, x2, y2)) {
-        fallbackConnector.connect(context, path, x1, y1, x2, y2)
+        fallbackConnector.connect(context, path, x1, y1, x2, y2, entry1, entry2, series)
       } else {
         // Move to the new point instead of connecting
         path.moveTo(x2, y2)
@@ -489,7 +507,7 @@ protected constructor(
             val shouldConnect = line.connectionCondition?.invoke(previousEntry!!, entry) ?: true
 
             if (shouldConnect) {
-              line.pointConnector.connect(this, linePath, prevX, prevY, x, y)
+              line.pointConnector.connect(this, linePath, prevX, prevY, x, y, previousEntry!!, entry, series)
             } else {
               // Move to the new point without connecting (creates a gap)
               linePath.moveTo(x, y)
@@ -671,7 +689,7 @@ protected constructor(
           layerBounds.height()
     }
 
-    series.forEachIn(minX = minX, maxX = maxX, padding = 1) { entry, next ->
+    series.forEachIn(minX = minX, maxX = maxX, padding = 2) { entry, next ->
       val previousX = x
       val immutableX = nextX ?: getDrawX(entry)
       val immutableNextX = next?.let(::getDrawX)
