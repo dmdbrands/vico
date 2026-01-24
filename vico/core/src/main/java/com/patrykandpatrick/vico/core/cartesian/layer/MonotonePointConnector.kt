@@ -225,8 +225,6 @@ internal data class MonotonePointConnector(private val curvature: Float = 0.5f) 
 
     // Convert data-space tangents to screen-space tangents
     // Note: Y-axis is flipped in screen space (bottom is higher Y value)
-    // Use actual dx0 for more accurate conversion
-    val dxData = dx0
     val dxScreen = x2 - x1
 
     // Calculate screen-space tangent: m_screen = (dy_screen / dx_screen)
@@ -289,38 +287,6 @@ internal data class MonotonePointConnector(private val curvature: Float = 0.5f) 
         // Flat segment: both control points should equal y1 (and y2)
         c1y = y1
         c2y = y2
-      }
-    }
-
-    // Clamp control points to bounds to prevent drawing outside chart area
-    // Account for stroke width: shrink bounds by half stroke width + anti-aliasing + safety buffer
-    // This ensures the stroke itself doesn't visually extend beyond bounds
-    val bounds = context.layerBounds
-    val strokeWidthMargin =
-      4f // Accounts for up to 6dp stroke (~18px on 3x devices, half=9px) + anti-aliasing (~1px) + safety (~1px)
-    val effectiveTop = bounds.top + strokeWidthMargin
-    val effectiveBottom = bounds.bottom - strokeWidthMargin
-    val effectiveLeft = bounds.left + strokeWidthMargin
-    val effectiveRight = bounds.right - strokeWidthMargin
-    c1x = c1x.coerceIn(effectiveLeft, effectiveRight)
-    c1y = c1y.coerceIn(effectiveTop, effectiveBottom)
-    c2x = c2x.coerceIn(effectiveLeft, effectiveRight)
-    c2y = c2y.coerceIn(effectiveTop, effectiveBottom)
-
-    // For last segment: ensure curve joins from right of p1 and approaches bottom of p2
-    if (isLastSegment) {
-      // For last segment: preserve original c2y position from extrapolated neighbors
-      // The original c2y already provides smooth approach based on m1Screen calculation
-      // Don't override it - just ensure it's within bounds and maintains monotonicity
-      if (y1 > y2) {
-        // Decreasing segment: ensure c2y is between y2 and y1
-        c2y = c2y.coerceIn(y2, y1).coerceIn(effectiveTop, effectiveBottom)
-      } else if (y1 < y2) {
-        // Increasing segment: ensure c2y is between y1 and y2
-        c2y = c2y.coerceIn(y1, y2).coerceIn(effectiveTop, effectiveBottom)
-      } else {
-        // Flat segment: c2y = y2
-        c2y = y2.coerceIn(effectiveTop, effectiveBottom)
       }
     }
 
