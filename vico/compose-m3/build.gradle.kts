@@ -46,30 +46,39 @@ dependencies {
   implementation(libs.composeMaterial3)
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("release") {
-            groupId = "com.dmdbrands.lib"
-            artifactId = "vico-compose-m3"
-            version = Versions.VICO
-            artifact("build/outputs/aar/compose-m3-debug.aar")
-            artifact(tasks.named("sourcesJar"))
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                groupId = "com.dmdbrands.lib"
+                artifactId = "vico-compose-m3"
+                version = Versions.VICO
+                from(components["release"])
+                artifact(tasks.named("sourcesJar"))
 
-            pom {
-                name.set("Vico Compose M3")
-                description.set("Material 3 theming for Vico charts")
-                withXml {
-                    val deps = asNode().appendNode("dependencies")
-                    val dep = deps.appendNode("dependency")
-                    dep.appendNode("groupId", "com.dmdbrands.lib")
-                    dep.appendNode("artifactId", "vico-compose")
-                    dep.appendNode("version", Versions.VICO)
-                    dep.appendNode("scope", "compile")
+                pom {
+                    name.set("Vico Compose M3")
+                    description.set("Material 3 theming for Vico charts")
+                    withXml {
+                        val deps = asNode().appendNode("dependencies")
+                        val dep = deps.appendNode("dependency")
+                        dep.appendNode("groupId", "com.dmdbrands.lib")
+                        dep.appendNode("artifactId", "vico-compose")
+                        dep.appendNode("version", Versions.VICO)
+                        dep.appendNode("scope", "compile")
+                    }
                 }
             }
         }
-    }
-    repositories {
-        mavenLocal()
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/dmdbrands/vico")
+                credentials {
+                    username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_USERNAME") ?: "Selva-GG"
+                    password = project.findProperty("gpr.token") as String? ?: System.getenv("GITHUB_TOKEN") ?: ""
+                }
+            }
+        }
     }
 }

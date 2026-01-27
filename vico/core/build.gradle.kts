@@ -51,22 +51,31 @@ dependencies {
   testImplementation(libs.testCore)
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("release") {
-            groupId = "com.dmdbrands.lib"
-            artifactId = "vico-core"
-            version = Versions.VICO
-            artifact("build/outputs/aar/core-debug.aar")
-            artifact(tasks.named("sourcesJar"))
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                groupId = "com.dmdbrands.lib"
+                artifactId = "vico-core"
+                version = Versions.VICO
+                from(components["release"])
+                artifact(tasks.named("sourcesJar"))
 
-            pom {
-                name.set("Vico Core")
-                description.set("Core chart library for Android")
+                pom {
+                    name.set("Vico Core")
+                    description.set("Core chart library for Android")
+                }
             }
         }
-    }
-    repositories {
-        mavenLocal()
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/dmdbrands/vico")
+                credentials {
+                    username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_USERNAME") ?: "Selva-GG"
+                    password = project.findProperty("gpr.token") as String? ?: System.getenv("GITHUB_TOKEN") ?: ""
+                }
+            }
+        }
     }
 }
