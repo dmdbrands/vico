@@ -29,9 +29,6 @@ android {
     freeCompilerArgs += listOf("-Xjsr305=strict", "-Xjvm-default=all")
   }
   namespace = moduleNamespace
-  publishing {
-    singleVariant("release")
-  }
 }
 
 kotlin { explicitApi() }
@@ -54,38 +51,23 @@ dependencies {
   testImplementation(libs.kotlinTest)
 }
 
-afterEvaluate {
-    publishing {
-        publications {
-            create<MavenPublication>("release") {
-                groupId = "com.dmdbrands.lib"
-                artifactId = "vico-compose"
-                version = Versions.VICO
-                from(components["release"])
-                artifact(tasks.named("sourcesJar"))
-
-                pom {
-                    name.set("Vico Compose")
-                    description.set("Jetpack Compose chart library")
-                    withXml {
-                        val deps = asNode().appendNode("dependencies")
-                        val dep = deps.appendNode("dependency")
-                        dep.appendNode("groupId", "com.dmdbrands.lib")
-                        dep.appendNode("artifactId", "vico-core")
-                        dep.appendNode("version", Versions.VICO)
-                        dep.appendNode("scope", "compile")
-                    }
-                }
-            }
+publishing {
+    publications {
+        create<MavenPublication>("gpr") {
+            groupId = "com.dmdbrands.lib"
+            artifactId = "vico-compose"
+            version = Versions.VICO
+            artifact("build/outputs/aar/compose-release.aar")
+            artifact(tasks.named("sourcesJar"))
         }
-        repositories {
-            maven {
-                name = "GitHubPackages"
-                url = uri("https://maven.pkg.github.com/dmdbrands/vico")
-                credentials {
-                    username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_USERNAME") ?: "Selva-GG"
-                    password = project.findProperty("gpr.token") as String? ?: System.getenv("GITHUB_TOKEN") ?: ""
-                }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/dmdbrands/vico")
+            credentials {
+                username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_USERNAME") ?: "Selva-GG"
+                password = project.findProperty("gpr.token") as String? ?: System.getenv("GITHUB_TOKEN") ?: ""
             }
         }
     }

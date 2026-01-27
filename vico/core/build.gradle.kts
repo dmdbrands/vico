@@ -28,9 +28,6 @@ android {
     freeCompilerArgs += listOf("-Xjsr305=strict", "-Xjvm-default=all")
   }
   namespace = moduleNamespace
-  publishing {
-    singleVariant("release")
-  }
 }
 
 kotlin { explicitApi() }
@@ -54,30 +51,23 @@ dependencies {
   testImplementation(libs.testCore)
 }
 
-afterEvaluate {
-    publishing {
-        publications {
-            create<MavenPublication>("release") {
-                groupId = "com.dmdbrands.lib"
-                artifactId = "vico-core"
-                version = Versions.VICO
-                from(components["release"])
-                artifact(tasks.named("sourcesJar"))
-
-                pom {
-                    name.set("Vico Core")
-                    description.set("Core chart library for Android")
-                }
-            }
+publishing {
+    publications {
+        create<MavenPublication>("gpr") {
+            groupId = "com.dmdbrands.lib"
+            artifactId = "vico-core"
+            version = Versions.VICO
+            artifact("build/outputs/aar/core-release.aar")
+            artifact(tasks.named("sourcesJar"))
         }
-        repositories {
-            maven {
-                name = "GitHubPackages"
-                url = uri("https://maven.pkg.github.com/dmdbrands/vico")
-                credentials {
-                    username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_USERNAME") ?: "Selva-GG"
-                    password = project.findProperty("gpr.token") as String? ?: System.getenv("GITHUB_TOKEN") ?: ""
-                }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/dmdbrands/vico")
+            credentials {
+                username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_USERNAME") ?: "Selva-GG"
+                password = project.findProperty("gpr.token") as String? ?: System.getenv("GITHUB_TOKEN") ?: ""
             }
         }
     }
