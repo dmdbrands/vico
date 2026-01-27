@@ -107,6 +107,7 @@ public fun CartesianMeasuringContext.interpolateYValue(
       return when (interpolationType) {
         InterpolationType.LINEAR -> linearInterpolation(currentPoint, nextPoint, xValue)
         InterpolationType.CUBIC -> this.cubicInterpolation(series, i, xValue, curvature, minY , maxY)
+        InterpolationType.MONOTONE -> this.monotoneInterpolation(series, i, xValue, minY, maxY)
       }
     }
   }
@@ -206,13 +207,364 @@ private fun CartesianMeasuringContext.cubicInterpolation(
 }
 
 /**
+ * Gets 6 neighboring entries from series for monotone interpolation.
+ * Returns [entry-2, entry-1, entry, entry+1, entry+2, entry+3] where entry is at currentIndex.
+ * Handles edge cases by extrapolating boundary entries for first and last segments.
+ */
+private fun getNeighborsForMonotone(
+  series: List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>,
+  currentIndex: Int,
+): List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry> {
+  if (series.isEmpty()) return emptyList()
+  if (currentIndex < 0 || currentIndex >= series.size) return emptyList()
+
+  val result = mutableListOf<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>()
+  val isFirstSegment = currentIndex == 0
+  val isLastSegment = currentIndex >= series.size - 1
+
+  val entry1 = series[currentIndex]
+  val entry2 = if (currentIndex < series.size - 1) series[currentIndex + 1] else entry1
+
+  // For first segment: extrapolate backward neighbors
+  if (isFirstSegment) {
+    // Get future neighbors to calculate average dx for extrapolation
+    val futureNeighbor1 = series.getOrNull(currentIndex + 2) ?: entry2
+    val futureNeighbor2 = series.getOrNull(currentIndex + 3) ?: futureNeighbor1
+
+    // Calculate average dx from future segments
+    val dx0 = entry2.x - entry1.x
+    val dx1 = futureNeighbor1.x - entry2.x
+    val dx2 = futureNeighbor2.x - futureNeighbor1.x
+
+    // Calculate average dx, fallback to dx0 if others are zero
+    val avgDx = when {
+      dx0 != 0.0 && dx1 != 0.0 && dx2 != 0.0 -> (dx0 + dx1 + dx2) / 3.0
+      dx0 != 0.0 && dx1 != 0.0 -> (dx0 + dx1) / 2.0
+      dx0 != 0.0 -> dx0
+      else -> if (dx1 != 0.0) dx1 else if (dx2 != 0.0) dx2 else 1.0
+    }
+
+    // Determine trend direction
+    val dy0 = entry2.y - entry1.y
+    val isIncreasing = entry1.y < entry2.y
+
+    // Extrapolate backward: continue the trend in reverse
+    val absDy0 = kotlin.math.abs(dy0)
+    val prevY1 = if (isIncreasing) {
+      entry1.y - absDy0 * 0.5
+    } else {
+      entry1.y + absDy0 * 0.5
+    }
+
+    val prevY2 = if (isIncreasing) {
+      prevY1 - absDy0 * 0.3
+    } else {
+      prevY1 + absDy0 * 0.3
+    }
+
+    // Create extrapolated entries for backward neighbors
+    result.add(
+      com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry(
+        entry1.x - 2 * avgDx,
+        prevY2,
+      )
+    )
+    result.add(
+      com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry(
+        entry1.x - avgDx,
+        prevY1,
+      )
+    )
+    result.add(entry1)
+    result.add(entry2)
+  } else {
+    // Normal case: get actual backward neighbors
+    result.add(series.getOrNull(currentIndex - 2) ?: series.first())
+    result.add(series.getOrNull(currentIndex - 1) ?: series.first())
+    result.add(entry1)
+    result.add(entry2)
+  }
+
+  // For last segment: extrapolate future neighbors
+  if (isLastSegment) {
+    val neighbors0 = result[0]
+    val neighbors1 = result[1]
+    val neighbors2 = result[2]
+    val neighbors3 = result[3]
+
+    val dxMinus2 = neighbors1.x - neighbors0.x
+    val dxMinus1 = neighbors2.x - neighbors1.x
+    val dx0 = neighbors3.x - neighbors2.x
+
+    // Calculate average dx
+    val avgDx = when {
+      dxMinus2 != 0.0 && dxMinus1 != 0.0 && dx0 != 0.0 -> (dxMinus2 + dxMinus1 + dx0) / 3.0
+      dxMinus1 != 0.0 && dx0 != 0.0 -> (dxMinus1 + dx0) / 2.0
+      dx0 != 0.0 -> dx0
+      else -> if (dxMinus1 != 0.0) dxMinus1 else if (dxMinus2 != 0.0) dxMinus2 else 1.0
+    }
+
+    // Determine segment direction
+    val dy0 = entry2.y - entry1.y
+    val isIncreasing = entry1.y < entry2.y
+
+    // Extrapolate next points: continue the trend
+    val absDy0 = kotlin.math.abs(dy0)
+    val nextY1 = if (isIncreasing) {
+      entry2.y + absDy0 * 0.5
+    } else {
+      entry2.y - absDy0 * 0.5
+    }
+
+    val nextY2 = if (isIncreasing) {
+      nextY1 + absDy0 * 0.3
+    } else {
+      nextY1 - absDy0 * 0.3
+    }
+
+    // Create extrapolated entries
+    result.add(
+      com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry(
+        entry2.x + avgDx,
+        nextY1,
+      )
+    )
+    result.add(
+      com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry(
+        entry2.x + 2 * avgDx,
+        nextY2,
+      )
+    )
+  } else {
+    // Normal case: get actual future neighbors
+    result.add(series.getOrNull(currentIndex + 2) ?: series.last())
+    result.add(series.getOrNull(currentIndex + 3) ?: series.last())
+  }
+
+  return result
+}
+
+/**
+ * Performs monotone cubic interpolation using Fritsch-Carlson algorithm.
+ * This mimics the behavior of MonotonePointConnector and works entirely in data space.
+ */
+private fun CartesianMeasuringContext.monotoneInterpolation(
+  series: List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>,
+  currentIndex: Int,
+  xValue: Double,
+  minY: Double,
+  maxY: Double,
+): Double {
+  val currentPoint = series[currentIndex]
+  val nextPoint = series[currentIndex + 1]
+
+  // Need at least 2 points for interpolation
+  if (series.size < 2) {
+    return linearInterpolation(currentPoint, nextPoint, xValue)
+  }
+
+  // Get 6 neighbors for Fritsch-Carlson algorithm
+  val neighbors = getNeighborsForMonotone(series, currentIndex)
+  if (neighbors.size < 6) {
+    // Fall back to linear if we don't have enough neighbors
+    return linearInterpolation(currentPoint, nextPoint, xValue)
+  }
+
+  // Calculate secant slopes in DATA SPACE (normalized by dx to handle non-uniform spacing)
+  val dxMinus2 = neighbors[1].x - neighbors[0].x
+  val dxMinus1 = neighbors[2].x - neighbors[1].x
+  val dx0 = neighbors[3].x - neighbors[2].x  // entry2.x - entry1.x
+  val dx1 = neighbors[4].x - neighbors[3].x
+  val dx2 = neighbors[5].x - neighbors[4].x
+
+  // Detect if we're missing past neighbors (first segment case)
+  val hasPastNeighbors = dxMinus2 != 0.0 && dxMinus1 != 0.0
+
+  // Detect if we're missing future neighbors (last segment case)
+  val hasFutureNeighbors = dx1 != 0.0 && dx2 != 0.0
+
+  // Calculate normalized secants (dy/dx)
+  val sMinus2 =
+    if (hasPastNeighbors && dxMinus2 != 0.0) (neighbors[1].y - neighbors[0].y) / dxMinus2 else 0.0
+  val sMinus1 =
+    if (hasPastNeighbors && dxMinus1 != 0.0) (neighbors[2].y - neighbors[1].y) / dxMinus1 else 0.0
+  val s0 = if (dx0 != 0.0) (neighbors[3].y - neighbors[2].y) / dx0 else 0.0
+  val s1 = if (hasFutureNeighbors && dx1 != 0.0) (neighbors[4].y - neighbors[3].y) / dx1 else 0.0
+  val s2 = if (hasFutureNeighbors && dx2 != 0.0) (neighbors[5].y - neighbors[4].y) / dx2 else 0.0
+
+  // Use central differences to calculate initial gradients in DATA SPACE
+  val totalDxMinus = if (hasPastNeighbors) dxMinus2 + dxMinus1 else 0.0
+  val totalDx0 = if (hasPastNeighbors) dxMinus1 + dx0 else dx0
+  val totalDx1 = if (hasFutureNeighbors) dx0 + dx1 else 0.0
+  val totalDx2 = if (hasFutureNeighbors) dx1 + dx2 else 0.0
+
+  var mMinus1Data =
+    if (hasPastNeighbors && totalDxMinus != 0.0) (sMinus2 * dxMinus2 + sMinus1 * dxMinus1) / totalDxMinus else 0.0
+  var m0LeftData = if (totalDx0 != 0.0) {
+    if (hasPastNeighbors) {
+      (sMinus1 * dxMinus1 + s0 * dx0) / totalDx0
+    } else {
+      s0
+    }
+  } else 0.0
+  var m1LeftData =
+    if (hasFutureNeighbors && totalDx1 != 0.0) (s0 * dx0 + s1 * dx1) / totalDx1 else 0.0
+  var m2Data =
+    if (hasFutureNeighbors && totalDx2 != 0.0) (s1 * dx1 + s2 * dx2) / totalDx2 else 0.0
+
+  // For C1 continuity, we calculate gradients for left and right curves
+  var m0RightData = m0LeftData
+  var m1RightData = m1LeftData
+
+  // Handle equal values and sign changes
+  if (neighbors[2].y == neighbors[3].y || dx0 == 0.0) {
+    m0RightData = 0.0
+    m1LeftData = 0.0
+  } else {
+    // Check left curve (only if we have past neighbors)
+    if (hasPastNeighbors && (neighbors[1].y == neighbors[2].y || dxMinus1 == 0.0)) {
+      m0LeftData = 0.0
+    }
+    // Check right curve (only if we have future neighbors)
+    if (hasFutureNeighbors && (neighbors[3].y == neighbors[4].y || dx1 == 0.0)) {
+      m1RightData = 0.0
+    }
+
+    // Handle sign changes - set gradients to zero
+    if (hasPastNeighbors && sMinus2 != 0.0 && sMinus1 != 0.0 && ((sMinus2 < 0.0 && sMinus1 > 0.0) || (sMinus2 > 0.0 && sMinus1 < 0.0))) {
+      mMinus1Data = 0.0
+    }
+    if (hasPastNeighbors && sMinus1 != 0.0 && s0 != 0.0 && ((sMinus1 < 0.0 && s0 > 0.0) || (sMinus1 > 0.0 && s0 < 0.0))) {
+      m0LeftData = 0.0
+      m0RightData = 0.0
+    }
+    if (hasFutureNeighbors && s0 != 0.0 && s1 != 0.0 && ((s0 < 0.0 && s1 > 0.0) || (s0 > 0.0 && s1 < 0.0))) {
+      m1LeftData = 0.0
+      m1RightData = 0.0
+    }
+    if (hasFutureNeighbors && s1 != 0.0 && s2 != 0.0 && ((s1 < 0.0 && s2 > 0.0) || (s1 > 0.0 && s2 < 0.0))) {
+      m2Data = 0.0
+    }
+
+    // Calculate alpha and beta values for Fritsch-Carlson constraint
+    val alphaLeft = if (hasPastNeighbors && sMinus1 != 0.0) mMinus1Data / sMinus1 else 0.0
+    val betaLeft = if (hasPastNeighbors && sMinus1 != 0.0) m0LeftData / sMinus1 else 0.0
+
+    val alphaCent = if (s0 != 0.0) m0RightData / s0 else 0.0
+    val betaCent = if (hasFutureNeighbors && s0 != 0.0) m1LeftData / s0 else 0.0
+
+    val alphaRight = if (hasFutureNeighbors && s1 != 0.0) m1RightData / s1 else 0.0
+    val betaRight = if (hasFutureNeighbors && s1 != 0.0) m2Data / s1 else 0.0
+
+    // Apply Fritsch-Carlson constraint (circle of radius 3)
+    if (hasPastNeighbors) {
+      val discLeft = alphaLeft * alphaLeft + betaLeft * betaLeft
+      if (discLeft.compareTo(9.0) > 0) {
+        val tau = 3.0 / kotlin.math.sqrt(discLeft)
+        m0LeftData = tau * betaLeft * sMinus1
+      }
+    }
+
+    val discCent = alphaCent * alphaCent + betaCent * betaCent
+    if (discCent.compareTo(9.0) > 0) {
+      val tau = 3.0 / kotlin.math.sqrt(discCent)
+      m0RightData = tau * alphaCent * s0
+      if (hasFutureNeighbors) {
+        m1LeftData = tau * betaCent * s0
+      }
+    }
+
+    if (hasFutureNeighbors) {
+      val discRight = alphaRight * alphaRight + betaRight * betaRight
+      if (discRight.compareTo(9.0) > 0) {
+        val tau = 3.0 / kotlin.math.sqrt(discRight)
+        m1RightData = tau * alphaRight * s1
+      }
+    }
+  }
+
+  // Choose gradients with smallest magnitude for C1 continuity
+  var m0Data =
+    if (hasPastNeighbors && kotlin.math.abs(m0LeftData) < kotlin.math.abs(m0RightData)) m0LeftData else m0RightData
+  var m1Data = if (kotlin.math.abs(m1LeftData) < kotlin.math.abs(m1RightData)) m1LeftData else m1RightData
+
+  // Convert data-space tangents to Bézier control points (in data space)
+  // For interpolation, we work directly in data space, no screen-space conversion needed
+  val dxData = dx0
+  val p1 = neighbors[2]  // entry1
+  val p2 = neighbors[3]  // entry2
+
+  // Calculate control points for cubic Bézier curve in data space
+  // Control points are positioned at 1/3 and 2/3 along the segment
+  val t = if (dxData != 0.0) (xValue - p1.x) / dxData else 0.0
+  val clampedT = t.coerceIn(0.0, 1.0)
+
+  // Convert tangents to control point offsets
+  // For a cubic Bézier: control points are at p1 + (dx/3, m0*dx/3) and p2 - (dx/3, m1*dx/3)
+  val dxThird = dxData / 3.0
+  val cp1x = p1.x + dxThird
+  val cp1y = p1.y + m0Data * dxThird
+  val cp2x = p2.x - dxThird
+  val cp2y = p2.y - m1Data * dxThird
+
+  // Enforce monotonicity constraints on control points
+  var finalCp1y = cp1y
+  var finalCp2y = cp2y
+
+  when {
+    p1.y < p2.y -> {
+      // Increasing segment: ensure c1y and c2y are between y1 and y2, and c1y ≤ c2y
+      finalCp1y = cp1y.coerceIn(p1.y, p2.y)
+      finalCp2y = cp2y.coerceIn(p1.y, p2.y)
+      if (finalCp1y > finalCp2y) {
+        val mid = (finalCp1y + finalCp2y) / 2.0
+        finalCp1y = mid.coerceAtMost(p2.y)
+        finalCp2y = mid.coerceAtLeast(p1.y)
+      }
+    }
+    p1.y > p2.y -> {
+      // Decreasing segment: ensure c1y and c2y are between y2 and y1, and c1y ≥ c2y
+      finalCp1y = cp1y.coerceIn(p2.y, p1.y)
+      finalCp2y = cp2y.coerceIn(p2.y, p1.y)
+      if (finalCp1y < finalCp2y) {
+        val mid = (finalCp1y + finalCp2y) / 2.0
+        finalCp1y = mid.coerceAtLeast(p2.y)
+        finalCp2y = mid.coerceAtMost(p1.y)
+      }
+    }
+    else -> {
+      // Flat segment: both control points should equal y1 (and y2)
+      finalCp1y = p1.y
+      finalCp2y = p2.y
+    }
+  }
+
+  // Evaluate cubic Bézier curve at t
+  // B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
+  val oneMinusT = 1.0 - clampedT
+  val oneMinusTSquared = oneMinusT * oneMinusT
+  val oneMinusTCubed = oneMinusTSquared * oneMinusT
+  val tSquared = clampedT * clampedT
+  val tCubed = tSquared * clampedT
+
+  val y = oneMinusTCubed * p1.y +
+    3.0 * oneMinusTSquared * clampedT * finalCp1y +
+    3.0 * oneMinusT * tSquared * finalCp2y +
+    tCubed * p2.y
+
+  return y
+}
+
+/**
  * Enum representing different interpolation types.
  */
 public enum class InterpolationType {
   /** Linear interpolation between points */
   LINEAR,
   /** Cubic Bézier curve interpolation */
-  CUBIC
+  CUBIC,
+  /** Monotone cubic interpolation using Fritsch-Carlson algorithm */
+  MONOTONE
 }
 
 /**
