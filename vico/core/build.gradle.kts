@@ -28,6 +28,9 @@ android {
     freeCompilerArgs += listOf("-Xjsr305=strict", "-Xjvm-default=all")
   }
   namespace = moduleNamespace
+  publishing {
+    singleVariant("release")
+  }
 }
 
 kotlin { explicitApi() }
