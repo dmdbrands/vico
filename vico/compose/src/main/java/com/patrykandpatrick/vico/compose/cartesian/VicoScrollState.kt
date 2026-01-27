@@ -396,8 +396,9 @@ public class VicoScrollState {
         val interpolatedYValues = mutableListOf<Number>()
 
         // Interpolate Y value for each X position
+        // Note: minY and maxY are no longer needed as interpolation works directly with data values
         xValues.forEach { xValue ->
-          val interpolatedY = context.interpolateYValue(series, xValue.toDouble(), interpolationType, curvature, lineModel.minY, lineModel.maxY)
+          val interpolatedY = context.interpolateYValue(series, xValue.toDouble(), interpolationType, curvature)
 
           if (interpolatedY != null) {
             val roundedY = kotlin.math.round(interpolatedY * 100.0) / 100.0

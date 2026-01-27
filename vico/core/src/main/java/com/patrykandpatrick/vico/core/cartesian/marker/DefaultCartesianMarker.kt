@@ -288,7 +288,7 @@ public open class DefaultCartesianMarker(
 
       if (lineModel.series.isNotEmpty()) {
         val series = lineModel.series.first()
-        val interpolatedY = context.interpolateYValue(series, averageX, interpolationType, curvature, lineModel.minY , lineModel.maxY)
+        val interpolatedY = context.interpolateYValue(series, averageX, interpolationType, curvature)
 
         if (interpolatedY != null) {
           val roundedY = kotlin.math.round(interpolatedY * 100.0) / 100.0

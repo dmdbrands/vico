@@ -88,8 +88,8 @@ public fun CartesianMeasuringContext.interpolateYValue(
   xValue: Double,
   interpolationType: InterpolationType,
   curvature: Float = 0.5f,
-  minY : Double,
-  maxY : Double,
+  minY : Double? = null,
+  maxY : Double? = null,
 ): Double? {
   if (series.isEmpty()) return null
 
@@ -106,8 +106,8 @@ public fun CartesianMeasuringContext.interpolateYValue(
     if (xValue >= currentPoint.x && xValue <= nextPoint.x) {
       return when (interpolationType) {
         InterpolationType.LINEAR -> linearInterpolation(currentPoint, nextPoint, xValue)
-        InterpolationType.CUBIC -> this.cubicInterpolation(series, i, xValue, curvature, minY , maxY)
-        InterpolationType.MONOTONE -> this.monotoneInterpolation(series, i, xValue, minY, maxY)
+        InterpolationType.CUBIC -> this.cubicInterpolation(series, i, xValue, curvature)
+        InterpolationType.MONOTONE -> this.monotoneInterpolation(series, i, xValue)
       }
     }
   }
@@ -137,53 +137,41 @@ private fun linearInterpolation(
 
 /**
  * Performs cubic Bézier interpolation between points.
- * This mimics the behavior of CubicPointConnector and considers the chart's Y ranges.
+ * This mimics the behavior of CubicPointConnector but works in data space.
+ * Note: For interpolation, we work directly with data values and don't normalize by Y range,
+ * as the interpolation should be independent of the visible chart range.
  */
 private fun CartesianMeasuringContext.cubicInterpolation(
   series: List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>,
   currentIndex: Int,
   xValue: Double,
   curvature: Float,
-  minY: Double,
-  maxY: Double
 ): Double {
   val currentPoint = series[currentIndex]
   val nextPoint = series[currentIndex + 1]
 
-  // For cubic interpolation, we need at least 4 points to create a proper curve
-  // If we don't have enough points, fall back to linear interpolation
-  if (series.size < 4) {
+  // For cubic interpolation, we need at least 2 points
+  if (series.size < 2) {
     return linearInterpolation(currentPoint, nextPoint, xValue)
   }
 
-  // Get control points for cubic Bézier curve
-  val p0 = if (currentIndex > 0) series[currentIndex - 1] else currentPoint
   val p1 = currentPoint
   val p2 = nextPoint
-  val p3 = if (currentIndex < series.size - 2) series[currentIndex + 2] else nextPoint
 
   // Calculate the parameter t (0 to 1) for the given x value
-  val t = (xValue - p1.x) / (p2.x - p1.x)
+  val dx = p2.x - p1.x
+  if (dx == 0.0) {
+    return p1.y
+  }
 
-  // Clamp t to [0, 1] range
+  val t = (xValue - p1.x) / dx
   val clampedT = t.coerceIn(0.0, 1.0)
 
   // Calculate control points for the cubic Bézier curve
-  // This mimics the CubicPointConnector logic but considers the chart's Y range
-  val yRange = maxY - minY
-
-  // Debug logging to help identify issues
-  android.util.Log.d("CUBIC_INTERPOLATION", "Y Range: minY=${minY}, maxY=${maxY}, yRange=$yRange")
-  android.util.Log.d("CUBIC_INTERPOLATION", "Points: p1=(${p1.x}, ${p1.y}), p2=(${p2.x}, ${p2.y})")
-
-  // Safety check to avoid division by zero
-  if (yRange <= 0) {
-    android.util.Log.w("CUBIC_INTERPOLATION", "Invalid Y range, falling back to linear interpolation")
-    return linearInterpolation(currentPoint, nextPoint, xValue)
-  }
-
-  val normalizedYDelta = kotlin.math.abs(p2.y - p1.y) / yRange
-  val xDelta = (4 * normalizedYDelta).coerceAtMost(1.0) * curvature * (p2.x - p1.x)
+  // Use a simple approach: control points are offset by a fraction of the segment length
+  // This mimics CubicPointConnector's behavior but adapted for data space
+  // The curvature parameter directly controls the control point offset
+  val xDelta = curvature * dx * 0.33  // Use 1/3 of segment length scaled by curvature
 
   val cp1x = p1.x + xDelta
   val cp1y = p1.y
@@ -191,7 +179,6 @@ private fun CartesianMeasuringContext.cubicInterpolation(
   val cp2y = p2.y
 
   // Cubic Bézier formula: B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
-  // For our case, we use the control points we calculated
   val oneMinusT = 1.0 - clampedT
   val oneMinusTSquared = oneMinusT * oneMinusT
   val oneMinusTCubed = oneMinusTSquared * oneMinusT
@@ -199,8 +186,8 @@ private fun CartesianMeasuringContext.cubicInterpolation(
   val tCubed = tSquared * clampedT
 
   val y = oneMinusTCubed * p1.y +
-          3 * oneMinusTSquared * clampedT * cp1y +
-          3 * oneMinusT * tSquared * cp2y +
+          3.0 * oneMinusTSquared * clampedT * cp1y +
+          3.0 * oneMinusT * tSquared * cp2y +
           tCubed * p2.y
 
   return y
@@ -347,13 +334,13 @@ private fun getNeighborsForMonotone(
 /**
  * Performs monotone cubic interpolation using Fritsch-Carlson algorithm.
  * This mimics the behavior of MonotonePointConnector and works entirely in data space.
+ * Note: This function doesn't use Y range normalization as interpolation should work
+ * directly with data values, independent of the visible chart range.
  */
 private fun CartesianMeasuringContext.monotoneInterpolation(
   series: List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>,
   currentIndex: Int,
   xValue: Double,
-  minY: Double,
-  maxY: Double,
 ): Double {
   val currentPoint = series[currentIndex]
   val nextPoint = series[currentIndex + 1]
