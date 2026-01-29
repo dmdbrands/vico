@@ -18,6 +18,7 @@ package com.patrykandpatrick.vico.core.cartesian
 
 import android.graphics.Canvas
 import android.graphics.RectF
+import android.util.Log
 import androidx.annotation.RestrictTo
 import androidx.compose.runtime.Stable
 import com.patrykandpatrick.vico.core.cartesian.CartesianChart.PersistentMarkerScope
@@ -264,15 +265,28 @@ private constructor(
     layerDimensions: MutableCartesianLayerDimensions
   ): Float {
     with(context) {
-      // Use layerBounds which has the correct value and is now available
-      val availableWidth = layerBounds.width() + layerDimensions.unscalablePadding
+      // Use layerBounds.width() plus a small portion of right margin to get slightly more available width
+      // Adding half the right margin gives a little more space without being too large
+      val availableWidth = layerBounds.width() + (layerMargins.getRight(isLtr) * 0.026f)
       val currentSpacing = layerDimensions.xSpacing
 
       if (currentSpacing <= 0f || availableWidth <= 0f) return 1f
 
-      // Calculate desired spacing based on visible labels count
-      // We need spacing for (visibleLabelsCount - 1) intervals between the labels
-      val desiredSpacing = availableWidth / (visibleLabelsCount )
+      // visibleLabelsCount represents the number of intervals (count), not x range difference
+      // Use it directly as the number of intervals for spacing calculation
+      val intervalsToUse = if (visibleLabelsCount > 0) {
+        visibleLabelsCount
+      } else {
+        // Fallback: calculate from ranges if visibleLabelsCount not provided
+        (ranges.xLength / ranges.xStep).coerceAtLeast(1.0)
+      }
+
+      // Calculate desired spacing: divide available width by number of intervals
+      val desiredSpacing = availableWidth / intervalsToUse
+
+      // #region agent log
+      Log.d("CartesianChart", "[HYP-C] Using interval count: availableWidth=$availableWidth (layerBounds=${layerBounds.width()}, addedMargin=${layerMargins.getRight(isLtr) * 0.0225f}), currentSpacing=$currentSpacing, visibleLabelsCount=$visibleLabelsCount (intervals), intervalsToUse=$intervalsToUse, desiredSpacing=$desiredSpacing, xStep=${ranges.xStep}, xLength=${ranges.xLength}")
+      // #endregion
 
       // Return the scale factor needed to achieve desired spacing
       return (desiredSpacing / currentSpacing).toFloat() // Reasonable limits
@@ -327,6 +341,14 @@ private constructor(
         canvasBounds.bottom - layerMargins.bottom - legendHeight,
       )
 
+      axisManager.setAxesBounds(context, canvasBounds, layerBounds, layerMargins)
+      legend?.setBounds(
+        left = canvasBounds.left,
+        top = layerBounds.bottom + layerMargins.bottom,
+        right = canvasBounds.right,
+        bottom = layerBounds.bottom + layerMargins.bottom + legendHeight,
+      )
+
       // Apply spacing adjustment for visible labels if specified (after layerBounds is set)
       if (visibleLabelsCount > 0) {
         val scaleFactor = calculateLabelSpacingScale(context, layerDimensions)
@@ -335,13 +357,6 @@ private constructor(
         }
       }
 
-      axisManager.setAxesBounds(context, canvasBounds, layerBounds, layerMargins)
-      legend?.setBounds(
-        left = canvasBounds.left,
-        top = layerBounds.bottom + layerMargins.bottom,
-        right = canvasBounds.right,
-        bottom = layerBounds.bottom + layerMargins.bottom + legendHeight,
-      )
     }
   }
 

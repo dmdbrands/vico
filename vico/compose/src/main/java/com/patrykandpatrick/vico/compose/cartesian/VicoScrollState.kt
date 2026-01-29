@@ -348,6 +348,40 @@ public class VicoScrollState {
   }
 
   /**
+   * Returns whether the chart can scroll forward (to the right/increasing scroll value).
+   * 
+   * @return true if the current scroll value is less than maxValue (can scroll forward), false otherwise.
+   * If initial scroll hasn't been handled yet, checks if initial scroll is not at End position.
+   */
+  public val canScrollForward: Boolean
+    get() {
+      if (!scrollEnabled || maxValue < 0f) return false
+      // If initial scroll hasn't been handled, check if initial scroll is not at End
+      if (!initialScrollHandled) {
+        return initialScroll !== Scroll.Absolute.End
+      }
+      // Otherwise, check if current value is less than maxValue
+      return value < maxValue
+    }
+
+  /**
+   * Returns whether the chart can scroll backward (to the left/decreasing scroll value).
+   * 
+   * @return true if the current scroll value is greater than 0 (can scroll backward), false otherwise.
+   * If initial scroll hasn't been handled yet, checks if initial scroll is not at Start position.
+   */
+  public val canScrollBackward: Boolean
+    get() {
+      if (!scrollEnabled) return false
+      // If initial scroll hasn't been handled, check if initial scroll is not at Start
+      if (!initialScrollHandled) {
+        return initialScroll !== Scroll.Absolute.Start
+      }
+      // Otherwise, check if current value is greater than 0
+      return value > 0f
+    }
+
+  /**
    * Returns a list of x-axis label values that are currently visible in the chart.
    * This is a convenience method that uses the scroll state's current drawing context.
    *
