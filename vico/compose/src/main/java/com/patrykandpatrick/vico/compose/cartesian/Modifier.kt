@@ -157,11 +157,9 @@ private fun createSnapBehavior(scrollState: VicoScrollState, config: SnapBehavio
 
             val finalSnapOffset =
                 if (approachedLabel != null && layerDimensions != null && context != null && bounds != null) {
-                    // With visible-window padding, Scroll.Absolute.x puts data X at viewport left edge.
-                    // We want data-only start = approachedLabel, so viewport start = approachedLabel - startPad.
-                    val startPad = context.layerPadding.visibleStartPaddingXStep * context.ranges.xStep
-                    val scrollTargetX = approachedLabel - startPad
-                    val targetScrollPosition = Scroll.Absolute.x(scrollTargetX, bias = 0f)
+                    // Same convention as GraphView initial scroll: x = viewport start (first data point), no padding subtraction.
+                    // Scroll.Absolute.x(x) puts x at the viewport left edge, so use approachedLabel directly.
+                    val targetScrollPosition = Scroll.Absolute.x(approachedLabel, bias = 0f)
                         .getValue(context, layerDimensions, bounds, maxValue)
 
                     // Get current scroll position

@@ -16,7 +16,6 @@
 
 package com.patrykandpatrick.vico.core.cartesian.axis
 
-import android.util.Log
 import androidx.annotation.RestrictTo
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
@@ -401,7 +400,13 @@ protected constructor(
 
     val firstLabelValue = itemPlacer.getFirstLabelValue(context, maxLabelWidth)
     val lastLabelValue = itemPlacer.getLastLabelValue(context, maxLabelWidth)
-    if (firstLabelValue != null) {
+    // When visible-window padding is set, do not add axis unscalable padding to layer dimensions.
+    // Otherwise getFullXRange extends the range by that padding, and we also draw visible-window
+    // padding, resulting in the gap being applied twice (e.g. 0.5 appearing as 1.0).
+    val useVisibleWindowPadding =
+      context.layerPadding.visibleStartPaddingXStep > 0.0 ||
+        context.layerPadding.visibleEndPaddingXStep > 0.0
+    if (firstLabelValue != null && !useVisibleWindowPadding) {
       val text =
         valueFormatter.formatForAxis(
           context = context,
@@ -421,8 +426,9 @@ protected constructor(
         unscalableStartPadding -=
           (firstLabelValue - ranges.minX).toFloat() * layerDimensions.xSpacing
       }
+      layerDimensions.ensureValuesAtLeast(unscalableStartPadding = unscalableStartPadding)
     }
-    if (lastLabelValue != null) {
+    if (lastLabelValue != null && !useVisibleWindowPadding) {
       val text =
         valueFormatter.formatForAxis(
           context = context,
@@ -438,7 +444,11 @@ protected constructor(
             pad = true,
           )
           .half
-
+      if (!context.zoomEnabled) {
+        unscalableEndPadding -=
+          ((ranges.maxX - lastLabelValue) * layerDimensions.xSpacing).toFloat()
+      }
+      layerDimensions.ensureValuesAtLeast(unscalableEndPadding = unscalableEndPadding)
     }
   }
 

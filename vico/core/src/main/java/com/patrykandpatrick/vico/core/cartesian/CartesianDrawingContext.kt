@@ -65,7 +65,7 @@ internal fun CartesianDrawingContext.getVisibleXRange(): ClosedFloatingPointRang
  * values and current [CartesianLayerDimensions.xSpacing]. Used when drawing so the visible
  * window shows [gap][first visible]…[last visible][gap]. Returns (0f, 0f) when xSpacing is 0
  * or padding xStep values are non-positive.
- * At full range start: no start padding (no gap before first data). At full range end: no end padding (no gap after last data).
+ * At full range start: no gap before first data. At full range end: no gap after last data.
  */
 internal fun CartesianDrawingContext.getVisibleWindowPaddingPx(): Pair<Float, Float> =
   layerPadding.run {

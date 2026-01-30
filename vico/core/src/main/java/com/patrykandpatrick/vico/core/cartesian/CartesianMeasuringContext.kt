@@ -17,6 +17,7 @@
 package com.patrykandpatrick.vico.core.cartesian
 
 import android.graphics.RectF
+import android.util.Log
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModel
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges
 import com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel
@@ -26,7 +27,6 @@ import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerPadding
 import com.patrykandpatrick.vico.core.common.MeasuringContext
 import com.patrykandpatrick.vico.core.common.Point
 import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.sqrt
 
 /** A [MeasuringContext] extension with [CartesianChart]-specific data. */
@@ -66,8 +66,9 @@ public fun CartesianMeasuringContext.getFullXRange(layerDimensions: CartesianLay
   }
 
 /**
- * Returns the data-only visible x range: the x range that corresponds to the data region
- * (between the visible-window padding gaps). At full range start/end no adjustment is applied.
+ * Returns the visible x range (viewport): the x range that is mapped onto the chart layer.
+ * This matches what is drawn: the full viewport is mapped onto the data strip (with visible-window
+ * padding only affecting pixel layout, not the x range). So the returned range is viewport start..end.
  */
 public fun CartesianMeasuringContext.getVisibleXRange(
   bounds: RectF,
@@ -81,20 +82,13 @@ public fun CartesianMeasuringContext.getVisibleXRange(
     )
   val end =
     (start + bounds.width() / layerDimensions.xSpacing * ranges.xStep).coerceAtMost(maximumValue = fullRange.endInclusive)
-
-  val xSpacing = layerDimensions.xSpacing
-  if (xSpacing <= 0f) return start..end
-
-  val epsilon = 1e-9 * max(ranges.xStep, 1.0)
-  val atFullRangeStart = start <= fullRange.start + epsilon
-  val atFullRangeEnd = end >= fullRange.endInclusive - epsilon
-  val effectiveStartSteps = if (atFullRangeStart) 0.0 else layerPadding.visibleStartPaddingXStep
-  val effectiveEndSteps = if (atFullRangeEnd) 0.0 else layerPadding.visibleEndPaddingXStep
-
-  val dataOnlyStart = (start + effectiveStartSteps * ranges.xStep).coerceIn(fullRange.start, end)
-  val dataOnlyEnd =
-    (end - effectiveEndSteps * ranges.xStep).coerceIn(dataOnlyStart, fullRange.endInclusive)
-  return dataOnlyStart..dataOnlyEnd
+  Log.d(
+    "VicoScrollState",
+    "getVisibleXRange: scroll=$scroll (px), fullRange.start=${fullRange.start}, fullRange.end=${fullRange.endInclusive}, " +
+      "xSpacing=${layerDimensions.xSpacing}, xStep=${ranges.xStep}, bounds.width()=${bounds.width()}, " +
+      "layoutDirectionMultiplier=$layoutDirectionMultiplier -> start=$start, end=$end",
+  )
+  return start..end
 }
 
 

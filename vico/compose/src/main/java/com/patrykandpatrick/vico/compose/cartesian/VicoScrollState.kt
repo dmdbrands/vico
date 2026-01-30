@@ -116,6 +116,9 @@ public class VicoScrollState {
 
   /** Function for custom snap behavior - takes current X label and returns snapped X label */
 
+  /** True for the first emit after initial scroll is applied (for debug logging). */
+  private var justAppliedInitialScroll: Boolean = false
+
   private var boundaryDelayStartTime: Long = 0L
   private val boundaryDelayMs = 300L
 
@@ -274,12 +277,15 @@ public class VicoScrollState {
       )
       _visibleRange.tryEmit(visibleRange)
       currentVisibleRange = visibleRange
-      // Visible range is data-only (data region between padding gaps); boundary logic applied in getVisibleXRange.
+      val source = if (justAppliedInitialScroll) "INITIAL" else "AFTER_DRAG/FLING"
+      justAppliedInitialScroll = false
+      // Visible range is viewport (matches what is drawn in the data strip).
       Log.d(
         "VicoScrollState",
-        "Visible range (data-only): start=${visibleXRange.start}, endInclusive=${visibleXRange.endInclusive}. " +
-          "Visible-window padding xStep: start=${context.layerPadding.visibleStartPaddingXStep}, end=${context.layerPadding.visibleEndPaddingXStep}. " +
-          "scroll=$value, bounds.width()=${bounds.width()}"
+        "[$source] Visible range: start=${visibleXRange.start}, endInclusive=${visibleXRange.endInclusive}. " +
+          "scroll(value)=$value (px), maxValue=$maxValue, bounds.width()=${bounds.width()}, " +
+          "fullXRange.start=${fullXRange.start}, fullXRange.end=${fullXRange.endInclusive}, " +
+          "xSpacing=${layerDimensions.xSpacing}, xStep=${context.ranges.xStep}"
       )
   }
 
@@ -295,10 +301,16 @@ public class VicoScrollState {
     if (!initialScrollHandled) {
       value = initialScroll.getValue(context, layerDimensions, bounds, maxValue)
       initialScrollHandled = true
-      // Don't emit visible range on initial setup
-    } else {
-        emitVisibleRange(context, layerDimensions, bounds)
+      justAppliedInitialScroll = true
+      val fullRange = context.getFullXRange(layerDimensions)
+      Log.d(
+        "VicoScrollState",
+        "INITIAL scroll applied: scroll(value)=$value (px), maxValue=$maxValue, " +
+          "fullRange.start=${fullRange.start}, fullRange.end=${fullRange.endInclusive}, " +
+          "bounds.width()=${bounds.width()}, xSpacing=${layerDimensions.xSpacing}, xStep=${context.ranges.xStep}"
+      )
     }
+    emitVisibleRange(context, layerDimensions, bounds)
   }
 
   internal fun updateDrawingContext(drawingContext: CartesianDrawingContext) {
