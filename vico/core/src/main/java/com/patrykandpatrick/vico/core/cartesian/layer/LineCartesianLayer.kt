@@ -27,6 +27,8 @@ import androidx.annotation.FloatRange
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
+import com.patrykandpatrick.vico.core.cartesian.getVisibleWindowPaddingPx
+import com.patrykandpatrick.vico.core.cartesian.getVisibleXRange
 import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
 import com.patrykandpatrick.vico.core.cartesian.axis.Axis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
@@ -477,6 +479,26 @@ protected constructor(
 
       val drawingModel = extraStore.getOrNull(drawingModelKey)
 
+      val (visibleStartPx, visibleEndPx) = getVisibleWindowPaddingPx()
+      val useVisibleWindowPadding = visibleStartPx > 0f || visibleEndPx > 0f
+      val visibleXRange = if (useVisibleWindowPadding) getVisibleXRange() else null
+      val visibleSpan = visibleXRange?.let { it.endInclusive - it.start } ?: 0.0
+      val dataWidthPx =
+        if (useVisibleWindowPadding && visibleSpan > 0)
+          (layerBounds.width() - visibleStartPx - visibleEndPx).coerceAtLeast(0f)
+        else
+          0f
+      val effectiveXSpacing =
+        if (useVisibleWindowPadding && visibleSpan > 0 && dataWidthPx > 0f)
+          dataWidthPx / (visibleSpan / ranges.xStep).toFloat()
+        else
+          null
+      val useVisibleMapping =
+        useVisibleWindowPadding &&
+          visibleXRange != null &&
+          effectiveXSpacing != null &&
+          effectiveXSpacing > 0f
+
       model.series.forEachIndexed { seriesIndex, series ->
         val pointInfoMap = drawingModel?.getOrNull(seriesIndex)
 
@@ -486,11 +508,12 @@ protected constructor(
         var prevX = layerBounds.getStart(isLtr = isLtr)
         var prevY = layerBounds.bottom
 
-        val drawingStartAlignmentCorrection =
-          layoutDirectionMultiplier * layerDimensions.startPadding
-
         val drawingStart =
-          layerBounds.getStart(isLtr = isLtr) + drawingStartAlignmentCorrection - scroll
+          if (useVisibleMapping)
+            layerBounds.getStart(isLtr = isLtr) + layoutDirectionMultiplier * visibleStartPx
+          else
+            layerBounds.getStart(isLtr = isLtr) +
+              layoutDirectionMultiplier * layerDimensions.startPadding - scroll
 
         var previousEntry: LineCartesianLayerModel.Entry? = null
 
@@ -499,6 +522,9 @@ protected constructor(
           drawingStart = drawingStart,
           pointInfoMap = pointInfoMap,
           drawFullLineLength = line.stroke is LineStroke.Dashed,
+          visibleMinX = visibleXRange?.start,
+          visibleMaxX = visibleXRange?.endInclusive,
+          effectiveXSpacing = effectiveXSpacing,
         ) { entry, x, y, _, _ ->
           if (linePath.isEmpty) {
             linePath.moveTo(x, y)
@@ -533,11 +559,27 @@ protected constructor(
         canvas.drawBitmap(lineBitmap, 0f, 0f, null)
         canvas.restore()
 
-        forEachPointInBounds(series, drawingStart, pointInfoMap) { entry, x, y, _, _ ->
+        forEachPointInBounds(
+          series = series,
+          drawingStart = drawingStart,
+          pointInfoMap = pointInfoMap,
+          visibleMinX = visibleXRange?.start,
+          visibleMaxX = visibleXRange?.endInclusive,
+          effectiveXSpacing = effectiveXSpacing,
+        ) { entry, x, y, _, _ ->
           updateMarkerTargets(entry, x, y, lineFillBitmap)
         }
 
-        drawPointsAndDataLabels(line, series, seriesIndex, drawingStart, pointInfoMap)
+        drawPointsAndDataLabels(
+          line = line,
+          series = series,
+          seriesIndex = seriesIndex,
+          drawingStart = drawingStart,
+          pointInfoMap = pointInfoMap,
+          visibleMinX = visibleXRange?.start,
+          visibleMaxX = visibleXRange?.endInclusive,
+          effectiveXSpacing = effectiveXSpacing,
+        )
 
         canvas.restore()
       }
@@ -574,11 +616,17 @@ protected constructor(
     seriesIndex: Int,
     drawingStart: Float,
     pointInfoMap: Map<Double, LineCartesianLayerDrawingModel.Entry>?,
+    visibleMinX: Double? = null,
+    visibleMaxX: Double? = null,
+    effectiveXSpacing: Float? = null,
   ) {
     forEachPointInBounds(
       series = series,
       drawingStart = drawingStart,
       pointInfoMap = pointInfoMap,
+      visibleMinX = visibleMinX,
+      visibleMaxX = visibleMaxX,
+      effectiveXSpacing = effectiveXSpacing,
     ) { chartEntry, x, y, previousX, nextX ->
       val point = line.pointProvider?.getPoint(chartEntry, seriesIndex, model.extraStore)
       point?.draw(this, x, y)
@@ -663,13 +711,18 @@ protected constructor(
     drawingStart: Float,
     pointInfoMap: Map<Double, LineCartesianLayerDrawingModel.Entry>?,
     drawFullLineLength: Boolean = false,
+    visibleMinX: Double? = null,
+    visibleMaxX: Double? = null,
+    effectiveXSpacing: Float? = null,
     action:
       (
         entry: LineCartesianLayerModel.Entry, x: Float, y: Float, previousX: Float?, nextX: Float?,
       ) -> Unit,
   ) {
-    val minX = ranges.minX
-    val maxX = ranges.maxX
+    val useVisibleMapping =
+      visibleMinX != null && visibleMaxX != null && effectiveXSpacing != null && effectiveXSpacing > 0f
+    val minX = if (useVisibleMapping) visibleMinX!! else ranges.minX
+    val maxX = if (useVisibleMapping) visibleMaxX!! else ranges.maxX
     val xStep = ranges.xStep
 
     var x: Float? = null
@@ -679,8 +732,12 @@ protected constructor(
     val boundsEnd = boundsStart + layoutDirectionMultiplier * layerBounds.width()
 
     fun getDrawX(entry: LineCartesianLayerModel.Entry): Float =
-      drawingStart +
-        layoutDirectionMultiplier * layerDimensions.xSpacing * ((entry.x - minX) / xStep).toFloat()
+      if (useVisibleMapping)
+        drawingStart +
+          layoutDirectionMultiplier * effectiveXSpacing!! * ((entry.x - minX) / xStep).toFloat()
+      else
+        drawingStart +
+          layoutDirectionMultiplier * layerDimensions.xSpacing * ((entry.x - minX) / xStep).toFloat()
 
     fun getDrawY(entry: LineCartesianLayerModel.Entry): Float {
       val yRange = ranges.getYRange(verticalAxisPosition)

@@ -16,13 +16,18 @@
 
 package com.patrykandpatrick.vico.core.cartesian
 
+import android.graphics.RectF
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModel
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges
+import com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerPadding
 import com.patrykandpatrick.vico.core.common.MeasuringContext
 import com.patrykandpatrick.vico.core.common.Point
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.sqrt
 
 /** A [MeasuringContext] extension with [CartesianChart]-specific data. */
 public interface CartesianMeasuringContext : MeasuringContext {
@@ -38,11 +43,11 @@ public interface CartesianMeasuringContext : MeasuringContext {
   /** Whether zoom is enabled. */
   public val zoomEnabled: Boolean
 
-  public val scroll : Float
+  public val scroll: Float
 
-  public val initialScroll : Scroll.Absolute
+  public val initialScroll: Scroll.Absolute
 
-  public val isInitializedScroll : Boolean
+  public val isInitializedScroll: Boolean
 
   /** Stores the [CartesianLayer] padding values. */
   public val layerPadding: CartesianLayerPadding
@@ -51,25 +56,46 @@ public interface CartesianMeasuringContext : MeasuringContext {
   public val pointerPosition: Point?
 }
 
-public fun CartesianMeasuringContext.getFullXRange(layerDimensions: CartesianLayerDimensions) =
+public fun CartesianMeasuringContext.getFullXRange(layerDimensions: CartesianLayerDimensions): ClosedFloatingPointRange<Double> =
   layerDimensions.run {
-    val start = (ranges.minX - startPadding / xSpacing * ranges.xStep).coerceAtLeast(minimumValue = ranges.minX)
-    val end = (ranges.maxX + endPadding / xSpacing * ranges.xStep).coerceAtMost(maximumValue = ranges.maxX)
+    val start =
+      (ranges.minX - startPadding / xSpacing * ranges.xStep).coerceAtLeast(minimumValue = ranges.minX)
+    val end =
+      (ranges.maxX + endPadding / xSpacing * ranges.xStep).coerceAtMost(maximumValue = ranges.maxX)
     start..end
   }
 
+/**
+ * Returns the data-only visible x range: the x range that corresponds to the data region
+ * (between the visible-window padding gaps). At full range start/end no adjustment is applied.
+ */
 public fun CartesianMeasuringContext.getVisibleXRange(
-  bounds: android.graphics.RectF,
+  bounds: RectF,
   layerDimensions: CartesianLayerDimensions,
   scroll: Float,
 ): ClosedFloatingPointRange<Double> {
   val fullRange = getFullXRange(layerDimensions)
   val start =
-    (fullRange.start + layoutDirectionMultiplier * scroll / layerDimensions.xSpacing * ranges.xStep).coerceAtLeast(minimumValue = fullRange.start)
-  val end = (start + bounds.width() / layerDimensions.xSpacing * ranges.xStep).coerceAtMost(maximumValue = fullRange.endInclusive)
-  return start..end
-}
+    (fullRange.start + layoutDirectionMultiplier * scroll / layerDimensions.xSpacing * ranges.xStep).coerceAtLeast(
+      minimumValue = fullRange.start,
+    )
+  val end =
+    (start + bounds.width() / layerDimensions.xSpacing * ranges.xStep).coerceAtMost(maximumValue = fullRange.endInclusive)
 
+  val xSpacing = layerDimensions.xSpacing
+  if (xSpacing <= 0f) return start..end
+
+  val epsilon = 1e-9 * max(ranges.xStep, 1.0)
+  val atFullRangeStart = start <= fullRange.start + epsilon
+  val atFullRangeEnd = end >= fullRange.endInclusive - epsilon
+  val effectiveStartSteps = if (atFullRangeStart) 0.0 else layerPadding.visibleStartPaddingXStep
+  val effectiveEndSteps = if (atFullRangeEnd) 0.0 else layerPadding.visibleEndPaddingXStep
+
+  val dataOnlyStart = (start + effectiveStartSteps * ranges.xStep).coerceIn(fullRange.start, end)
+  val dataOnlyEnd =
+    (end - effectiveEndSteps * ranges.xStep).coerceIn(dataOnlyStart, fullRange.endInclusive)
+  return dataOnlyStart..dataOnlyEnd
+}
 
 
 /**
@@ -84,12 +110,12 @@ public fun CartesianMeasuringContext.getVisibleXRange(
  * @return the interpolated Y value, or null if the X value is outside the data range
  */
 public fun CartesianMeasuringContext.interpolateYValue(
-  series: List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>,
+  series: List<LineCartesianLayerModel.Entry>,
   xValue: Double,
   interpolationType: InterpolationType,
   curvature: Float = 0.5f,
-  minY : Double? = null,
-  maxY : Double? = null,
+  minY: Double? = null,
+  maxY: Double? = null,
 ): Double? {
   if (series.isEmpty()) return null
 
@@ -119,8 +145,8 @@ public fun CartesianMeasuringContext.interpolateYValue(
  * Performs linear interpolation between two points.
  */
 private fun linearInterpolation(
-  point1: com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry,
-  point2: com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry,
+  point1: LineCartesianLayerModel.Entry,
+  point2: LineCartesianLayerModel.Entry,
   xValue: Double,
 ): Double {
   val x1 = point1.x
@@ -142,7 +168,7 @@ private fun linearInterpolation(
  * as the interpolation should be independent of the visible chart range.
  */
 private fun CartesianMeasuringContext.cubicInterpolation(
-  series: List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>,
+  series: List<LineCartesianLayerModel.Entry>,
   currentIndex: Int,
   xValue: Double,
   curvature: Float,
@@ -173,9 +199,9 @@ private fun CartesianMeasuringContext.cubicInterpolation(
   // The curvature parameter directly controls the control point offset
   val xDelta = curvature * dx * 0.33  // Use 1/3 of segment length scaled by curvature
 
-  val cp1x = p1.x + xDelta
+  p1.x + xDelta
   val cp1y = p1.y
-  val cp2x = p2.x - xDelta
+  p2.x - xDelta
   val cp2y = p2.y
 
   // Cubic Bézier formula: B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
@@ -186,9 +212,9 @@ private fun CartesianMeasuringContext.cubicInterpolation(
   val tCubed = tSquared * clampedT
 
   val y = oneMinusTCubed * p1.y +
-          3.0 * oneMinusTSquared * clampedT * cp1y +
-          3.0 * oneMinusT * tSquared * cp2y +
-          tCubed * p2.y
+    3.0 * oneMinusTSquared * clampedT * cp1y +
+    3.0 * oneMinusT * tSquared * cp2y +
+    tCubed * p2.y
 
   return y
 }
@@ -199,13 +225,13 @@ private fun CartesianMeasuringContext.cubicInterpolation(
  * Handles edge cases by extrapolating boundary entries for first and last segments.
  */
 private fun getNeighborsForMonotone(
-  series: List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>,
+  series: List<LineCartesianLayerModel.Entry>,
   currentIndex: Int,
-): List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry> {
+): List<LineCartesianLayerModel.Entry> {
   if (series.isEmpty()) return emptyList()
   if (currentIndex < 0 || currentIndex >= series.size) return emptyList()
 
-  val result = mutableListOf<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>()
+  val result = mutableListOf<LineCartesianLayerModel.Entry>()
   val isFirstSegment = currentIndex == 0
   val isLastSegment = currentIndex >= series.size - 1
 
@@ -236,7 +262,7 @@ private fun getNeighborsForMonotone(
     val isIncreasing = entry1.y < entry2.y
 
     // Extrapolate backward: continue the trend in reverse
-    val absDy0 = kotlin.math.abs(dy0)
+    val absDy0 = abs(dy0)
     val prevY1 = if (isIncreasing) {
       entry1.y - absDy0 * 0.5
     } else {
@@ -251,16 +277,16 @@ private fun getNeighborsForMonotone(
 
     // Create extrapolated entries for backward neighbors
     result.add(
-      com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry(
+      LineCartesianLayerModel.Entry(
         entry1.x - 2 * avgDx,
         prevY2,
-      )
+      ),
     )
     result.add(
-      com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry(
+      LineCartesianLayerModel.Entry(
         entry1.x - avgDx,
         prevY1,
-      )
+      ),
     )
     result.add(entry1)
     result.add(entry2)
@@ -296,7 +322,7 @@ private fun getNeighborsForMonotone(
     val isIncreasing = entry1.y < entry2.y
 
     // Extrapolate next points: continue the trend
-    val absDy0 = kotlin.math.abs(dy0)
+    val absDy0 = abs(dy0)
     val nextY1 = if (isIncreasing) {
       entry2.y + absDy0 * 0.5
     } else {
@@ -311,16 +337,16 @@ private fun getNeighborsForMonotone(
 
     // Create extrapolated entries
     result.add(
-      com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry(
+      LineCartesianLayerModel.Entry(
         entry2.x + avgDx,
         nextY1,
-      )
+      ),
     )
     result.add(
-      com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry(
+      LineCartesianLayerModel.Entry(
         entry2.x + 2 * avgDx,
         nextY2,
-      )
+      ),
     )
   } else {
     // Normal case: get actual future neighbors
@@ -338,7 +364,7 @@ private fun getNeighborsForMonotone(
  * directly with data values, independent of the visible chart range.
  */
 private fun CartesianMeasuringContext.monotoneInterpolation(
-  series: List<com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel.Entry>,
+  series: List<LineCartesianLayerModel.Entry>,
   currentIndex: Int,
   xValue: Double,
 ): Double {
@@ -447,14 +473,14 @@ private fun CartesianMeasuringContext.monotoneInterpolation(
     if (hasPastNeighbors) {
       val discLeft = alphaLeft * alphaLeft + betaLeft * betaLeft
       if (discLeft.compareTo(9.0) > 0) {
-        val tau = 3.0 / kotlin.math.sqrt(discLeft)
+        val tau = 3.0 / sqrt(discLeft)
         m0LeftData = tau * betaLeft * sMinus1
       }
     }
 
     val discCent = alphaCent * alphaCent + betaCent * betaCent
     if (discCent.compareTo(9.0) > 0) {
-      val tau = 3.0 / kotlin.math.sqrt(discCent)
+      val tau = 3.0 / sqrt(discCent)
       m0RightData = tau * alphaCent * s0
       if (hasFutureNeighbors) {
         m1LeftData = tau * betaCent * s0
@@ -464,7 +490,7 @@ private fun CartesianMeasuringContext.monotoneInterpolation(
     if (hasFutureNeighbors) {
       val discRight = alphaRight * alphaRight + betaRight * betaRight
       if (discRight.compareTo(9.0) > 0) {
-        val tau = 3.0 / kotlin.math.sqrt(discRight)
+        val tau = 3.0 / sqrt(discRight)
         m1RightData = tau * alphaRight * s1
       }
     }
@@ -472,8 +498,8 @@ private fun CartesianMeasuringContext.monotoneInterpolation(
 
   // Choose gradients with smallest magnitude for C1 continuity
   var m0Data =
-    if (hasPastNeighbors && kotlin.math.abs(m0LeftData) < kotlin.math.abs(m0RightData)) m0LeftData else m0RightData
-  var m1Data = if (kotlin.math.abs(m1LeftData) < kotlin.math.abs(m1RightData)) m1LeftData else m1RightData
+    if (hasPastNeighbors && abs(m0LeftData) < abs(m0RightData)) m0LeftData else m0RightData
+  var m1Data = if (abs(m1LeftData) < abs(m1RightData)) m1LeftData else m1RightData
 
   // Convert data-space tangents to Bézier control points (in data space)
   // For interpolation, we work directly in data space, no screen-space conversion needed
@@ -489,9 +515,9 @@ private fun CartesianMeasuringContext.monotoneInterpolation(
   // Convert tangents to control point offsets
   // For a cubic Bézier: control points are at p1 + (dx/3, m0*dx/3) and p2 - (dx/3, m1*dx/3)
   val dxThird = dxData / 3.0
-  val cp1x = p1.x + dxThird
+  p1.x + dxThird
   val cp1y = p1.y + m0Data * dxThird
-  val cp2x = p2.x - dxThird
+  p2.x - dxThird
   val cp2y = p2.y - m1Data * dxThird
 
   // Enforce monotonicity constraints on control points
@@ -509,6 +535,7 @@ private fun CartesianMeasuringContext.monotoneInterpolation(
         finalCp2y = mid.coerceAtLeast(p1.y)
       }
     }
+
     p1.y > p2.y -> {
       // Decreasing segment: ensure c1y and c2y are between y2 and y1, and c1y ≥ c2y
       finalCp1y = cp1y.coerceIn(p2.y, p1.y)
@@ -519,6 +546,7 @@ private fun CartesianMeasuringContext.monotoneInterpolation(
         finalCp2y = mid.coerceAtMost(p1.y)
       }
     }
+
     else -> {
       // Flat segment: both control points should equal y1 (and y2)
       finalCp1y = p1.y
@@ -548,8 +576,10 @@ private fun CartesianMeasuringContext.monotoneInterpolation(
 public enum class InterpolationType {
   /** Linear interpolation between points */
   LINEAR,
+
   /** Cubic Bézier curve interpolation */
   CUBIC,
+
   /** Monotone cubic interpolation using Fritsch-Carlson algorithm */
   MONOTONE
 }

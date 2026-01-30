@@ -18,7 +18,6 @@ package com.patrykandpatrick.vico.core.cartesian
 
 import android.graphics.Canvas
 import android.graphics.RectF
-import android.util.Log
 import androidx.annotation.RestrictTo
 import androidx.compose.runtime.Stable
 import com.patrykandpatrick.vico.core.cartesian.CartesianChart.PersistentMarkerScope
@@ -211,7 +210,7 @@ private constructor(
    * @param decorations the [Decoration]s.
    * @param persistentMarkers adds persistent [CartesianMarker]s.
    * @param getXStep defines the _x_ step (the difference between neighboring major _x_ values).
-   * @param visibleLabelsCount the number of visible labels to display, used to calculate optimal spacing.
+   * @param visibleLabelsCount the number of visible labels (e.g. 7 → a,b,c,d,e,f,g). Used to calculate spacing so exactly N labels fit; gaps before first / after last follow full-range boundary rules. Double supports decimals.
    * @param onChartClick callback invoked when the chart is clicked with marker x values and exact x value.
    */
   public constructor(
@@ -258,38 +257,26 @@ private constructor(
 
   /**
    * Calculates a scale factor to adjust spacing based on visible labels count.
-   * This ensures optimal label spacing across the entire chart.
+   * Simple calculation: divide layer width by N intervals so N labels fit.
    */
   private fun calculateLabelSpacingScale(
     context: CartesianMeasuringContext,
     layerDimensions: MutableCartesianLayerDimensions
   ): Float {
     with(context) {
-      // Use layerBounds.width() plus a small portion of right margin to get slightly more available width
-      // Adding half the right margin gives a little more space without being too large
-      val availableWidth = layerBounds.width() + (layerMargins.getRight(isLtr) * 0.026f)
+      val fullWidth = layerBounds.width() + (layerMargins.getRight(isLtr) * 0.026f)
       val currentSpacing = layerDimensions.xSpacing
 
-      if (currentSpacing <= 0f || availableWidth <= 0f) return 1f
+      if (currentSpacing <= 0f || fullWidth <= 0f) return 1f
 
-      // visibleLabelsCount represents the number of intervals (count), not x range difference
-      // Use it directly as the number of intervals for spacing calculation
       val intervalsToUse = if (visibleLabelsCount > 0) {
-        visibleLabelsCount
+        visibleLabelsCount.coerceAtLeast(1.0)
       } else {
-        // Fallback: calculate from ranges if visibleLabelsCount not provided
         (ranges.xLength / ranges.xStep).coerceAtLeast(1.0)
       }
 
-      // Calculate desired spacing: divide available width by number of intervals
-      val desiredSpacing = availableWidth / intervalsToUse
-
-      // #region agent log
-      Log.d("CartesianChart", "[HYP-C] Using interval count: availableWidth=$availableWidth (layerBounds=${layerBounds.width()}, addedMargin=${layerMargins.getRight(isLtr) * 0.0225f}), currentSpacing=$currentSpacing, visibleLabelsCount=$visibleLabelsCount (intervals), intervalsToUse=$intervalsToUse, desiredSpacing=$desiredSpacing, xStep=${ranges.xStep}, xLength=${ranges.xLength}")
-      // #endregion
-
-      // Return the scale factor needed to achieve desired spacing
-      return (desiredSpacing / currentSpacing).toFloat() // Reasonable limits
+      val desiredSpacing = fullWidth / intervalsToUse
+      return (desiredSpacing / currentSpacing).toFloat()
     }
   }
 
@@ -477,10 +464,10 @@ private constructor(
           // Use existing marker targets if available
           block(marker, existingTargets)
         } else {
-          // Fallback: Create a LineCartesianLayerMarkerTarget for the persistent marker
+          // Fallback: Create a LineCartesianLayerMarkerTarget using same visible-window mapping as the layer
           val target = MutableLineCartesianLayerMarkerTarget(
             x = x,
-            canvasX = context.layerBounds.left + ((x - visibleXRange.start) / context.ranges.xStep * context.layerDimensions.xSpacing).toFloat()
+            canvasX = context.getCanvasXFromDataX(x),
           )
           block(marker, listOf(target))
         }

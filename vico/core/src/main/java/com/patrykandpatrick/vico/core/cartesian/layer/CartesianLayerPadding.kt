@@ -25,6 +25,8 @@ import androidx.compose.runtime.Immutable
  * @property scalableEndDp the size of the scalable end padding (in dp).
  * @property unscalableStartDp the size of the unscalable start padding (in dp).
  * @property unscalableEndDp the size of the unscalable end padding (in dp).
+ * @property visibleStartPaddingXStep gap before the first visible x value (in xStep units). Applied per visible window; default 0.
+ * @property visibleEndPaddingXStep gap after the last visible x value (in xStep units). Applied per visible window; default 0.
  */
 @Immutable
 public class CartesianLayerPadding(
@@ -32,6 +34,8 @@ public class CartesianLayerPadding(
   public val scalableEndDp: Float = 0f,
   public val unscalableStartDp: Float = 0f,
   public val unscalableEndDp: Float = 0f,
+  public val visibleStartPaddingXStep: Double = 0.0,
+  public val visibleEndPaddingXStep: Double = 0.0,
 ) {
   override fun equals(other: Any?): Boolean =
     this === other ||
@@ -39,13 +43,17 @@ public class CartesianLayerPadding(
         scalableStartDp == other.scalableStartDp &&
         scalableEndDp == other.scalableEndDp &&
         unscalableStartDp == other.unscalableStartDp &&
-        unscalableEndDp == other.unscalableEndDp
+        unscalableEndDp == other.unscalableEndDp &&
+        visibleStartPaddingXStep == other.visibleStartPaddingXStep &&
+        visibleEndPaddingXStep == other.visibleEndPaddingXStep
 
   override fun hashCode(): Int {
     var result = scalableStartDp.hashCode()
     result = 31 * result + scalableEndDp.hashCode()
     result = 31 * result + unscalableStartDp.hashCode()
     result = 31 * result + unscalableEndDp.hashCode()
+    result = 31 * result + visibleStartPaddingXStep.hashCode()
+    result = 31 * result + visibleEndPaddingXStep.hashCode()
     return result
   }
 }

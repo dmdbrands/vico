@@ -274,6 +274,13 @@ public class VicoScrollState {
       )
       _visibleRange.tryEmit(visibleRange)
       currentVisibleRange = visibleRange
+      // Visible range is data-only (data region between padding gaps); boundary logic applied in getVisibleXRange.
+      Log.d(
+        "VicoScrollState",
+        "Visible range (data-only): start=${visibleXRange.start}, endInclusive=${visibleXRange.endInclusive}. " +
+          "Visible-window padding xStep: start=${context.layerPadding.visibleStartPaddingXStep}, end=${context.layerPadding.visibleEndPaddingXStep}. " +
+          "scroll=$value, bounds.width()=${bounds.width()}"
+      )
   }
 
   internal fun update(
@@ -349,7 +356,7 @@ public class VicoScrollState {
 
   /**
    * Returns whether the chart can scroll forward (to the right/increasing scroll value).
-   * 
+   *
    * @return true if the current scroll value is less than maxValue (can scroll forward), false otherwise.
    * If initial scroll hasn't been handled yet, checks if initial scroll is not at End position.
    */
@@ -366,7 +373,7 @@ public class VicoScrollState {
 
   /**
    * Returns whether the chart can scroll backward (to the left/decreasing scroll value).
-   * 
+   *
    * @return true if the current scroll value is greater than 0 (can scroll backward), false otherwise.
    * If initial scroll hasn't been handled yet, checks if initial scroll is not at Start position.
    */

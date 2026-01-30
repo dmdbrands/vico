@@ -22,6 +22,7 @@ import androidx.annotation.RestrictTo
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
 import com.patrykandpatrick.vico.core.common.DrawingContext
+import com.patrykandpatrick.vico.core.common.getStart
 import kotlin.math.ceil
 
 /** A [DrawingContext] extension with [CartesianChart]-specific data. */
@@ -60,18 +61,111 @@ internal fun CartesianDrawingContext.getVisibleXRange(): ClosedFloatingPointRang
 }
 
 /**
+ * Visible-window padding in pixels (start, end). Computed from [CartesianLayerPadding] xStep
+ * values and current [CartesianLayerDimensions.xSpacing]. Used when drawing so the visible
+ * window shows [gap][first visible]…[last visible][gap]. Returns (0f, 0f) when xSpacing is 0
+ * or padding xStep values are non-positive.
+ * At full range start: no start padding (no gap before first data). At full range end: no end padding (no gap after last data).
+ */
+internal fun CartesianDrawingContext.getVisibleWindowPaddingPx(): Pair<Float, Float> =
+  layerPadding.run {
+    val xSpacing = layerDimensions.xSpacing
+    if (xSpacing <= 0f) return 0f to 0f
+    val startPx =
+      (visibleStartPaddingXStep * xSpacing).toFloat().coerceAtLeast(0f)
+    val endPx =
+      (visibleEndPaddingXStep * xSpacing).toFloat().coerceAtLeast(0f)
+    val viewport = getVisibleXRange()
+    val fullRange = getFullXRange(layerDimensions)
+    val epsilon = 1e-9 * kotlin.math.max(ranges.xStep, 1.0)
+    val atFullRangeStart = viewport.start <= fullRange.start + epsilon
+    val atFullRangeEnd = viewport.endInclusive >= fullRange.endInclusive - epsilon
+    // Start: no gap before first data. End: no gap after last data. Middle: apply both paddings.
+    val effectiveStartPx = when {
+      atFullRangeStart -> 0f
+      else -> startPx
+    }
+    val effectiveEndPx = when {
+      atFullRangeEnd -> 0f
+      else -> endPx
+    }
+    effectiveStartPx to effectiveEndPx
+  }
+
+/**
+ * Returns the canvas x coordinate for a given data x value.
+ * Uses visible-window mapping when visible padding is enabled (so marker/fallback positions match the line).
+ */
+internal fun CartesianDrawingContext.getCanvasXFromDataX(dataX: Double): Float {
+  val (visibleStartPx, visibleEndPx) = getVisibleWindowPaddingPx()
+  val useVisibleWindowPadding = visibleStartPx > 0f || visibleEndPx > 0f
+  val visibleXRange = if (useVisibleWindowPadding) getVisibleXRange() else null
+  val visibleSpan = visibleXRange?.let { it.endInclusive - it.start } ?: 0.0
+  val dataWidthPx =
+    if (useVisibleWindowPadding && visibleSpan > 0)
+      (layerBounds.width() - visibleStartPx - visibleEndPx).coerceAtLeast(0f)
+    else
+      0f
+  val effectiveXSpacing =
+    if (useVisibleWindowPadding && visibleSpan > 0 && dataWidthPx > 0f)
+      dataWidthPx / (visibleSpan / ranges.xStep).toFloat()
+    else
+      null
+  val useVisibleMapping =
+    useVisibleWindowPadding &&
+      visibleXRange != null &&
+      effectiveXSpacing != null &&
+      effectiveXSpacing > 0f
+  val drawingStart =
+    if (useVisibleMapping)
+      layerBounds.getStart(isLtr = isLtr) + layoutDirectionMultiplier * visibleStartPx
+    else
+      layerBounds.getStart(isLtr = isLtr) -
+        scroll + layoutDirectionMultiplier * layerDimensions.startPadding
+  val xSpacing =
+    if (useVisibleMapping) effectiveXSpacing!! else layerDimensions.xSpacing
+  val refMinX = if (useVisibleMapping) visibleXRange!!.start else ranges.minX
+  return drawingStart +
+    layoutDirectionMultiplier * xSpacing * ((dataX - refMinX) / ranges.xStep).toFloat()
+}
+
+/**
  * Returns the exact x value at the given click position.
- * This converts pixel x coordinate to the actual data x value, accounting for scroll.
+ * This converts pixel x coordinate to the actual data x value, accounting for scroll and visible-window padding.
  */
 internal fun CartesianDrawingContext.getExactXValue(clickXPosition: Double): Double? {
   val visibleXRange = getVisibleXRange()
+  val (visibleStartPx, visibleEndPx) = getVisibleWindowPaddingPx()
+  val useVisibleWindowPadding = visibleStartPx > 0f || visibleEndPx > 0f
+  val visibleSpan = visibleXRange.endInclusive - visibleXRange.start
+  val dataWidthPx =
+    if (useVisibleWindowPadding && visibleSpan > 0)
+      (layerBounds.width() - visibleStartPx - visibleEndPx).coerceAtLeast(0f)
+    else
+      0f
+  val effectiveXSpacing =
+    if (useVisibleWindowPadding && visibleSpan > 0 && dataWidthPx > 0f)
+      dataWidthPx / (visibleSpan / ranges.xStep).toFloat()
+    else
+      null
+  val useVisibleMapping =
+    useVisibleWindowPadding &&
+      effectiveXSpacing != null &&
+      effectiveXSpacing > 0f
+  val drawingStart =
+    if (useVisibleMapping)
+      layerBounds.getStart(isLtr = isLtr) + layoutDirectionMultiplier * visibleStartPx
+    else
+      layerBounds.getStart(isLtr = isLtr) -
+        scroll + layoutDirectionMultiplier * layerDimensions.startPadding
+  val dataX =
+    if (useVisibleMapping)
+      visibleXRange.start +
+        (clickXPosition - drawingStart) / (layoutDirectionMultiplier * effectiveXSpacing!!) * ranges.xStep
+    else
+      visibleXRange.start +
+        (clickXPosition - layerBounds.left) / layerDimensions.xSpacing * ranges.xStep
 
-  // Convert pixel x coordinate to data x coordinate, accounting for scroll
-  // This uses the same logic as getVisibleXRange() but in reverse
-  val relativeX = (clickXPosition - layerBounds.left) / layerDimensions.xSpacing
-  val dataX = visibleXRange.start + relativeX * ranges.xStep
-
-  // Return the exact data x value if it's within the visible range
   return if (dataX >= visibleXRange.start && dataX <= visibleXRange.endInclusive) {
     dataX
   } else {

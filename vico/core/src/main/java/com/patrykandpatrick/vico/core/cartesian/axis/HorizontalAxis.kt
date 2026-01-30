@@ -25,6 +25,7 @@ import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.formatForAxis
 import com.patrykandpatrick.vico.core.cartesian.getFullXRange as internalGetFullXRange
+import com.patrykandpatrick.vico.core.cartesian.getVisibleWindowPaddingPx
 import com.patrykandpatrick.vico.core.cartesian.getVisibleXRange
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
@@ -50,7 +51,7 @@ import kotlin.math.min
  * @property itemPlacer determines for what _x_ values the [HorizontalAxis] displays labels, ticks,
  *   and guidelines.
  * @property separators returns a list of x values where vertical separator lines should be drawn.
- * @property visibleLabelsCount the number of visible labels to display, used to calculate xSpacing.
+ * @property visibleLabelsCount the number of visible labels (e.g. 7 labels), used to calculate xSpacing. Double supports decimals.
  * @property horizontalLabelPosition defines the horizontal position of the labels relative to the
  *   axis line.
  */
@@ -164,18 +165,47 @@ protected constructor(
           itemPlacer.getEndLayerMargin(this, layerDimensions, tickThickness, maxLabelWidth),
         max(bounds.bottom, layerBounds.bottom),
       )
+      val (visibleStartPx, visibleEndPx) = getVisibleWindowPaddingPx()
+      val useVisibleWindowPadding = visibleStartPx > 0f || visibleEndPx > 0f
+      val visibleXRangeForMapping = if (useVisibleWindowPadding) getVisibleXRange() else null
+      val visibleSpan = visibleXRangeForMapping?.let { it.endInclusive - it.start } ?: 0.0
+      val dataWidthPx =
+        if (useVisibleWindowPadding && visibleSpan > 0)
+          (layerBounds.width() - visibleStartPx - visibleEndPx).coerceAtLeast(0f)
+        else
+          0f
+      val effectiveXSpacing =
+        if (useVisibleWindowPadding && visibleSpan > 0 && dataWidthPx > 0f)
+          dataWidthPx / (visibleSpan / ranges.xStep).toFloat()
+        else
+          null
+      val useVisibleMapping =
+        useVisibleWindowPadding &&
+          visibleXRangeForMapping != null &&
+          effectiveXSpacing != null &&
+          effectiveXSpacing > 0f
       val baseCanvasX =
-        bounds.getStart(isLtr) - scroll + layerDimensions.startPadding * layoutDirectionMultiplier
+        if (useVisibleMapping)
+          bounds.getStart(isLtr) + layoutDirectionMultiplier * visibleStartPx
+        else
+          bounds.getStart(isLtr) - scroll + layerDimensions.startPadding * layoutDirectionMultiplier
+      fun xToCanvasX(x: Double): Float =
+        if (useVisibleMapping)
+          baseCanvasX +
+            ((x - visibleXRangeForMapping!!.start) / ranges.xStep).toFloat() *
+              effectiveXSpacing!! *
+              layoutDirectionMultiplier
+        else
+          baseCanvasX +
+            ((x - ranges.minX) / ranges.xStep).toFloat() *
+              layerDimensions.xSpacing *
+              layoutDirectionMultiplier
       val visibleXRange = getVisibleXRange()
       val labelValues = itemPlacer.getLabelValues(this, visibleXRange, fullXRange, maxLabelWidth)
       val lineValues = itemPlacer.getLineValues(this, visibleXRange, fullXRange, maxLabelWidth)
 
       labelValues.forEachIndexed { index, x ->
-        val canvasX =
-          baseCanvasX +
-            ((x - ranges.minX) / ranges.xStep).toFloat() *
-              layerDimensions.xSpacing *
-              layoutDirectionMultiplier
+        val canvasX = xToCanvasX(x)
 
         label?.draw(
           context = this,
@@ -202,12 +232,7 @@ protected constructor(
       lineValues?.forEach { x ->
         tick?.drawVertical(
           context = this,
-          x =
-            baseCanvasX +
-              ((x - ranges.minX) / ranges.xStep).toFloat() *
-                layerDimensions.xSpacing *
-                layoutDirectionMultiplier +
-              getLinesCorrectionX(x, fullXRange),
+          x = xToCanvasX(x) + getLinesCorrectionX(x, fullXRange),
           top = getTickTopY(),
           bottom = getTickBottomY(),
         )
@@ -250,8 +275,21 @@ protected constructor(
 
       canvas.restoreToCount(saveCount)
 
-      drawGuidelines(context, baseCanvasX, fullXRange, labelValues, lineValues)
-      drawSeparators(context, baseCanvasX)
+      drawGuidelines(
+        context = context,
+        baseCanvasX = baseCanvasX,
+        fullXRange = fullXRange,
+        labelValues = labelValues,
+        lineValues = lineValues,
+        effectiveXSpacing = if (useVisibleMapping) effectiveXSpacing else null,
+        visibleMinX = visibleXRangeForMapping?.start,
+      )
+      drawSeparators(
+        context = context,
+        baseCanvasX = baseCanvasX,
+        effectiveXSpacing = if (useVisibleMapping) effectiveXSpacing else null,
+        visibleMinX = visibleXRangeForMapping?.start,
+      )
     }
   }
 
@@ -261,19 +299,29 @@ protected constructor(
     fullXRange: ClosedFloatingPointRange<Double>,
     labelValues: List<Double>,
     lineValues: List<Double>?,
+    effectiveXSpacing: Float? = null,
+    visibleMinX: Double? = null,
   ): Unit =
     with(context) {
       val guideline = guideline ?: return
       val clipRestoreCount = canvas.save()
       canvas.clipRect(layerBounds)
+      val useVisibleMapping = effectiveXSpacing != null && visibleMinX != null && effectiveXSpacing > 0f
+      fun xToCanvasX(x: Double): Float =
+        if (useVisibleMapping)
+          baseCanvasX +
+            ((x - visibleMinX!!) / ranges.xStep).toFloat() *
+              effectiveXSpacing!! *
+              layoutDirectionMultiplier
+        else
+          baseCanvasX +
+            ((x - ranges.minX) / ranges.xStep).toFloat() *
+              layerDimensions.xSpacing *
+              layoutDirectionMultiplier
 
       if (lineValues == null) {
         labelValues.forEach { x ->
-          val canvasX =
-            baseCanvasX +
-              ((x - ranges.minX) / ranges.xStep).toFloat() *
-                layerDimensions.xSpacing *
-                layoutDirectionMultiplier
+          val canvasX = xToCanvasX(x)
 
           guideline
             .takeUnless { x.isBoundOf(fullXRange) }
@@ -281,12 +329,7 @@ protected constructor(
         }
       } else {
         lineValues.forEach { x ->
-          val canvasX =
-            baseCanvasX +
-              ((x - ranges.minX) / ranges.xStep).toFloat() *
-                layerDimensions.xSpacing *
-                layoutDirectionMultiplier +
-              getLinesCorrectionX(x, fullXRange)
+          val canvasX = xToCanvasX(x) + getLinesCorrectionX(x, fullXRange)
 
           guideline
             .takeUnless { x.isBoundOf(fullXRange) }
@@ -300,6 +343,8 @@ protected constructor(
   protected open fun drawSeparators(
     context: CartesianDrawingContext,
     baseCanvasX: Float,
+    effectiveXSpacing: Float? = null,
+    visibleMinX: Double? = null,
   ): Unit =
     with(context) {
       val separatorValues = separators(model.extraStore)
@@ -307,13 +352,21 @@ protected constructor(
 
       val clipRestoreCount = canvas.save()
       canvas.clipRect(layerBounds)
-
-      separatorValues.forEach { x ->
-        val canvasX =
+      val useVisibleMapping = effectiveXSpacing != null && visibleMinX != null && effectiveXSpacing > 0f
+      fun xToCanvasX(x: Double): Float =
+        if (useVisibleMapping)
+          baseCanvasX +
+            ((x - visibleMinX!!) / ranges.xStep).toFloat() *
+              effectiveXSpacing!! *
+              layoutDirectionMultiplier
+        else
           baseCanvasX +
             ((x - ranges.minX) / ranges.xStep).toFloat() *
               layerDimensions.xSpacing *
               layoutDirectionMultiplier
+
+      separatorValues.forEach { x ->
+        val canvasX = xToCanvasX(x)
 
         // Always use the axis line component for separators (continuous, not dashed)
         line?.drawVertical(this, canvasX, layerBounds.top, layerBounds.bottom)
