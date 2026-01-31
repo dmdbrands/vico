@@ -67,8 +67,7 @@ public fun CartesianMeasuringContext.getFullXRange(layerDimensions: CartesianLay
 
 /**
  * Returns the visible x range (viewport): the x range that is mapped onto the chart layer.
- * This matches what is drawn: the full viewport is mapped onto the data strip (with visible-window
- * padding only affecting pixel layout, not the x range). So the returned range is viewport start..end.
+ * This matches what is drawn: the full viewport is mapped onto the data strip.
  */
 public fun CartesianMeasuringContext.getVisibleXRange(
   bounds: RectF,
@@ -76,18 +75,14 @@ public fun CartesianMeasuringContext.getVisibleXRange(
   scroll: Float,
 ): ClosedFloatingPointRange<Double> {
   val fullRange = getFullXRange(layerDimensions)
+  val xSpacing = layerDimensions.xSpacing
+  if (xSpacing <= 0f) return fullRange
   val start =
-    (fullRange.start + layoutDirectionMultiplier * scroll / layerDimensions.xSpacing * ranges.xStep).coerceAtLeast(
+    (fullRange.start + layoutDirectionMultiplier * scroll / xSpacing * ranges.xStep).coerceAtLeast(
       minimumValue = fullRange.start,
     )
   val end =
-    (start + bounds.width() / layerDimensions.xSpacing * ranges.xStep).coerceAtMost(maximumValue = fullRange.endInclusive)
-  Log.d(
-    "VicoScrollState",
-    "getVisibleXRange: scroll=$scroll (px), fullRange.start=${fullRange.start}, fullRange.end=${fullRange.endInclusive}, " +
-      "xSpacing=${layerDimensions.xSpacing}, xStep=${ranges.xStep}, bounds.width()=${bounds.width()}, " +
-      "layoutDirectionMultiplier=$layoutDirectionMultiplier -> start=$start, end=$end",
-  )
+    (start + bounds.width() / xSpacing * ranges.xStep).coerceAtMost(maximumValue = fullRange.endInclusive)
   return start..end
 }
 

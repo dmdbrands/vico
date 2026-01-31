@@ -454,23 +454,18 @@ private constructor(
     context: CartesianDrawingContext,
     block: (CartesianMarker, List<CartesianMarker.Target>) -> Unit
   ) {
-    val visibleXRange = context.getVisibleXRange()
+    val bounds = context.layerBounds
     persistentMarkerMap.forEach { (x, marker) ->
-      // Only show persistent marker if its x value is within the visible range
-      if (x >= visibleXRange.start && x <= visibleXRange.endInclusive) {
-        // First try to use existing marker targets at this x value
-        val existingTargets = markerTargets[x]
-        if (existingTargets != null && existingTargets.isNotEmpty()) {
-          // Use existing marker targets if available
-          block(marker, existingTargets)
-        } else {
-          // Fallback: Create a LineCartesianLayerMarkerTarget using same visible-window mapping as the layer
-          val target = MutableLineCartesianLayerMarkerTarget(
-            x = x,
-            canvasX = context.getCanvasXFromDataX(x),
-          )
-          block(marker, listOf(target))
-        }
+      val existingTargets = markerTargets[x]
+      if (existingTargets != null && existingTargets.isNotEmpty()) {
+        block(marker, existingTargets)
+      } else {
+        val canvasX = context.getCanvasXFromDataX(x).coerceIn(bounds.left, bounds.right)
+        val target = MutableLineCartesianLayerMarkerTarget(
+          x = x,
+          canvasX = canvasX,
+        )
+        block(marker, listOf(target))
       }
     }
   }
