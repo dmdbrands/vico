@@ -296,7 +296,26 @@ internal constructor(
       if (markerTargets.isNotEmpty()) marker?.drawUnderLayers(context, markerTargets)
       canvas.drawImage(layerBitmap, Offset.Zero, EmptyPaint)
       fadingEdges?.run {
-        draw(context)
+        val fadeBounds =
+          Rect(
+            minOf(
+              layerBounds.left,
+              axisManager.startAxis?.bounds?.left ?: layerBounds.left,
+            ),
+            minOf(
+              layerBounds.top,
+              axisManager.topAxis?.bounds?.top ?: layerBounds.top,
+            ),
+            maxOf(
+              layerBounds.right,
+              axisManager.endAxis?.bounds?.right ?: layerBounds.right,
+            ),
+            maxOf(
+              layerBounds.bottom,
+              axisManager.bottomAxis?.bounds?.bottom ?: layerBounds.bottom,
+            ),
+          )
+        draw(context, fadeBounds)
         canvas.restore()
       }
       axisManager.drawOverLayers(context)

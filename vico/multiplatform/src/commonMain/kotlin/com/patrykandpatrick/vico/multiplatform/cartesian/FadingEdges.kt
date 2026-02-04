@@ -78,32 +78,42 @@ public open class FadingEdges(
     require(value = endWidth.value >= 0) { "`endWidth` must be nonnegative." }
   }
 
-  internal fun draw(context: CartesianDrawingContext) {
+  /**
+   * Draws the fading edges. When [fadeBounds] is non-null, the fade is applied over that rect
+   * (e.g. to include horizontal axis area); otherwise [CartesianDrawingContext.layerBounds] is used.
+   */
+  internal fun draw(context: CartesianDrawingContext, fadeBounds: Rect? = null) {
     with(context) {
+      val bounds = fadeBounds ?: layerBounds
       val maxScroll = getMaxScrollDistance()
       var fadeAlphaFraction: Float
+      val viewport = getVisibleXRange()
+      val fullRange = getFullXRange(layerDimensions)
+      val epsilon = 1e-9 * kotlin.math.max(ranges.xStep, 1.0)
+      val atFullRangeStart = viewport.start <= fullRange.start + epsilon
+      val atFullRangeEnd = viewport.endInclusive >= fullRange.endInclusive - epsilon
 
-      if (scrollEnabled && startWidth.value > 0f && scroll > 0f) {
+      if (scrollEnabled && startWidth.value > 0f && scroll > 0f && !atFullRangeStart) {
         fadeAlphaFraction = (scroll / visibilityThreshold.pixels).coerceAtMost(1f)
 
         drawFadingEdge(
-          left = layerBounds.left,
-          top = layerBounds.top,
-          right = layerBounds.left + startWidth.pixels,
-          bottom = layerBounds.bottom,
+          left = bounds.left,
+          top = bounds.top,
+          right = bounds.left + startWidth.pixels,
+          bottom = bounds.bottom,
           direction = -1,
           alpha = visibilityEasing.transform(fadeAlphaFraction),
         )
       }
 
-      if (scrollEnabled && endWidth.value > 0f && scroll < maxScroll) {
+      if (scrollEnabled && endWidth.value > 0f && scroll < maxScroll && !atFullRangeEnd) {
         fadeAlphaFraction = ((maxScroll - scroll) / visibilityThreshold.pixels).coerceAtMost(1f)
 
         drawFadingEdge(
-          left = layerBounds.right - endWidth.pixels,
-          top = layerBounds.top,
-          right = layerBounds.right,
-          bottom = layerBounds.bottom,
+          left = bounds.right - endWidth.pixels,
+          top = bounds.top,
+          right = bounds.right,
+          bottom = bounds.bottom,
           direction = 1,
           alpha = visibilityEasing.transform(fadeAlphaFraction),
         )

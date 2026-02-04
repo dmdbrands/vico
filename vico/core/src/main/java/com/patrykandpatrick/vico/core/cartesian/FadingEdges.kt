@@ -25,6 +25,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.view.animation.AccelerateDecelerateInterpolator
 import androidx.compose.runtime.Immutable
+import com.patrykandpatrick.vico.core.cartesian.getVisibleWindowPaddingPx
 import com.patrykandpatrick.vico.core.common.Defaults.FADING_EDGE_VISIBILITY_THRESHOLD_DP
 import com.patrykandpatrick.vico.core.common.Defaults.FADING_EDGE_WIDTH_DP
 import com.patrykandpatrick.vico.core.common.copyColor
@@ -44,6 +45,8 @@ private const val NO_FADE: Int = 0x00000000
  * @param visibilityInterpolator used for the fading edges’ fade-in and fade-out animations. This is
  *   a mapping of the degree to which [visibilityThresholdDp] has been satisfied to the opacity of
  *   the fading edges.
+ * @param useVisiblePaddingWidth when true, the fade strip width is taken from the layer's visible
+ *   padding (px) when set, so the padded part is faded; otherwise [startWidthDp] / [endWidthDp] are used.
  */
 @Immutable
 public open class FadingEdges(
@@ -51,6 +54,7 @@ public open class FadingEdges(
   protected val endWidthDp: Float = FADING_EDGE_WIDTH_DP,
   protected val visibilityThresholdDp: Float = FADING_EDGE_VISIBILITY_THRESHOLD_DP,
   protected val visibilityInterpolator: TimeInterpolator = AccelerateDecelerateInterpolator(),
+  protected val useVisiblePaddingWidth: Boolean = false,
 ) {
   private val paint: Paint = Paint()
 
@@ -70,11 +74,13 @@ public open class FadingEdges(
     widthDp: Float = FADING_EDGE_WIDTH_DP,
     visibilityThresholdDp: Float = FADING_EDGE_VISIBILITY_THRESHOLD_DP,
     visibilityInterpolator: TimeInterpolator = AccelerateDecelerateInterpolator(),
+    useVisiblePaddingWidth: Boolean = false,
   ) : this(
     startWidthDp = widthDp,
     endWidthDp = widthDp,
     visibilityThresholdDp = visibilityThresholdDp,
     visibilityInterpolator = visibilityInterpolator,
+    useVisiblePaddingWidth = useVisiblePaddingWidth,
   )
 
   init {
@@ -84,32 +90,56 @@ public open class FadingEdges(
     paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
   }
 
-  internal fun draw(context: CartesianDrawingContext) {
+  /**
+   * Draws the fading edges. When [fadeBounds] is non-null, the fade is applied over that rect
+   * (e.g. to include horizontal axis area); otherwise [CartesianDrawingContext.layerBounds] is used.
+   */
+  internal fun draw(context: CartesianDrawingContext, fadeBounds: RectF? = null) {
     with(context) {
+      val bounds = fadeBounds ?: layerBounds
       val maxScroll = getMaxScrollDistance()
       var fadeAlphaFraction: Float
+      val viewport = getVisibleXRange()
+      val fullRange = getFullXRange(layerDimensions)
+      val epsilon = 1e-9 * kotlin.math.max(ranges.xStep, 1.0)
+      val atFullRangeStart = viewport.start <= fullRange.start + epsilon
+      val atFullRangeEnd = viewport.endInclusive >= fullRange.endInclusive - epsilon
+      val (visibleStartPx, visibleEndPx) = getVisibleWindowPaddingPx()
+      val (leftStripWidthPx, rightStripWidthPx) =
+        if (useVisiblePaddingWidth && (visibleStartPx > 0f || visibleEndPx > 0f)) {
+          val startPx = if (isLtr) visibleStartPx else visibleEndPx
+          val endPx = if (isLtr) visibleEndPx else visibleStartPx
+          val leftExtra = (layerBounds.left - bounds.left).coerceAtLeast(0f)
+          val rightExtra = (bounds.right - layerBounds.right).coerceAtLeast(0f)
+          // Add 1px overdraw so the fade fully covers the padded area (avoids subpixel gaps).
+          val leftWidth = (startPx + leftExtra + 1f).coerceAtMost(bounds.width())
+          val rightWidth = (endPx + rightExtra + 1f).coerceAtMost(bounds.width())
+          leftWidth to rightWidth
+        } else {
+          startWidthDp.pixels to endWidthDp.pixels
+        }
 
-      if (scrollEnabled && startWidthDp > 0f && scroll > 0f) {
+      if (scrollEnabled && leftStripWidthPx > 0f && scroll > 0f && !atFullRangeStart) {
         fadeAlphaFraction = (scroll / visibilityThresholdDp.pixels).coerceAtMost(1f)
 
         drawFadingEdge(
-          left = layerBounds.left,
-          top = layerBounds.top,
-          right = layerBounds.left + startWidthDp.pixels,
-          bottom = layerBounds.bottom,
+          left = bounds.left,
+          top = bounds.top,
+          right = bounds.left + leftStripWidthPx,
+          bottom = bounds.bottom,
           direction = -1,
           alpha = (visibilityInterpolator.getInterpolation(fadeAlphaFraction) * FULL_ALPHA).toInt(),
         )
       }
 
-      if (scrollEnabled && endWidthDp > 0f && scroll < maxScroll) {
+      if (scrollEnabled && rightStripWidthPx > 0f && scroll < maxScroll && !atFullRangeEnd) {
         fadeAlphaFraction = ((maxScroll - scroll) / visibilityThresholdDp.pixels).coerceAtMost(1f)
 
         drawFadingEdge(
-          left = layerBounds.right - endWidthDp.pixels,
-          top = layerBounds.top,
-          right = layerBounds.right,
-          bottom = layerBounds.bottom,
+          left = bounds.right - rightStripWidthPx,
+          top = bounds.top,
+          right = bounds.right,
+          bottom = bounds.bottom,
           direction = 1,
           alpha = (visibilityInterpolator.getInterpolation(fadeAlphaFraction) * FULL_ALPHA).toInt(),
         )
@@ -148,13 +178,15 @@ public open class FadingEdges(
         startWidthDp == other.startWidthDp &&
         endWidthDp == other.endWidthDp &&
         visibilityThresholdDp == other.visibilityThresholdDp &&
-        visibilityInterpolator == other.visibilityInterpolator
+        visibilityInterpolator == other.visibilityInterpolator &&
+        useVisiblePaddingWidth == other.useVisiblePaddingWidth
 
   override fun hashCode(): Int {
     var result = startWidthDp.hashCode()
     result = 31 * result + endWidthDp.hashCode()
     result = 31 * result + visibilityThresholdDp.hashCode()
     result = 31 * result + visibilityInterpolator.hashCode()
+    result = 31 * result + useVisiblePaddingWidth.hashCode()
     return result
   }
 }

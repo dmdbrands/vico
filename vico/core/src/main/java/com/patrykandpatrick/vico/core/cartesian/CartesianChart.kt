@@ -369,7 +369,14 @@ private constructor(
       if (markerTargets.isNotEmpty()) marker?.drawUnderLayers(context, markerTargets)
       canvas.drawBitmap(layerBitmap, 0f, 0f, null)
       fadingEdges?.run {
-        draw(context)
+        val fadeBounds =
+          RectF(layerBounds).apply {
+            axisManager.topAxis?.bounds?.let { if (it.top < top) top = it.top }
+            axisManager.bottomAxis?.bounds?.let { if (it.bottom > bottom) bottom = it.bottom }
+            axisManager.startAxis?.bounds?.let { if (it.left < left) left = it.left }
+            axisManager.endAxis?.bounds?.let { if (it.right > right) right = it.right }
+          }
+        draw(context, fadeBounds)
         canvas.restoreToCount(canvasSaveCount)
       }
       axisManager.drawOverLayers(context)
