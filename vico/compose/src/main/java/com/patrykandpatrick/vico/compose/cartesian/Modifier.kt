@@ -370,7 +370,7 @@ internal fun Modifier.pointerInput(
               InteractionMode.DECIDING -> {
                 // Quick tap - marker selection
                 scrollState.emitInteractionEvent(ChartInteractionEvent.MarkerInteractionEnded(pressPosition))
-                onPointerPositionChange(null)
+                onPointerPositionChange(pressPosition)
                 Log.i("PointerEvent", "DECIDING - quick tap selection")
               }
               else -> {

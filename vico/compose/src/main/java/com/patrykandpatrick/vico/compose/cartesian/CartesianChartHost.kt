@@ -18,11 +18,8 @@ package com.patrykandpatrick.vico.compose.cartesian
 
 import android.annotation.SuppressLint
 import android.graphics.RectF
-import android.util.Log
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
@@ -63,7 +59,6 @@ import com.patrykandpatrick.vico.core.common.set
 import com.patrykandpatrick.vico.core.common.setValue
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
@@ -193,7 +188,7 @@ internal fun CartesianChartHostImpl(
       pointerPosition = pointerPosition.value,
       initialScroll = scrollState.initialScroll,
       scroll = scrollState.value,
-      isInitializedScroll = scrollState.initialScrollHandled
+      isInitializedScroll = scrollState.initialScrollHandled,
     )
 
   val coroutineScope = rememberCoroutineScope()
@@ -213,7 +208,7 @@ internal fun CartesianChartHostImpl(
   // Monitor scroll changes and trigger callback when scrolling stops
   LaunchedEffect(Unit) {
     scrollState.visibleRange
-      .debounce(300) // Wait 300ms after scroll stops
+      .debounce(100) // Wait 300ms after scroll stops
       .distinctUntilChanged()
       .collect { scrollValue ->
         // Only invoke callback after auto-scroll is complete (user-initiated scrolling)
@@ -228,7 +223,8 @@ internal fun CartesianChartHostImpl(
   val layerBounds = rememberUpdatedState(chart.layerBounds)
   Canvas(
     modifier =
-      Modifier.fillMaxSize()
+      Modifier
+        .fillMaxSize()
         .pointerInput(
           scrollState = scrollState,
           consumeMoveEvents = consumeMoveEvents,
@@ -251,7 +247,7 @@ internal fun CartesianChartHostImpl(
                 null
               }
             },
-        )
+        ),
   ) {
     val canvas = drawContext.canvas.nativeCanvas
     if (canvas.width == 0 || canvas.height == 0) return@Canvas
@@ -290,5 +286,7 @@ internal fun CartesianChartHostImpl(
 
 @Composable
 private fun CartesianChartHostBox(modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
-  Box(modifier = modifier.height(CHART_HEIGHT.dp).fillMaxWidth(), content = content)
+  Box(modifier = modifier
+    .height(CHART_HEIGHT.dp)
+    .fillMaxWidth(), content = content)
 }
