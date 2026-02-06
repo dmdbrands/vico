@@ -94,9 +94,9 @@ protected constructor(
   protected val rangeProvider: CartesianLayerRangeProvider = CartesianLayerRangeProvider.auto(),
   protected val verticalAxisPosition: Axis.Position.Vertical? = null,
   protected val drawingModelInterpolator:
-    CartesianLayerDrawingModelInterpolator<
-      LineCartesianLayerDrawingModel.Entry,
-      LineCartesianLayerDrawingModel,
+  CartesianLayerDrawingModelInterpolator<
+    LineCartesianLayerDrawingModel.Entry,
+    LineCartesianLayerDrawingModel,
     > =
     CartesianLayerDrawingModelInterpolator.default(),
   protected val drawingModelKey: ExtraStore.Key<LineCartesianLayerDrawingModel>,
@@ -267,6 +267,9 @@ protected constructor(
       y1: Float,
       x2: Float,
       y2: Float,
+      entry1: LineCartesianLayerModel.Entry,
+      entry2: LineCartesianLayerModel.Entry,
+      series: List<LineCartesianLayerModel.Entry>,
     )
 
     /** Houses a [PointConnector] factory function. */
@@ -292,7 +295,7 @@ protected constructor(
        * Uses cubic Bézier curves. [curvature], which must be in ([0, 1]], defines their strength.
        */
       public fun cubic(
-        @FloatRange(from = 0.0, to = 1.0, fromInclusive = false) curvature: Float = 0.5f
+        @FloatRange(from = 0.0, to = 1.0, fromInclusive = false) curvature: Float = 0.5f,
       ): PointConnector = CubicPointConnector(curvature)
 
       /**
@@ -408,9 +411,9 @@ protected constructor(
     rangeProvider: CartesianLayerRangeProvider = CartesianLayerRangeProvider.auto(),
     verticalAxisPosition: Axis.Position.Vertical? = null,
     drawingModelInterpolator:
-      CartesianLayerDrawingModelInterpolator<
-        LineCartesianLayerDrawingModel.Entry,
-        LineCartesianLayerDrawingModel,
+    CartesianLayerDrawingModelInterpolator<
+      LineCartesianLayerDrawingModel.Entry,
+      LineCartesianLayerDrawingModel,
       > =
       CartesianLayerDrawingModelInterpolator.default(),
   ) : this(
@@ -454,14 +457,24 @@ protected constructor(
           if (linePath.isEmpty) {
             linePath.moveTo(x, y)
           } else {
-            line.pointConnector.connect(this, linePath, prevX, prevY, x, y, previousEntry!!, entry, series)
+            line.pointConnector.connect(
+              this,
+              linePath,
+              prevX,
+              prevY,
+              x,
+              y,
+              previousEntry!!,
+              entry,
+              series,
+            )
           }
           prevX = x
           prevY = y
           previousEntry = entry
         }
 
-                saveLayer(opacity = drawingModel?.opacity ?: 1f)
+        saveLayer(opacity = drawingModel?.opacity ?: 1f)
 
         val (lineBitmap, lineCanvas) = getBitmap(cacheKeyNamespace, seriesIndex, "line")
         val (lineFillBitmap, lineFillCanvas) = getBitmap(cacheKeyNamespace, seriesIndex, "lineFill")
@@ -578,16 +591,18 @@ protected constructor(
       previousX != null && nextX != null -> min(x - previousX, nextX - x)
       previousX == null && nextX == null ->
         min(layerDimensions.startPadding, layerDimensions.endPadding).doubled
+
       nextX != null -> {
         ((entry.x - ranges.minX) / ranges.xStep * layerDimensions.xSpacing +
-            layerDimensions.startPadding)
+          layerDimensions.startPadding)
           .doubled
           .toFloat()
           .coerceAtMost(nextX - x)
       }
+
       else -> {
         ((ranges.maxX - entry.x) / ranges.xStep * layerDimensions.xSpacing +
-            layerDimensions.endPadding)
+          layerDimensions.endPadding)
           .doubled
           .toFloat()
           .coerceAtMost(x - previousX!!)
@@ -606,8 +621,8 @@ protected constructor(
     drawFullLineLength: Boolean = false,
     action:
       (
-        entry: LineCartesianLayerModel.Entry, x: Float, y: Float, previousX: Float?, nextX: Float?,
-      ) -> Unit,
+      entry: LineCartesianLayerModel.Entry, x: Float, y: Float, previousX: Float?, nextX: Float?,
+    ) -> Unit,
   ) {
     val minX = ranges.minX
     val maxX = ranges.maxX
@@ -627,7 +642,7 @@ protected constructor(
       val yRange = ranges.getYRange(verticalAxisPosition)
       return layerBounds.bottom -
         (pointInfoMap?.get(entry.x)?.y ?: ((entry.y - yRange.minY) / yRange.length).toFloat()) *
-          layerBounds.height
+        layerBounds.height
     }
 
     series.forEachIn(minX = minX, maxX = maxX, padding = 2) { entry, next ->
@@ -638,9 +653,9 @@ protected constructor(
       nextX = immutableNextX
       if (
         drawFullLineLength.not() &&
-          immutableNextX != null &&
-          (isLtr && immutableX < boundsStart || !isLtr && immutableX > boundsStart) &&
-          (isLtr && immutableNextX < boundsStart || !isLtr && immutableNextX > boundsStart)
+        immutableNextX != null &&
+        (isLtr && immutableX < boundsStart || !isLtr && immutableX > boundsStart) &&
+        (isLtr && immutableNextX < boundsStart || !isLtr && immutableNextX > boundsStart)
       ) {
         return@forEachIn
       }
@@ -728,7 +743,7 @@ protected constructor(
   }
 
   private fun LineCartesianLayerModel.toDrawingModel(
-    ranges: CartesianChartRanges
+    ranges: CartesianChartRanges,
   ): LineCartesianLayerDrawingModel {
     val yRange = ranges.getYRange(verticalAxisPosition)
     return LineCartesianLayerDrawingModel(
@@ -736,10 +751,10 @@ protected constructor(
         series.associate { entry ->
           entry.x to
             LineCartesianLayerDrawingModel.Entry(
-              ((entry.y - yRange.minY) / yRange.length).toFloat()
+              ((entry.y - yRange.minY) / yRange.length).toFloat(),
             )
         }
-      }
+      },
     )
   }
 
@@ -750,9 +765,9 @@ protected constructor(
     rangeProvider: CartesianLayerRangeProvider = this.rangeProvider,
     verticalAxisPosition: Axis.Position.Vertical? = this.verticalAxisPosition,
     drawingModelInterpolator:
-      CartesianLayerDrawingModelInterpolator<
-        LineCartesianLayerDrawingModel.Entry,
-        LineCartesianLayerDrawingModel,
+    CartesianLayerDrawingModelInterpolator<
+      LineCartesianLayerDrawingModel.Entry,
+      LineCartesianLayerDrawingModel,
       > =
       this.drawingModelInterpolator,
   ): LineCartesianLayer =
@@ -768,11 +783,11 @@ protected constructor(
   override fun equals(other: Any?): Boolean =
     this === other ||
       other is LineCartesianLayer &&
-        lineProvider == other.lineProvider &&
-        pointSpacing == other.pointSpacing &&
-        rangeProvider == other.rangeProvider &&
-        verticalAxisPosition == other.verticalAxisPosition &&
-        drawingModelInterpolator == other.drawingModelInterpolator
+      lineProvider == other.lineProvider &&
+      pointSpacing == other.pointSpacing &&
+      rangeProvider == other.rangeProvider &&
+      verticalAxisPosition == other.verticalAxisPosition &&
+      drawingModelInterpolator == other.drawingModelInterpolator
 
   override fun hashCode(): Int {
     var result = lineProvider.hashCode()
@@ -796,7 +811,7 @@ internal fun CartesianDrawingContext.getCanvasSplitY(
   val base =
     layerBounds.bottom -
       ((splitY(model.extraStore).toDouble() - yRange.minY) / yRange.length).toFloat() *
-        layerBounds.height
+      layerBounds.height
   return ceil(base).coerceIn(layerBounds.top..layerBounds.bottom) + ceil(halfLineThickness)
 }
 
@@ -807,15 +822,15 @@ public fun rememberLineCartesianLayer(
     LineCartesianLayer.LineProvider.series(
       vicoTheme.lineCartesianLayerColors.map { color ->
         LineCartesianLayer.rememberLine(LineCartesianLayer.LineFill.single(Fill(color)))
-      }
+      },
     ),
   pointSpacing: Dp = Defaults.POINT_SPACING.dp,
   rangeProvider: CartesianLayerRangeProvider = remember { CartesianLayerRangeProvider.auto() },
   verticalAxisPosition: Axis.Position.Vertical? = null,
   drawingModelInterpolator:
-    CartesianLayerDrawingModelInterpolator<
-      LineCartesianLayerDrawingModel.Entry,
-      LineCartesianLayerDrawingModel,
+  CartesianLayerDrawingModelInterpolator<
+    LineCartesianLayerDrawingModel.Entry,
+    LineCartesianLayerDrawingModel,
     > =
     remember {
       CartesianLayerDrawingModelInterpolator.default()

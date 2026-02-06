@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
@@ -57,6 +58,7 @@ import com.patrykandpatrick.vico.core.common.data.ExtraStore
 import com.patrykandpatrick.vico.core.common.getValue
 import com.patrykandpatrick.vico.core.common.set
 import com.patrykandpatrick.vico.core.common.setValue
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -160,6 +162,7 @@ public fun CartesianChartHost(
   }
 }
 
+@OptIn(FlowPreview::class)
 @Composable
 internal fun CartesianChartHostImpl(
   chart: CartesianChart,
@@ -206,17 +209,18 @@ internal fun CartesianChartHostImpl(
   }
 
   // Monitor scroll changes and trigger callback when scrolling stops
-  LaunchedEffect(Unit) {
-    scrollState.visibleRange
-      .debounce(100) // Wait 300ms after scroll stops
+
+  LaunchedEffect(scrollState) {
+    snapshotFlow { scrollState.value }
       .distinctUntilChanged()
-      .collect { scrollValue ->
-        // Only invoke callback after auto-scroll is complete (user-initiated scrolling)
+      .debounce(150) // emit only after value hasn't changed for 150ms
+      .collect {
         if (scrollState.isAutoScrollComplete) {
           onScrollStopped?.invoke(scrollState.currentVisibleRange)
         }
       }
   }
+
 
   DisposableEffect(scrollState) { onDispose { scrollState.clearUpdated() } }
 
@@ -286,7 +290,10 @@ internal fun CartesianChartHostImpl(
 
 @Composable
 private fun CartesianChartHostBox(modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
-  Box(modifier = modifier
-    .height(CHART_HEIGHT.dp)
-    .fillMaxWidth(), content = content)
+  Box(
+    modifier = modifier
+      .height(CHART_HEIGHT.dp)
+      .fillMaxWidth(),
+    content = content,
+  )
 }
