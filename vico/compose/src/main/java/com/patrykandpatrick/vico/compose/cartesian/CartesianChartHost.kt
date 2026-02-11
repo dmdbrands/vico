@@ -213,9 +213,9 @@ internal fun CartesianChartHostImpl(
   LaunchedEffect(scrollState) {
     snapshotFlow { scrollState.value }
       .distinctUntilChanged()
-      .debounce(150) // emit only after value hasn't changed for 150ms
+      .debounce(200) // emit only after value hasn't changed for 200ms
       .collect {
-        if (scrollState.isAutoScrollComplete) {
+        if (scrollState.isAutoScrollComplete && !scrollState.isScrollInProgress) {
           onScrollStopped?.invoke(scrollState.currentVisibleRange)
         }
       }
