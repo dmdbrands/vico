@@ -21,6 +21,7 @@ import android.graphics.RectF
 import androidx.annotation.RestrictTo
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayer
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
+import com.patrykandpatrick.vico.core.cartesian.layer.HorizontalCartesianLayerMargins
 import com.patrykandpatrick.vico.core.common.DrawingContext
 import kotlin.math.ceil
 
@@ -31,6 +32,9 @@ public interface CartesianDrawingContext : DrawingContext, CartesianMeasuringCon
 
   /** Stores shared [CartesianLayer] dimensions. */
   public val layerDimensions: CartesianLayerDimensions
+
+  /** Optional layer margins; when set, used by [FadingEdges] so fade width matches content insets. */
+  public val layerMargins: HorizontalCartesianLayerMargins?
 
   /** The zoom factor. */
   public val zoom: Float
@@ -125,6 +129,7 @@ public fun CartesianDrawingContext(
   layerBounds: RectF,
   scroll: Float,
   zoom: Float,
+  layerMargins: HorizontalCartesianLayerMargins? = null,
 ): CartesianDrawingContext =
   object : CartesianDrawingContext, CartesianMeasuringContext by measuringContext {
     override val layerBounds: RectF = layerBounds
@@ -132,6 +137,8 @@ public fun CartesianDrawingContext(
     override var canvas: Canvas = canvas
 
     override val layerDimensions: CartesianLayerDimensions = layerDimensions
+
+    override val layerMargins: HorizontalCartesianLayerMargins? = layerMargins
 
     override val scroll: Float = scroll
 

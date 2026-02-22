@@ -167,6 +167,11 @@ private constructor(
   /** @suppress */
   @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP) public val layerBounds: RectF = RectF()
 
+  /** @suppress Layer margins used when drawing (e.g. by [FadingEdges]) to align fade with content. */
+  @get:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  public val layerMarginsForDrawing: CartesianLayerMargins
+    get() = layerMargins
+
   /** The [CartesianLayer]s of which this [CartesianChart] is composed. */
   public val layers: List<CartesianLayer<*>> = layers.toList()
 

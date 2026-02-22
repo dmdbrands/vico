@@ -105,6 +105,10 @@ public open class FadingEdges(
           ?: layerDimensions.endPadding
       val endFadeWidth = maxOf(endWidthDp.pixels, endPaddingPixels)
 
+      // Extend fade rect into start/end margin so there is no gap before the fade (fade starts at chart edge).
+      val startMargin = context.layerMargins?.getLeft(isLtr) ?: 0f
+      val endMargin = context.layerMargins?.getRight(isLtr) ?: 0f
+
       val maxScroll = getMaxScrollDistance()
       var fadeAlphaFraction: Float
 
@@ -112,7 +116,7 @@ public open class FadingEdges(
         fadeAlphaFraction = (scroll / visibilityThresholdDp.pixels).coerceAtMost(1f)
 
         drawFadingEdge(
-          left = layerBounds.left,
+          left = layerBounds.left - startMargin,
           top = layerBounds.top,
           right = layerBounds.left + startFadeWidth,
           bottom = layerBounds.bottom,
@@ -127,7 +131,7 @@ public open class FadingEdges(
         drawFadingEdge(
           left = layerBounds.right - endFadeWidth,
           top = layerBounds.top,
-          right = layerBounds.right,
+          right = layerBounds.right + endMargin,
           bottom = layerBounds.bottom,
           direction = 1,
           alpha = (visibilityInterpolator.getInterpolation(fadeAlphaFraction) * FULL_ALPHA).toInt(),

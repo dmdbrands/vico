@@ -278,6 +278,7 @@ internal fun CartesianChartHostImpl(
         chart.layerBounds,
         scrollState.value,
         zoomState.value,
+        layerMargins = chart.layerMarginsForDrawing,
       )
 
     // Update the scroll state with the drawing context for getVisibleAxisLabels

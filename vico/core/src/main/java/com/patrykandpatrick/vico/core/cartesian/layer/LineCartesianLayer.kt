@@ -527,9 +527,16 @@ protected constructor(
         line.draw(context, linePath, lineCanvas, lineFillCanvas, verticalAxisPosition)
         lineCanvas.drawBitmap(lineFillBitmap, 0f, 0f, srcInPaint)
 
-        // Apply clipping to prevent line overflow beyond chart bounds
+        // Extend line horizontally (left/right) to match points and avoid jumps; keep vertical clip at layerBounds.
+        val marginStart = context.layerMargins?.getLeft(isLtr) ?: 0f
+        val marginEnd = context.layerMargins?.getRight(isLtr) ?: 0f
         canvas.save()
-        canvas.clipRect(layerBounds)
+        canvas.clipRect(
+          layerBounds.left - marginStart,
+          layerBounds.top,
+          layerBounds.right + marginEnd,
+          layerBounds.bottom,
+        )
         canvas.drawBitmap(lineBitmap, 0f, 0f, null)
         canvas.restore()
 
@@ -767,7 +774,19 @@ protected constructor(
           }
           .half
           .pixels
-      layerMargins.ensureValuesAtLeast(top = verticalMargin, bottom = verticalMargin)
+      if (verticalAxisPosition != null) {
+        // Ensure stored margin is pointSize.half per edge so points are not clipped.
+        // CartesianLayerMargins.ensureValuesAtLeast halves top/bottom when storing, so pass 2x
+        // to get stored value = verticalMargin (pointSize.half). Start/end are stored as-is.
+        layerMargins.ensureValuesAtLeast(
+          start = verticalMargin,
+          end = verticalMargin,
+          top = verticalMargin * 2,
+          bottom = verticalMargin * 2,
+        )
+      } else {
+        layerMargins.ensureValuesAtLeast(top = verticalMargin, bottom = verticalMargin)
+      }
     }
   }
 
