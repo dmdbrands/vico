@@ -44,6 +44,13 @@ private const val NO_FADE: Int = 0x00000000
  * @param visibilityInterpolator used for the fading edges’ fade-in and fade-out animations. This is
  *   a mapping of the degree to which [visibilityThresholdDp] has been satisfied to the opacity of
  *   the fading edges.
+ * @param startPaddingXStep optional padding for the start fade width as a fraction of x-step (e.g.
+ *   0.2 = 20% of one step). When non-null, converted to pixels at draw time via
+ *   [CartesianLayerDimensions.xSpacing]; the effective start fade width is the max of
+ *   [startWidthDp] and this value. When null, [CartesianLayerDimensions.startPadding] is used.
+ * @param endPaddingXStep optional padding for the end fade width as a fraction of x-step. When
+ *   non-null, converted to pixels at draw time; effective end fade width is the max of [endWidthDp]
+ *   and this value. When null, [CartesianLayerDimensions.endPadding] is used.
  */
 @Immutable
 public open class FadingEdges(
@@ -51,6 +58,8 @@ public open class FadingEdges(
   protected val endWidthDp: Float = FADING_EDGE_WIDTH_DP,
   protected val visibilityThresholdDp: Float = FADING_EDGE_VISIBILITY_THRESHOLD_DP,
   protected val visibilityInterpolator: TimeInterpolator = AccelerateDecelerateInterpolator(),
+  protected val startPaddingXStep: Double? = null,
+  protected val endPaddingXStep: Double? = null,
 ) {
   private val paint: Paint = Paint()
 
@@ -86,27 +95,37 @@ public open class FadingEdges(
 
   internal fun draw(context: CartesianDrawingContext) {
     with(context) {
+      val layerDimensions = context.layerDimensions
+      val startPaddingPixels =
+        startPaddingXStep?.let { (it * layerDimensions.xSpacing).toFloat() }
+          ?: layerDimensions.startPadding
+      val startFadeWidth = maxOf(startWidthDp.pixels, startPaddingPixels)
+      val endPaddingPixels =
+        endPaddingXStep?.let { (it * layerDimensions.xSpacing).toFloat() }
+          ?: layerDimensions.endPadding
+      val endFadeWidth = maxOf(endWidthDp.pixels, endPaddingPixels)
+
       val maxScroll = getMaxScrollDistance()
       var fadeAlphaFraction: Float
 
-      if (scrollEnabled && startWidthDp > 0f && scroll > 0f) {
+      if (scrollEnabled && startFadeWidth > 0f && scroll > 0f) {
         fadeAlphaFraction = (scroll / visibilityThresholdDp.pixels).coerceAtMost(1f)
 
         drawFadingEdge(
           left = layerBounds.left,
           top = layerBounds.top,
-          right = layerBounds.left + startWidthDp.pixels,
+          right = layerBounds.left + startFadeWidth,
           bottom = layerBounds.bottom,
           direction = -1,
           alpha = (visibilityInterpolator.getInterpolation(fadeAlphaFraction) * FULL_ALPHA).toInt(),
         )
       }
 
-      if (scrollEnabled && endWidthDp > 0f && scroll < maxScroll) {
+      if (scrollEnabled && endFadeWidth > 0f && scroll < maxScroll) {
         fadeAlphaFraction = ((maxScroll - scroll) / visibilityThresholdDp.pixels).coerceAtMost(1f)
 
         drawFadingEdge(
-          left = layerBounds.right - endWidthDp.pixels,
+          left = layerBounds.right - endFadeWidth,
           top = layerBounds.top,
           right = layerBounds.right,
           bottom = layerBounds.bottom,
@@ -145,16 +164,20 @@ public open class FadingEdges(
   override fun equals(other: Any?): Boolean =
     this === other ||
       other is FadingEdges &&
-        startWidthDp == other.startWidthDp &&
-        endWidthDp == other.endWidthDp &&
-        visibilityThresholdDp == other.visibilityThresholdDp &&
-        visibilityInterpolator == other.visibilityInterpolator
+      startWidthDp == other.startWidthDp &&
+      endWidthDp == other.endWidthDp &&
+      visibilityThresholdDp == other.visibilityThresholdDp &&
+      visibilityInterpolator == other.visibilityInterpolator &&
+      startPaddingXStep == other.startPaddingXStep &&
+      endPaddingXStep == other.endPaddingXStep
 
   override fun hashCode(): Int {
     var result = startWidthDp.hashCode()
     result = 31 * result + endWidthDp.hashCode()
     result = 31 * result + visibilityThresholdDp.hashCode()
     result = 31 * result + visibilityInterpolator.hashCode()
+    result = 31 * result + (startPaddingXStep?.hashCode() ?: 0)
+    result = 31 * result + (endPaddingXStep?.hashCode() ?: 0)
     return result
   }
 }

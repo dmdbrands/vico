@@ -34,13 +34,24 @@ public fun rememberFadingEdges(
   endWidth: Dp = FadingEdgesDefaults.edgeWidth,
   visibilityThreshold: Dp = FadingEdgesDefaults.visibilityThreshold,
   visibilityEasing: Easing = FadingEdgesDefaults.visibilityEasing,
+  startPaddingXStep: Double? = null,
+  endPaddingXStep: Double? = null,
 ): FadingEdges =
-  remember(startWidth, endWidth, visibilityThreshold, visibilityEasing) {
+  remember(
+    startWidth,
+    endWidth,
+    visibilityThreshold,
+    visibilityEasing,
+    startPaddingXStep,
+    endPaddingXStep,
+  ) {
     FadingEdges(
       startWidth.value,
       endWidth.value,
       visibilityThreshold.value,
       TimeInterpolator(visibilityEasing::transform),
+      startPaddingXStep,
+      endPaddingXStep,
     )
   }
 
@@ -50,12 +61,15 @@ public fun rememberFadingEdges(
   width: Dp = FadingEdgesDefaults.edgeWidth,
   visibilityThreshold: Dp = FadingEdgesDefaults.visibilityThreshold,
   visibilityEasing: Easing = FadingEdgesDefaults.visibilityEasing,
+  paddingXStep: Double? = null,
 ): FadingEdges =
   rememberFadingEdges(
     startWidth = width,
     endWidth = width,
     visibilityThreshold = visibilityThreshold,
     visibilityEasing = visibilityEasing,
+    startPaddingXStep = paddingXStep,
+    endPaddingXStep = paddingXStep,
   )
 
 private object FadingEdgesDefaults {
