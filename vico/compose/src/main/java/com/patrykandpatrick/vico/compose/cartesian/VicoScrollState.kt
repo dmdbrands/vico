@@ -101,6 +101,7 @@ public class VicoScrollState {
   public var initialScrollHandled: Boolean
 
   /**
+   * 
    * Tracks whether the initial auto-scroll animation has completed.
    * Used to skip onScrollStopped callback during initial chart load.
    */
@@ -144,6 +145,12 @@ public class VicoScrollState {
   /** The current bounds (for snap calculations). */
   public val currentBounds: RectF?
     get() = this.bounds
+
+  /**
+   * Start padding as a factor of x step (e.g. 0.2 = 20% of one x step).
+   * Used for scroll/visible-window start padding; implementation to be applied later.
+   */
+  public val scrollStartPaddingXStep: Double
 
   /** Whether scrolling is currently in progress. */
   internal val isScrollInProgress: Boolean
@@ -211,7 +218,8 @@ public class VicoScrollState {
     autoScrollAnimationSpec: AnimationSpec<Float>,
     value: Float,
     initialScrollHandled: Boolean,
-    snapBehaviorConfig: SnapBehaviorConfig?
+    snapBehaviorConfig: SnapBehaviorConfig?,
+    scrollStartPaddingXStep: Double = 0.0,
   ) {
     this.scrollEnabled = scrollEnabled
     this.initialScroll = initialScroll
@@ -221,6 +229,7 @@ public class VicoScrollState {
     this.autoScrollAnimationSpec = autoScrollAnimationSpec
     _value = mutableFloatStateOf(value)
     this.initialScrollHandled = initialScrollHandled
+    this.scrollStartPaddingXStep = scrollStartPaddingXStep
   }
 
   /**
@@ -233,6 +242,7 @@ public class VicoScrollState {
    * @param autoScrollCondition defines when an automatic scroll should occur.
    * @param autoScrollAnimationSpec the [AnimationSpec] for automatic scrolling.
    * @param snapBehaviorConfig configuration for snap behavior including snap function, velocity thresholds, window movement, and animation settings.
+   * @param scrollStartPaddingXStep start padding as a factor of x step (e.g. 0.2 = 20% of one x step); default 0.0.
    */
   public constructor(
     scrollEnabled: Boolean,
@@ -240,7 +250,8 @@ public class VicoScrollState {
     autoScroll: Scroll,
     autoScrollCondition: AutoScrollCondition,
     autoScrollAnimationSpec: AnimationSpec<Float>,
-    snapBehaviorConfig: SnapBehaviorConfig?
+    snapBehaviorConfig: SnapBehaviorConfig?,
+    scrollStartPaddingXStep: Double = 0.0,
   ) : this(
     scrollEnabled = scrollEnabled,
     initialScroll = initialScroll,
@@ -249,7 +260,8 @@ public class VicoScrollState {
     autoScrollAnimationSpec = autoScrollAnimationSpec,
     value = 0f,
     initialScrollHandled = false,
-    snapBehaviorConfig = snapBehaviorConfig
+    snapBehaviorConfig = snapBehaviorConfig,
+    scrollStartPaddingXStep = scrollStartPaddingXStep,
   )
 
   private inline fun withUpdated(
@@ -349,7 +361,7 @@ public class VicoScrollState {
 
   /**
    * Returns whether the chart can scroll forward (to the right/increasing scroll value).
-   * 
+   *
    * @return true if the current scroll value is less than maxValue (can scroll forward), false otherwise.
    * If initial scroll hasn't been handled yet, checks if initial scroll is not at End position.
    */
@@ -366,7 +378,7 @@ public class VicoScrollState {
 
   /**
    * Returns whether the chart can scroll backward (to the left/decreasing scroll value).
-   * 
+   *
    * @return true if the current scroll value is greater than 0 (can scroll backward), false otherwise.
    * If initial scroll hasn't been handled yet, checks if initial scroll is not at Start position.
    */
@@ -458,7 +470,8 @@ public class VicoScrollState {
       autoScroll: Scroll,
       autoScrollCondition: AutoScrollCondition,
       autoScrollAnimationSpec: AnimationSpec<Float>,
-      snapBehaviorConfig: SnapBehaviorConfig? = null
+      snapBehaviorConfig: SnapBehaviorConfig? = null,
+      scrollStartPaddingXStep: Double = 0.0,
     ) =
       Saver<VicoScrollState, Pair<Float, Boolean>>(
         save = { it.value to it.initialScrollHandled },
@@ -471,7 +484,8 @@ public class VicoScrollState {
             autoScrollAnimationSpec,
             value,
             initialScrollHandled,
-            snapBehaviorConfig
+            snapBehaviorConfig,
+            scrollStartPaddingXStep,
           )
         },
       )
@@ -487,6 +501,7 @@ public fun rememberVicoScrollState(
   autoScrollCondition: AutoScrollCondition = AutoScrollCondition.Never,
   autoScrollAnimationSpec: AnimationSpec<Float> = spring(),
   snapBehaviorConfig: SnapBehaviorConfig? = null,
+  scrollStartPaddingXStep: Double = 0.0,
   key: Any? = null, // Add key parameter to force recreation
 ): VicoScrollState =
   rememberSaveable(
@@ -497,15 +512,17 @@ public fun rememberVicoScrollState(
     autoScrollCondition,
     autoScrollAnimationSpec,
     snapBehaviorConfig,
+    scrollStartPaddingXStep,
     saver =
-      remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec , snapBehaviorConfig , key) {
+      remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec, snapBehaviorConfig, scrollStartPaddingXStep, key) {
         VicoScrollState.Saver(
           scrollEnabled,
           initialScroll,
           autoScroll,
           autoScrollCondition,
           autoScrollAnimationSpec,
-          snapBehaviorConfig
+          snapBehaviorConfig,
+          scrollStartPaddingXStep,
         )
       },
   ) {
@@ -515,6 +532,7 @@ public fun rememberVicoScrollState(
       autoScroll,
       autoScrollCondition,
       autoScrollAnimationSpec,
-      snapBehaviorConfig = snapBehaviorConfig
+      snapBehaviorConfig = snapBehaviorConfig,
+      scrollStartPaddingXStep = scrollStartPaddingXStep,
     )
   }

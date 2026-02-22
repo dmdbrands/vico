@@ -145,7 +145,7 @@ private fun createSnapBehavior(scrollState: VicoScrollState, config: SnapBehavio
         }
 
         override fun calculateSnapOffset(velocity: Float): Float {
-            // Phase 2: Calculate the final snap offset using Scroll.Absolute.x()
+            // Phase 2: Calculate the final snap offset using Scroll.Absolute.xWithPadding()
             val initialRange = scrollState.currentVisibleRange?.visibleXRange?.start
             val approachedLabel = snapConfig.snapToLabelFunction?.let { it(initialRange, isDrag, velocity.sign > 0f) }
             Log.i("SnapBehavior", "isDrag: $isDrag, velocity: $velocity")
@@ -157,9 +157,13 @@ private fun createSnapBehavior(scrollState: VicoScrollState, config: SnapBehavio
 
             val finalSnapOffset =
                 if (approachedLabel != null && layerDimensions != null && context != null && bounds != null) {
-                    // Use Scroll.Absolute.x() to calculate the correct scroll position
-                    val targetScrollPosition = Scroll.Absolute.x(approachedLabel, bias = 0f)
-                        .getValue(context, layerDimensions, bounds, maxValue)
+                    // Use Scroll.Absolute.xWithPadding() to calculate the correct scroll position (target x minus padding)
+                    val targetScrollPosition =
+                        Scroll.Absolute.xWithPadding(
+                            approachedLabel,
+                            scrollState.scrollStartPaddingXStep,
+                            bias = 0f,
+                        ).getValue(context, layerDimensions, bounds, maxValue)
 
                     // Get current scroll position
                     val currentScrollPosition = scrollState.value

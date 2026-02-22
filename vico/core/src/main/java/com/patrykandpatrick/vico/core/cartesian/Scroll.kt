@@ -58,6 +58,23 @@ public sealed interface Scroll {
               layerDimensions.xSpacing - bias * bounds.width()
         }
 
+      /**
+       * Scrolls to the specified _x_ coordinate with padding applied: the actual scroll target
+       * is [x] minus [paddingXStep] × xStep (e.g. x=50, paddingXStep=0.2 → scroll to 49.8).
+       * Position is adjusted by [bias] between start edge (0) and end edge (1).
+       */
+      public fun xWithPadding(x: Double, paddingXStep: Double, bias: Float = 0f): Absolute =
+        Absolute { context, layerDimensions, bounds, _ ->
+          val effectiveX =
+            (x - paddingXStep * context.ranges.xStep).coerceIn(
+              context.ranges.minX,
+              context.ranges.maxX,
+            )
+          layerDimensions.startPadding +
+            ((effectiveX - context.ranges.minX) / context.ranges.xStep).toFloat() *
+              layerDimensions.xSpacing - bias * bounds.width()
+        }
+
       // Cache for stable scroll positions to prevent recreation
       private val stableScrollCache = mutableMapOf<String, Absolute>()
 

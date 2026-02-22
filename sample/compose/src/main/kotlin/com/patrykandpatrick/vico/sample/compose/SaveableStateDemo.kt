@@ -163,7 +163,7 @@ fun SaveableStateDemo(
 
   // Also use saveable scroll and zoom states to preserve chart position
   // Use xStable to prevent scroll state recreation when ranges change
-  val initialScroll = remember { Scroll.Absolute.x(70.0) }
+  val initialScroll = remember { Scroll.Absolute.xWithPadding(70.0, 0.2) }
   val scrollState = rememberVicoScrollState(
     initialScroll = initialScroll,
     snapBehaviorConfig = SnapBehaviorConfig(
