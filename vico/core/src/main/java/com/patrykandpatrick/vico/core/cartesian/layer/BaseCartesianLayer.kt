@@ -26,6 +26,8 @@ public abstract class BaseCartesianLayer<T : CartesianLayerModel> : CartesianLay
 
   protected abstract fun drawInternal(context: CartesianDrawingContext, model: T)
 
+  override fun drawOverlay(context: CartesianDrawingContext, model: T) {}
+
   override fun draw(context: CartesianDrawingContext, model: T) {
     with(context) {
       margins.clear()

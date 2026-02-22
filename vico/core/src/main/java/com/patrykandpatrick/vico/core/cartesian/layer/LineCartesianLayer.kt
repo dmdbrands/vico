@@ -537,9 +537,23 @@ protected constructor(
           updateMarkerTargets(entry, x, y, lineFillBitmap)
         }
 
-        drawPointsAndDataLabels(line, series, seriesIndex, drawingStart, pointInfoMap)
-
         canvas.restore()
+      }
+    }
+  }
+
+  override fun drawOverlay(context: CartesianDrawingContext, model: LineCartesianLayerModel) {
+    with(context) {
+      val drawingModel = extraStore.getOrNull(drawingModelKey)
+      val drawingStartAlignmentCorrection =
+        layoutDirectionMultiplier * layerDimensions.startPadding
+      val drawingStart =
+        layerBounds.getStart(isLtr = isLtr) + drawingStartAlignmentCorrection - scroll
+
+      model.series.forEachIndexed { seriesIndex, series ->
+        val pointInfoMap = drawingModel?.getOrNull(seriesIndex)
+        val line = lineProvider.getLine(seriesIndex, model.extraStore)
+        drawPointsAndDataLabels(line, series, seriesIndex, drawingStart, pointInfoMap)
       }
     }
   }

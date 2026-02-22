@@ -108,6 +108,15 @@ private constructor(
       }
     }
 
+  private val overlayDrawingConsumer =
+    object : ModelAndLayerConsumer {
+      lateinit var context: CartesianDrawingContext
+
+      override fun <T : CartesianLayerModel> invoke(model: T?, layer: CartesianLayer<T>) {
+        layer.drawOverlay(context, model ?: return)
+      }
+    }
+
   private val layerDimensionUpdateConsumer =
     object : ModelAndLayerConsumer {
       lateinit var context: CartesianMeasuringContext
@@ -381,6 +390,7 @@ private constructor(
       val markerTargets = getMarkerTargets(context, pointerPosition)
       if (markerTargets.isNotEmpty()) marker?.drawUnderLayers(context, markerTargets)
       canvas.drawBitmap(layerBitmap, 0f, 0f, null)
+      model.forEachWithLayer(overlayDrawingConsumer.apply { this.context = context })
       fadingEdges?.run {
         draw(context)
         canvas.restoreToCount(canvasSaveCount)
