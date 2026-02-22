@@ -36,13 +36,6 @@ public interface CartesianLayer<M : CartesianLayerModel> : CartesianLayerMarginU
   /** Draws the [CartesianLayer]. */
   public fun draw(context: CartesianDrawingContext, model: M)
 
-  /**
-   * Draws overlay content (e.g. points and data labels) on the main canvas after the layer bitmap
-   * is composited. Called by [CartesianChart] so that overlay content is not clipped by the layer
-   * bitmap and appears on top of the line. Default is no-op.
-   */
-  public fun drawOverlay(context: CartesianDrawingContext, model: M) {}
-
   /** Updates [dimensions] to match this [CartesianLayer]’s dimensions. */
   public fun updateDimensions(
     context: CartesianMeasuringContext,
