@@ -51,6 +51,7 @@ dependencies {
   testImplementation(libs.kotlinTest)
 }
 
+afterEvaluate { tasks.findByName("publishGprPublicationToGitHubPackagesRepository")?.dependsOn("assembleRelease") }
 publishing {
     publications {
         create<MavenPublication>("gpr") {

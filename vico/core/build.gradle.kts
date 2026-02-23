@@ -51,6 +51,7 @@ dependencies {
   testImplementation(libs.testCore)
 }
 
+afterEvaluate { tasks.findByName("publishGprPublicationToGitHubPackagesRepository")?.dependsOn("assembleRelease") }
 publishing {
     publications {
         create<MavenPublication>("gpr") {

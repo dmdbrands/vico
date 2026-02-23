@@ -46,6 +46,7 @@ dependencies {
   implementation(libs.composeMaterial3)
 }
 
+afterEvaluate { tasks.findByName("publishGprPublicationToGitHubPackagesRepository")?.dependsOn("assembleRelease") }
 publishing {
     publications {
         create<MavenPublication>("gpr") {
