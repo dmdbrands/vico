@@ -23,7 +23,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
@@ -36,6 +39,7 @@ import com.patrykandpatrick.vico.compose.cartesian.data.ScrollAwareRangeProvider
 import com.patrykandpatrick.vico.compose.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.compose.cartesian.data.rememberScrollAwareRangeProvider
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.marker.rememberScrubMarkerController
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.Scroll
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
@@ -107,6 +111,32 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       modifier = Modifier.padding(bottom = 16.dp),
     )
+    // Feature 2 test: iOS Health-like marker scrubbing
+    // - Tap (no movement): toggle marker
+    // - Hold 200ms + drag: scrub marker along data, all scroll locked
+    // - Horizontal swipe: chart scrolls normally
+    // - Release after scrub: marker stays
+    // - Scroll after marker visible: marker auto-dismisses
+    var selectedMarkerX by remember { mutableStateOf<Double?>(null) }
+
+    val scrubController = rememberScrubMarkerController(
+      scrollState = scrollState,
+      delayMs = 200L,
+      onMarkerIndexChanged = { clickX, targets ->
+        // Test: only allow marker on X values that are multiples of 3.
+        // Proves callback controls marker positioning (like meApp's getTargetPoints).
+        if (clickX == null) {
+          selectedMarkerX = null
+          null
+        } else {
+          val nearest = targets
+            .filter { it.toLong() % 3 == 0L }
+            .minByOrNull { kotlin.math.abs(it - clickX) }
+          selectedMarkerX = nearest
+          nearest
+        }
+      },
+    )
     CartesianChartHost(
       chart = rememberCartesianChart(
         rememberLineCartesianLayer(rangeProvider = rangeProvider),
@@ -114,6 +144,8 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
           itemPlacer = ListItemPlacer(ticks = { rangeProvider.currentTicks }),
         ),
         bottomAxis = HorizontalAxis.rememberBottom(),
+        marker = rememberMarker(),
+        markerController = scrubController,
       ),
       modelProducer = modelProducer,
       scrollState = scrollState,

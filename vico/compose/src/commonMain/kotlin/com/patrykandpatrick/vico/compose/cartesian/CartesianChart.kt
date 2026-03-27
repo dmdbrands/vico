@@ -150,6 +150,19 @@ internal constructor(
   /** Links _x_ values to [CartesianMarker.Target]s. */
   protected val markerTargets: Map<Double, List<CartesianMarker.Target>> = _markerTargets
 
+  /** All X values that have marker targets. Cached — only rebuilt when targets change. */
+  private var cachedMarkerTargetXValues: List<Double> = emptyList()
+  private var cachedMarkerTargetSize: Int = -1
+  internal val allMarkerTargetXValues: List<Double>
+    get() {
+      val currentSize = _markerTargets.size
+      if (currentSize != cachedMarkerTargetSize) {
+        cachedMarkerTargetXValues = _markerTargets.keys.toList()
+        cachedMarkerTargetSize = currentSize
+      }
+      return cachedMarkerTargetXValues
+    }
+
   /** The start [Axis]. */
   public val startAxis: Axis<Axis.Position.Vertical.Start>? by axisManager::startAxis
 

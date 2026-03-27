@@ -33,6 +33,7 @@ import com.patrykandpatrick.vico.compose.cartesian.layer.MutableCartesianLayerDi
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarkerController.Lock
 import com.patrykandpatrick.vico.compose.cartesian.marker.Interaction
+import com.patrykandpatrick.vico.compose.cartesian.marker.ScrubMarkerController
 import com.patrykandpatrick.vico.compose.common.*
 import com.patrykandpatrick.vico.compose.common.Defaults.CHART_HEIGHT
 import com.patrykandpatrick.vico.compose.common.data.ExtraStore
@@ -159,6 +160,25 @@ internal fun CartesianChartHostImpl(
   var markerSeriesIndex by rememberSaveable { mutableStateOf<Int?>(null) }
   var lastAcceptedInteraction by
     rememberSaveable(saver = Interaction.Saver) { mutableStateOf(null) }
+
+  // Sync ScrubMarkerController.hasActiveMarker with markerX (single source of truth).
+  // Also dismiss marker on scroll via consumedXDeltas.
+  val scrubController = chart.markerController as? ScrubMarkerController
+  scrubController?.hasActiveMarker = markerX != null
+
+  if (scrubController != null) {
+    LaunchedEffect(scrollState.consumedXDeltas) {
+      scrollState.consumedXDeltas.collect {
+        if (markerX != null && !scrubController.isScrubbing) {
+          scrubController.onDismiss()
+          markerX = null
+          markerSeriesIndex = null
+          lastAcceptedInteraction = null  // prevent onViewportChange from re-showing
+        }
+      }
+    }
+  }
+
   val measuringContext =
     rememberCartesianMeasuringContext(
       extraStore = extraStore,
@@ -226,12 +246,37 @@ internal fun CartesianChartHostImpl(
           if (chart.markerController.shouldAcceptInteraction(interaction, narrowedTargets)) {
             val shouldShow = chart.markerController.shouldShowMarker(interaction, narrowedTargets)
             lastAcceptedInteraction = interaction
-            if (shouldShow && narrowedTargets.isNotEmpty()) {
-              markerX = narrowedTargets.first().x
-              markerSeriesIndex = seriesIndex
+
+            // If ScrubMarkerController has a callback, let the consumer decide markerX
+            val scrubCallback = (chart.markerController as? ScrubMarkerController)?.onMarkerIndexChanged
+            if (scrubCallback != null) {
+              if (shouldShow && narrowedTargets.isNotEmpty()) {
+                // Pass ALL marker target X values, not just narrowed ones.
+                // Consumer's callback can find nearest match from full set.
+                val allTargetXValues = chart.allMarkerTargetXValues
+                val userMarkerX = scrubCallback(x, allTargetXValues)
+                if (userMarkerX != null) {
+                  markerX = userMarkerX
+                  markerSeriesIndex = seriesIndex
+                } else {
+                  markerX = null
+                  markerSeriesIndex = null
+                }
+              } else {
+                // Dismiss — notify consumer
+                scrubCallback(null, emptyList())
+                markerX = null
+                markerSeriesIndex = null
+              }
             } else {
-              markerX = null
-              markerSeriesIndex = null
+              // Fallback: vico's internal nearest-target logic
+              if (shouldShow && narrowedTargets.isNotEmpty()) {
+                markerX = narrowedTargets.first().x
+                markerSeriesIndex = seriesIndex
+              } else {
+                markerX = null
+                markerSeriesIndex = null
+              }
             }
           }
         }
@@ -279,6 +324,7 @@ internal fun CartesianChartHostImpl(
               }
             },
           longPressEnabled = chart.markerController.acceptsLongPress,
+          markerController = chart.markerController,
         )
   ) {
     if (size.isEmpty()) return@Canvas
@@ -377,22 +423,28 @@ private fun ScrollAwareRangeEffect(
     // is computed from the FULL dataset, not the visible window.
     var isFirstScrollUpdate by remember { mutableStateOf(true) }
 
-    // Build cache only — don't compute range from full dataset.
-    // The correct range comes from the visible window (first scroll event).
+    // Build cache and set initial range, then wait for first scroll to correct it.
     LaunchedEffect(model) {
       val layerModel = model.models.getOrNull(layerIndex) as? LineCartesianLayerModel
         ?: return@LaunchedEffect
       provider.buildCache(layerModel.series)
-      isFirstScrollUpdate = true
-    }
 
-    // First scroll event: process IMMEDIATELY (no debounce) and SNAP (no animation).
-    // This sets the correct visible-window range on the very first frame that
-    // Canvas reports scroll info — no flash of full-dataset range.
-    LaunchedEffect(provider, model) {
-      if (!isFirstScrollUpdate) return@LaunchedEffect
-      // Wait for the first scroll event (no debounce)
-      val firstScrollInfo = provider.scrollUpdates.first { provider.isCacheReady }
+      // Set initial range from full dataset (alpha=0 hides this)
+      val initialResult = provider.computeDisplayRange(layerModel.minY, layerModel.maxY)
+      if (initialResult != null) {
+        val (range, ticks) = initialResult
+        provider.currentMinY = range.start
+        provider.currentMaxY = range.endInclusive
+        provider.currentTicks = ticks
+        animMinY.snapTo(range.start.toFloat())
+        animMaxY.snapTo(range.endInclusive.toFloat())
+        onAnimatedRange(range.start, range.endInclusive)
+      }
+
+      // Now wait for first scroll event to correct to visible-window range.
+      // This runs AFTER cache is built, so isCacheReady is true.
+      isFirstScrollUpdate = true
+      val firstScrollInfo = provider.scrollUpdates.first()
       val visible = provider.computeVisibleRange(firstScrollInfo)
       val result = visible?.let { provider.computeDisplayRange(it.first, it.second) }
       if (result != null) {
@@ -404,6 +456,9 @@ private fun ScrollAwareRangeEffect(
         animMinY.snapTo(range.start.toFloat())
         animMaxY.snapTo(range.endInclusive.toFloat())
         onAnimatedRange(range.start, range.endInclusive)
+      } else {
+        // No visible range computed — still show the full dataset range
+        isFirstScrollUpdate = false
       }
     }
 
@@ -438,7 +493,7 @@ private fun ScrollAwareRangeEffect(
           maxJob.join()
         }
     }
-    
+
 
     // Push animated values to Compose State on each animation frame
     LaunchedEffect(Unit) {
