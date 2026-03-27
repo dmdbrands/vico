@@ -70,6 +70,10 @@ protected constructor(
     CartesianLayerDrawingModelInterpolator.default(),
   protected val drawingModelKey: ExtraStore.Key<LineCartesianLayerDrawingModel>,
 ) : BaseCartesianLayer<LineCartesianLayerModel>() {
+  // Internal accessors for CartesianChartHost scroll-aware range support.
+  internal val internalRangeProvider: CartesianLayerRangeProvider get() = rangeProvider
+  internal val internalVerticalAxisPosition: Axis.Position.Vertical? get() = verticalAxisPosition
+
   /**
    * Defines the appearance of a line in a line chart.
    *
@@ -510,7 +514,13 @@ protected constructor(
     with(context) {
       resetTempData()
 
-      val drawingModel = extraStore.getOrNull(drawingModelKey)
+      // When using ScrollAwareRangeProvider, skip the cached drawing model so that
+      // line positions are always computed from the live (animated) yRange.
+      val drawingModel = if (rangeProvider is ScrollAwareRangeProvider) {
+        null
+      } else {
+        extraStore.getOrNull(drawingModelKey)
+      }
 
       model.series.forEachIndexed { seriesIndex, series ->
         val pointInfoMap = drawingModel?.getOrNull(seriesIndex)
