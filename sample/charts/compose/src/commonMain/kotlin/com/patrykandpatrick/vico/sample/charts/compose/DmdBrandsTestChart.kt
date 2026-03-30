@@ -23,10 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
@@ -38,7 +35,12 @@ import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModelProdu
 import com.patrykandpatrick.vico.compose.cartesian.data.ScrollAwareRangeProvider
 import com.patrykandpatrick.vico.compose.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.compose.cartesian.data.rememberScrollAwareRangeProvider
+import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
+import com.patrykandpatrick.vico.compose.common.Fill
+import com.patrykandpatrick.vico.compose.common.component.ShapeComponent
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
 import com.patrykandpatrick.vico.compose.cartesian.marker.rememberScrubMarkerController
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.Scroll
@@ -89,12 +91,13 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
     (niceMin..niceMax) to ticks
   }
 
-  // Generate sample data with distinct regions
+  // Generate sample data with NON-SEQUENTIAL X values (gaps in X axis).
+  // Tests: marker on X with no data point, interpolation across gaps.
   LaunchedEffect(Unit) {
-    val data = generateWeightData(200)
+    val entries = generateNonSequentialData()
     modelProducer.runTransaction {
       lineSeries {
-        series(x = data.indices.map { it.toDouble() }, y = data)
+        series(x = entries.map { it.first }, y = entries.map { it.second })
       }
     }
   }
@@ -117,29 +120,28 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
     // - Horizontal swipe: chart scrolls normally
     // - Release after scrub: marker stays
     // - Scroll after marker visible: marker auto-dismisses
-    var selectedMarkerX by remember { mutableStateOf<Double?>(null) }
-
     val scrubController = rememberScrubMarkerController(
       scrollState = scrollState,
       delayMs = 200L,
-      onMarkerIndexChanged = { clickX, targets ->
-        // Test: only allow marker on X values that are multiples of 3.
-        // Proves callback controls marker positioning (like meApp's getTargetPoints).
-        if (clickX == null) {
-          selectedMarkerX = null
-          null
-        } else {
-          val nearest = targets
-            .filter { it.toLong() % 3 == 0L }
-            .minByOrNull { kotlin.math.abs(it - clickX) }
-          selectedMarkerX = nearest
-          nearest
-        }
-      },
     )
     CartesianChartHost(
       chart = rememberCartesianChart(
-        rememberLineCartesianLayer(rangeProvider = rangeProvider),
+        // Feature 3: Monotone cubic interpolation (Fritsch-Carlson, no overshoot)
+        rememberLineCartesianLayer(
+          rangeProvider = rangeProvider,
+          lineProvider = LineCartesianLayer.LineProvider.series(
+            LineCartesianLayer.Line(
+              fill = LineCartesianLayer.LineFill.single(Fill(Color(0xFF6750A4))),
+              interpolator = LineCartesianLayer.Interpolator.monotone(),
+              pointProvider = LineCartesianLayer.PointProvider.single(
+                LineCartesianLayer.Point(
+                  ShapeComponent(Fill(Color(0xFF6750A4)), CircleShape),
+                  size = 4.dp,
+                ),
+              ),
+            ),
+          ),
+        ),
         startAxis = VerticalAxis.rememberStart(
           itemPlacer = ListItemPlacer(ticks = { rangeProvider.currentTicks }),
         ),
@@ -154,15 +156,25 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
   }
 }
 
-/** Generates weight-like data with 3 distinct regions to test scroll-aware range. */
-private fun generateWeightData(count: Int): List<Double> = List(count) { i ->
-  val base = when {
-    i < 60 -> 160.0   // Low region
-    i < 130 -> 185.0  // High region
-    else -> 158.0      // Medium region
+/**
+ * Generates weight-like data with NON-SEQUENTIAL X values.
+ * X gaps simulate real-world data (missing days, irregular measurements).
+ * Three regions with different value ranges to test scroll-aware range.
+ */
+private fun generateNonSequentialData(): List<Pair<Double, Double>> {
+  val entries = mutableListOf<Pair<Double, Double>>()
+  var x = 0.0
+  for (i in 0 until 100) {
+    val y = when {
+      i < 30 -> 160.0 + 8.0 * sin(i * 0.3) + (i % 5) * 0.5   // Low region
+      i < 65 -> 185.0 + 6.0 * sin(i * 0.4) + (i % 4) * 0.3   // High region
+      else -> 158.0 + 5.0 * sin(i * 0.25) + (i % 6) * 0.4     // Medium region
+    }
+    entries.add(x to y)
+    // Non-sequential: random gaps of 1-5 between X values
+    x += 1.0 + (i % 5).toDouble()
   }
-  // Add some variation
-  base + 8.0 * sin(i * 0.3) + (i % 7) * 0.5
+  return entries
 }
 
 /** Returns a nice step size for the given range. Uses 1-2-5 pattern. */

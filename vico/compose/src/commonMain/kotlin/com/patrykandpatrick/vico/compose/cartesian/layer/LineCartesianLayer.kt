@@ -396,6 +396,14 @@ protected constructor(
       public fun catmullRom(
         @FloatRange(from = 0.0, to = 1.0, toInclusive = false) alpha: Float = 0f
       ): Interpolator = CatmullRomInterpolator(alpha)
+
+      /**
+       * Uses monotone cubic interpolation (Fritsch-Carlson algorithm). Matches SwiftUI's
+       * `.monotone` interpolation and iOS Health app charts. Unlike [catmullRom], this
+       * interpolator **never overshoots** — the curve stays within the Y bounds of the data.
+       * Ideal for health data (weight, blood pressure, temperature).
+       */
+      public fun monotone(): Interpolator = MonotoneInterpolator
     }
   }
 
