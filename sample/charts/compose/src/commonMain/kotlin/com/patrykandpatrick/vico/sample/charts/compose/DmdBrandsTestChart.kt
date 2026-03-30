@@ -16,9 +16,15 @@
 
 package com.patrykandpatrick.vico.sample.charts.compose
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -73,11 +79,13 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
 
   // ScrollAwareRangeProvider with simple nice-scale callback
   val rangeProvider = rememberScrollAwareRangeProvider(
-    segmentSize = 10,
+    paddingEntries = 1,
     debounceMs = 150,
     animDurationMs = 250,
-  ) { visibleMinY, visibleMaxY ->
-    // Simple nice scale: round to nearest 5, add padding
+  ) { visibleEntries ->
+    // Compute range from actual visible entries (+ padding)
+    val visibleMinY = visibleEntries.minOf { it.second }
+    val visibleMaxY = visibleEntries.maxOf { it.second }
     val step = niceStep(visibleMaxY - visibleMinY)
     val niceMin = floor(visibleMinY / step) * step
     val niceMax = ceil(visibleMaxY / step) * step
@@ -102,57 +110,71 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
     }
   }
 
-  Column(modifier = modifier.padding(16.dp)) {
-    Text(
-      text = "Scroll-Aware Range Demo",
-      style = MaterialTheme.typography.titleMedium,
-      modifier = Modifier.padding(bottom = 8.dp),
-    )
-    Text(
-      text = "Scroll the chart — Y-axis adapts to visible data with animation",
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      modifier = Modifier.padding(bottom = 16.dp),
-    )
-    // Feature 2 test: iOS Health-like marker scrubbing
-    // - Tap (no movement): toggle marker
-    // - Hold 200ms + drag: scrub marker along data, all scroll locked
-    // - Horizontal swipe: chart scrolls normally
-    // - Release after scrub: marker stays
-    // - Scroll after marker visible: marker auto-dismisses
-    val scrubController = rememberScrubMarkerController(
-      scrollState = scrollState,
-      delayMs = 200L,
-    )
-    CartesianChartHost(
-      chart = rememberCartesianChart(
-        // Feature 3: Monotone cubic interpolation (Fritsch-Carlson, no overshoot)
-        rememberLineCartesianLayer(
-          rangeProvider = rangeProvider,
-          lineProvider = LineCartesianLayer.LineProvider.series(
-            LineCartesianLayer.Line(
-              fill = LineCartesianLayer.LineFill.single(Fill(Color(0xFF6750A4))),
-              interpolator = LineCartesianLayer.Interpolator.monotone(),
-              pointProvider = LineCartesianLayer.PointProvider.single(
-                LineCartesianLayer.Point(
-                  ShapeComponent(Fill(Color(0xFF6750A4)), CircleShape),
-                  size = 4.dp,
+  val scrubController = rememberScrubMarkerController(
+    scrollState = scrollState,
+    delayMs = 200L,
+  )
+
+  // LazyColumn to test gesture conflict:
+  // - Horizontal chart scroll should NOT trigger vertical LazyColumn scroll
+  // - Marker scrub should NOT trigger vertical LazyColumn scroll
+  // - Vertical swipe on cards SHOULD scroll the LazyColumn
+  LazyColumn(modifier = modifier.fillMaxSize()) {
+    item {
+      Text(
+        text = "Scroll-Aware Range + LazyColumn Test",
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier.padding(16.dp),
+      )
+    }
+
+    item {
+      CartesianChartHost(
+        chart = rememberCartesianChart(
+          rememberLineCartesianLayer(
+            rangeProvider = rangeProvider,
+            lineProvider = LineCartesianLayer.LineProvider.series(
+              LineCartesianLayer.Line(
+                fill = LineCartesianLayer.LineFill.single(Fill(Color(0xFF6750A4))),
+                interpolator = LineCartesianLayer.Interpolator.monotone(),
+                pointProvider = LineCartesianLayer.PointProvider.single(
+                  LineCartesianLayer.Point(
+                    ShapeComponent(Fill(Color(0xFF6750A4)), CircleShape),
+                    size = 4.dp,
+                  ),
                 ),
               ),
             ),
           ),
+          startAxis = VerticalAxis.rememberStart(
+            itemPlacer = ListItemPlacer(ticks = { rangeProvider.currentTicks }),
+          ),
+          bottomAxis = HorizontalAxis.rememberBottom(),
+          marker = rememberMarker(),
+          markerController = scrubController,
         ),
-        startAxis = VerticalAxis.rememberStart(
-          itemPlacer = ListItemPlacer(ticks = { rangeProvider.currentTicks }),
+        modelProducer = modelProducer,
+        scrollState = scrollState,
+        modifier = Modifier.fillMaxWidth().height(300.dp).padding(horizontal = 16.dp),
+      )
+    }
+
+    // Cards below chart — vertical scroll should work here
+    items(20) { index ->
+      Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
-        bottomAxis = HorizontalAxis.rememberBottom(),
-        marker = rememberMarker(),
-        markerController = scrubController,
-      ),
-      modelProducer = modelProducer,
-      scrollState = scrollState,
-      modifier = Modifier.fillMaxWidth(),
-    )
+      ) {
+        Box(modifier = Modifier.padding(16.dp)) {
+          Text(
+            text = "Card #${index + 1} — Swipe vertically to scroll LazyColumn",
+            style = MaterialTheme.typography.bodyMedium,
+          )
+        }
+      }
+    }
   }
 }
 

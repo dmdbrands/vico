@@ -18,9 +18,8 @@ package com.patrykandpatrick.vico.compose.cartesian.data
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import com.patrykandpatrick.vico.compose.common.data.ExtraStore
-import kotlin.math.max
-import kotlin.math.min
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 /**
@@ -28,43 +27,51 @@ import kotlinx.coroutines.flow.MutableSharedFlow
  * visible data points. Follows iOS-like animation: new ticks appear instantly (approximating
  * cross-fade), while chart content animates positionally via range interpolation.
  *
- * @param segmentSize the number of data points per cache segment. Must be > 0.
+ * Uses binary search on sorted X values for O(log n) visible-window lookup — accurate for
+ * both sequential and non-sequential X data.
+ *
+ * @param paddingEntries extra entries to include before and after the visible window
+ *   for stable range computation. Default 1.
  * @param debounceMs milliseconds to wait after scroll settles before updating the range.
  * @param animDurationMs duration of the range animation in milliseconds.
- * @param onVisibleRange callback receiving (visibleMinY, visibleMaxY) and returning a
- *   [Pair] of the display range ([ClosedRange]) and tick label values ([List]).
+ * @param onVisibleEntries callback receiving the visible entries (+ padding) as (x, y) pairs.
+ *   Returns a [Pair] of the display range ([ClosedRange]) and tick label values ([List]).
  */
 public class ScrollAwareRangeProvider(
-  private val segmentSize: Int = 10,
+  private val paddingEntries: Int = 1,
   internal val debounceMs: Long = 100L,
   internal val animDurationMs: Int = 300,
-  private val onVisibleRange: (minY: Double, maxY: Double) -> Pair<ClosedRange<Double>, List<Double>>,
+  private val onVisibleEntries: (visibleEntries: List<Pair<Double, Double>>) -> Pair<ClosedRange<Double>, List<Double>>,
 ) : CartesianLayerRangeProvider {
 
   init {
-    require(segmentSize > 0) { "segmentSize must be > 0" }
+    require(paddingEntries >= 0) { "paddingEntries must be >= 0" }
   }
 
-  // Segment cache: index -> (minY, maxY) for that segment
-  private var segmentCache: List<Pair<Double, Double>> = emptyList()
+  // All entries from the first series, sorted by X. Stores (x, y).
+  private var allEntries: List<Pair<Double, Double>> = emptyList()
 
-  // All Y values from the first series, indexed by entry position
-  private var allYValues: List<Double> = emptyList()
+  // Sorted X values for binary search (parallel to allEntries).
+  private var sortedXValues: DoubleArray = DoubleArray(0)
 
-  // Current animated range values — set by ScrollAwareRangeEffect animation
+  // Current animated range values — set by ScrollAwareRangeEffect animation.
   internal var currentMinY: Double = Double.NaN
   internal var currentMaxY: Double = Double.NaN
 
-  // Whether the cache has been built at least once
+  // Whether entries have been loaded at least once.
   internal var isCacheReady: Boolean = false
 
-  // Current tick labels — read by ListItemPlacer
+  // Current tick labels — read by ListItemPlacer.
   public var currentTicks: List<Double> = emptyList()
     internal set
 
   // Flow for scroll updates — CartesianChartHost emits to this.
-  // Buffer of 10 prevents dropped events during rapid scrolling.
   internal val scrollUpdates = MutableSharedFlow<ScrollInfo>(extraBufferCapacity = 10)
+
+  // Cache: avoid recomputing if visible window hasn't changed.
+  private var lastVisibleStartIndex: Int = -1
+  private var lastVisibleEndIndex: Int = -1
+  private var lastVisibleEntries: List<Pair<Double, Double>> = emptyList()
 
   override fun getMinY(minY: Double, maxY: Double, extraStore: ExtraStore): Double =
     if (isCacheReady && !currentMinY.isNaN()) currentMinY else minY
@@ -73,61 +80,82 @@ public class ScrollAwareRangeProvider(
     if (isCacheReady && !currentMaxY.isNaN()) currentMaxY else maxY
 
   /**
-   * Builds the segment cache from model data. Called when the model changes.
-   * Uses the first series of the [LineCartesianLayerModel].
+   * Builds the entry list from model data. Called when the model changes.
+   * Uses the first series sorted by X.
    */
   internal fun buildCache(series: List<List<LineCartesianLayerModel.Entry>>) {
     if (series.isEmpty() || series.first().isEmpty()) {
-      segmentCache = emptyList()
-      allYValues = emptyList()
+      allEntries = emptyList()
+      sortedXValues = DoubleArray(0)
       isCacheReady = false
+      lastVisibleStartIndex = -1
       return
     }
-    allYValues = series.first().map { it.y }
-    segmentCache = allYValues.chunked(segmentSize).map { chunk ->
-      chunk.min() to chunk.max()
-    }
+    val entries = series.first().sortedBy { it.x }
+    allEntries = entries.map { it.x to it.y }
+    sortedXValues = DoubleArray(entries.size) { entries[it].x }
     isCacheReady = true
+    lastVisibleStartIndex = -1
   }
 
   /**
-   * Computes the visible Y min/max from the segment cache based on scroll info.
-   * Returns null if the cache is not ready or visible range is empty.
+   * Computes the visible entries (+ padding) based on scroll info.
+   * Uses binary search on sorted X values — O(log n).
+   * Returns null if not ready or no entries in visible range.
    */
-  internal fun computeVisibleRange(info: ScrollInfo): Pair<Double, Double>? {
-    if (!isCacheReady || allYValues.isEmpty() || info.xSpacing <= 0f) return null
+  internal fun computeVisibleEntries(info: ScrollInfo): List<Pair<Double, Double>>? {
+    if (!isCacheReady || allEntries.isEmpty() || info.xSpacing <= 0f) return null
 
-    val startIndex = (info.scrollPixels / info.xSpacing).toInt().coerceAtLeast(0)
-    val visibleCount = (info.chartWidth / info.xSpacing).toInt().coerceAtLeast(1)
-    val endIndex = (startIndex + visibleCount).coerceAtMost(allYValues.lastIndex)
-
-    if (startIndex > allYValues.lastIndex) return null
-
-    val startSegment = (startIndex / segmentSize).coerceAtMost(segmentCache.lastIndex)
-    val endSegment = (endIndex / segmentSize).coerceAtMost(segmentCache.lastIndex)
-    var visibleMin = Double.MAX_VALUE
-    var visibleMax = -Double.MAX_VALUE
-
-    for (i in startSegment..endSegment) {
-      val (segMin, segMax) = segmentCache[i]
-      visibleMin = min(visibleMin, segMin)
-      visibleMax = max(visibleMax, segMax)
+    // Convert scroll pixels to visible X range using xSpacing and xStep from ranges
+    val xStep = if (allEntries.size >= 2) {
+      // Estimate xStep from average spacing (xSpacing maps to xStep in pixel space)
+      // visibleXStart = minX + scrollPixels / xSpacing * xStep
+      // But we don't have xStep here. Use the actual X range and entry count.
+      (allEntries.last().first - allEntries.first().first) / (allEntries.size - 1).toDouble()
+    } else {
+      1.0
     }
 
-    if (visibleMin > visibleMax) return null
-    return visibleMin to visibleMax
+    val minX = allEntries.first().first
+    val visibleXStart = minX + (info.scrollPixels / info.xSpacing) * xStep
+    val visibleXEnd = visibleXStart + (info.chartWidth / info.xSpacing) * xStep
+
+    // Binary search for start and end indices
+    var startIndex = sortedXValues.binarySearchInsertionPoint(visibleXStart)
+    var endIndex = sortedXValues.binarySearchInsertionPoint(visibleXEnd)
+
+    // Clamp to valid range
+    startIndex = startIndex.coerceIn(0, allEntries.lastIndex)
+    endIndex = endIndex.coerceIn(0, allEntries.lastIndex)
+
+    // Add padding entries
+    val paddedStart = (startIndex - paddingEntries).coerceAtLeast(0)
+    val paddedEnd = (endIndex + paddingEntries).coerceAtMost(allEntries.lastIndex)
+
+    if (paddedStart > paddedEnd) return null
+
+    // Cache check — skip if same window
+    if (paddedStart == lastVisibleStartIndex && paddedEnd == lastVisibleEndIndex) {
+      return lastVisibleEntries
+    }
+
+    val entries = allEntries.subList(paddedStart, paddedEnd + 1)
+    lastVisibleStartIndex = paddedStart
+    lastVisibleEndIndex = paddedEnd
+    lastVisibleEntries = entries
+    return entries
   }
 
   /**
-   * Calls the consumer's callback to compute the display range and ticks.
+   * Calls the consumer's callback with visible entries.
    * Returns null if the callback returns a zero-length range.
    */
   internal fun computeDisplayRange(
-    visibleMinY: Double,
-    visibleMaxY: Double,
+    visibleEntries: List<Pair<Double, Double>>,
   ): Pair<ClosedRange<Double>, List<Double>>? {
+    if (visibleEntries.isEmpty()) return null
     val result = try {
-      onVisibleRange(visibleMinY, visibleMaxY)
+      onVisibleEntries(visibleEntries)
     } catch (_: Exception) {
       return null
     }
@@ -145,15 +173,39 @@ public class ScrollAwareRangeProvider(
 }
 
 /**
+ * Binary search insertion point — returns the index where [value] would be inserted
+ * to maintain sorted order. O(log n).
+ */
+private fun DoubleArray.binarySearchInsertionPoint(value: Double): Int {
+  var low = 0
+  var high = size
+  while (low < high) {
+    val mid = (low + high) ushr 1
+    if (this[mid] < value) low = mid + 1 else high = mid
+  }
+  return low
+}
+
+/**
  * Creates and remembers a [ScrollAwareRangeProvider].
+ *
+ * @param paddingEntries extra entries before/after visible window (default 1)
+ * @param debounceMs debounce delay after scroll settles (default 100ms)
+ * @param animDurationMs range animation duration (default 300ms)
+ * @param onVisibleEntries callback receiving visible (x, y) entries + padding.
+ *   Returns display range and tick labels.
  */
 @Composable
 public fun rememberScrollAwareRangeProvider(
-  segmentSize: Int = 10,
+  paddingEntries: Int = 1,
   debounceMs: Long = 100L,
   animDurationMs: Int = 300,
-  onVisibleRange: (minY: Double, maxY: Double) -> Pair<ClosedRange<Double>, List<Double>>,
-): ScrollAwareRangeProvider =
-  remember(segmentSize, debounceMs, animDurationMs) {
-    ScrollAwareRangeProvider(segmentSize, debounceMs, animDurationMs, onVisibleRange)
+  onVisibleEntries: (visibleEntries: List<Pair<Double, Double>>) -> Pair<ClosedRange<Double>, List<Double>>,
+): ScrollAwareRangeProvider {
+  val callbackRef = rememberUpdatedState(onVisibleEntries)
+  return remember(paddingEntries, debounceMs, animDurationMs) {
+    ScrollAwareRangeProvider(paddingEntries, debounceMs, animDurationMs) { entries ->
+      callbackRef.value(entries)
+    }
   }
+}

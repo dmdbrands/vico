@@ -20,6 +20,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -66,6 +67,7 @@ public fun CartesianChartHost(
   modifier: Modifier = Modifier,
   scrollState: VicoScrollState = rememberVicoScrollState(),
   zoomState: VicoZoomState = rememberDefaultVicoZoomState(scrollState.scrollEnabled),
+  flingBehavior: FlingBehavior? = null,
   animationSpec: AnimationSpec<Float>? = defaultCartesianDiffAnimationSpec,
   animateIn: Boolean = true,
   placeholder: @Composable BoxScope.() -> Unit = {},
@@ -109,6 +111,7 @@ public fun CartesianChartHost(
         ranges,
         previousModel,
         extraStore,
+        flingBehavior,
       )
     } else {
       placeholder()
@@ -155,6 +158,7 @@ internal fun CartesianChartHostImpl(
   ranges: CartesianChartRanges,
   previousModel: CartesianChartModel? = null,
   extraStore: ExtraStore = ExtraStore.Empty,
+  flingBehavior: FlingBehavior? = null,
 ) {
   var markerX by rememberSaveable { mutableStateOf<Double?>(null) }
   var markerSeriesIndex by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -325,6 +329,7 @@ internal fun CartesianChartHostImpl(
             },
           longPressEnabled = chart.markerController.acceptsLongPress,
           markerController = chart.markerController,
+          flingBehavior = flingBehavior,
         )
   ) {
     if (size.isEmpty()) return@Canvas
@@ -430,7 +435,8 @@ private fun ScrollAwareRangeEffect(
       provider.buildCache(layerModel.series)
 
       // Set initial range from full dataset (alpha=0 hides this)
-      val initialResult = provider.computeDisplayRange(layerModel.minY, layerModel.maxY)
+      val allEntries = layerModel.series.first().map { it.x to it.y }
+      val initialResult = provider.computeDisplayRange(allEntries)
       if (initialResult != null) {
         val (range, ticks) = initialResult
         provider.currentMinY = range.start
@@ -445,8 +451,8 @@ private fun ScrollAwareRangeEffect(
       // This runs AFTER cache is built, so isCacheReady is true.
       isFirstScrollUpdate = true
       val firstScrollInfo = provider.scrollUpdates.first()
-      val visible = provider.computeVisibleRange(firstScrollInfo)
-      val result = visible?.let { provider.computeDisplayRange(it.first, it.second) }
+      val visibleEntries = provider.computeVisibleEntries(firstScrollInfo)
+      val result = visibleEntries?.let { provider.computeDisplayRange(it) }
       if (result != null) {
         val (range, ticks) = result
         isFirstScrollUpdate = false
@@ -470,8 +476,8 @@ private fun ScrollAwareRangeEffect(
           if (!provider.isCacheReady || isFirstScrollUpdate) return@collect
           if (animMinY.value.isNaN()) return@collect
 
-          val visible = provider.computeVisibleRange(scrollInfo) ?: return@collect
-          val result = provider.computeDisplayRange(visible.first, visible.second) ?: return@collect
+          val visibleEntries = provider.computeVisibleEntries(scrollInfo) ?: return@collect
+          val result = provider.computeDisplayRange(visibleEntries) ?: return@collect
           val (range, newTicks) = result
           val targetMinY = range.start.toFloat()
           val targetMaxY = range.endInclusive.toFloat()

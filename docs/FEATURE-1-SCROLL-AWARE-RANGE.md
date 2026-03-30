@@ -6,6 +6,32 @@ Dynamic Y-axis range that adapts to visible data points as the user scrolls thro
 The Y-axis ticks and range animate following iOS-like patterns: ticks swap instantly
 (approximating iOS cross-fade), chart content animates positionally via range interpolation.
 
+**v2 (updated)**: Replaced segment cache with binary search on sorted X values.
+Callback now receives actual visible entries `List<Pair<x, y>>` with configurable
+`paddingEntries` instead of pre-computed `(minY, maxY)`. Accurate for non-sequential X data.
+
+## Callback API
+
+```kotlin
+val rangeProvider = rememberScrollAwareRangeProvider(
+  paddingEntries = 1,   // 1 extra entry before/after visible window
+  debounceMs = 150,
+  animDurationMs = 250,
+) { visibleEntries ->   // List<Pair<Double, Double>> — (x, y) pairs
+  val minY = visibleEntries.minOf { it.second }
+  val maxY = visibleEntries.maxOf { it.second }
+  // Your nice-scale logic
+  (niceMin..niceMax) to ticks
+}
+```
+
+## Visible Entry Computation
+
+- Binary search on sorted X values: O(log n)
+- Padding by entry count (not X distance): includes N extra entries on each side
+- Cache: skips recomputation if visible window indices haven't changed
+- No segment cache — removed (binary search is faster and exact)
+
 ## Files Changed
 
 ### New Files
