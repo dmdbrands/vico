@@ -54,6 +54,20 @@ public sealed interface Scroll {
             ((x - context.ranges.minX) / context.ranges.xStep).toFloat() *
               layerDimensions.xSpacing - bias * bounds.width
         }
+
+      /**
+       * Scrolls to the specified _x_ coordinate with a padding offset.
+       * The chart positions [x] at [paddingXStep] distance from the start edge,
+       * where [paddingXStep] is in units of xStep (e.g., 0.5 = half a step from edge).
+       */
+      public fun xWithPadding(x: Double, paddingXStep: Double, bias: Float = 0f): Absolute =
+        Absolute { context, layerDimensions, bounds, _ ->
+          layerDimensions.startPadding +
+            ((x - context.ranges.minX) / context.ranges.xStep).toFloat() *
+              layerDimensions.xSpacing -
+            (paddingXStep * layerDimensions.xSpacing).toFloat() -
+            bias * bounds.width
+        }
     }
   }
 
