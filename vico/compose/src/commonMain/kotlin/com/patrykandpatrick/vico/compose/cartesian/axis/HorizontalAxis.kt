@@ -65,6 +65,7 @@ protected constructor(
   title: (ExtraStore) -> CharSequence?,
   tickPosition: TickPosition,
   lineDrawingOrder: LineDrawingOrder,
+  public val separators: Separators? = null,
 ) :
   BaseAxis<P>(
     line,
@@ -231,6 +232,26 @@ protected constructor(
       canvas.restore()
 
       drawGuidelines(context, baseCanvasX, fullXRange, labelValues, lineValues)
+      drawSeparators(context, baseCanvasX)
+    }
+  }
+
+  /**
+   * Draws vertical separator lines at the specified X positions.
+   * No canvas clip — uses bounds check for performance.
+   * Skips off-screen separators.
+   */
+  private fun drawSeparators(context: CartesianDrawingContext, baseCanvasX: Float) {
+    val sep = separators ?: return
+    if (sep.values.isEmpty()) return
+    with(context) {
+      sep.values.forEach { x ->
+        val canvasX = baseCanvasX +
+          ((x - ranges.minX) / ranges.xStep).toFloat() *
+          layerDimensions.xSpacing * layoutDirectionMultiplier
+        if (canvasX < layerBounds.left || canvasX > layerBounds.right) return@forEach
+        sep.line.drawVertical(context, canvasX, layerBounds.top, layerBounds.bottom)
+      }
     }
   }
 
@@ -638,6 +659,18 @@ protected constructor(
 
   override fun hashCode(): Int = 31 * super.hashCode() + itemPlacer.hashCode()
 
+  /**
+   * Vertical separator lines drawn at specific X positions on the chart.
+   * Used for period boundaries (month/week starts), data boundaries (minX/maxX), etc.
+   *
+   * @property values the X data values where separator lines should be drawn.
+   * @property line the line component used to draw separators.
+   */
+  public data class Separators(
+    public val values: List<Double>,
+    public val line: LineComponent,
+  )
+
   /** Determines for what _x_ values a [HorizontalAxis] displays labels, ticks, and guidelines. */
   public interface ItemPlacer {
     /**
@@ -779,37 +812,17 @@ protected constructor(
       title: (ExtraStore) -> CharSequence? = { null },
       tickPosition: TickPosition = TickPosition.Outside,
       lineDrawingOrder: LineDrawingOrder = LineDrawingOrder.UnderLayers,
+      separators: Separators? = null,
     ): HorizontalAxis<Axis.Position.Horizontal.Top> =
       remember(
-        line,
-        label,
-        labelRotationDegrees,
-        valueFormatter,
-        tick,
-        tickLength,
-        guideline,
-        itemPlacer,
-        size,
-        titleComponent,
-        title,
-        tickPosition,
-        lineDrawingOrder,
+        line, label, labelRotationDegrees, valueFormatter, tick, tickLength,
+        guideline, itemPlacer, size, titleComponent, title, tickPosition,
+        lineDrawingOrder, separators,
       ) {
         HorizontalAxis(
-          Axis.Position.Horizontal.Top,
-          line,
-          label,
-          labelRotationDegrees,
-          valueFormatter,
-          tick,
-          tickLength,
-          guideline,
-          itemPlacer,
-          size,
-          titleComponent,
-          title,
-          tickPosition,
-          lineDrawingOrder,
+          Axis.Position.Horizontal.Top, line, label, labelRotationDegrees,
+          valueFormatter, tick, tickLength, guideline, itemPlacer, size,
+          titleComponent, title, tickPosition, lineDrawingOrder, separators,
         )
       }
 
@@ -829,37 +842,17 @@ protected constructor(
       title: (ExtraStore) -> CharSequence? = { null },
       tickPosition: TickPosition = TickPosition.Outside,
       lineDrawingOrder: LineDrawingOrder = LineDrawingOrder.UnderLayers,
+      separators: Separators? = null,
     ): HorizontalAxis<Axis.Position.Horizontal.Bottom> =
       remember(
-        line,
-        label,
-        labelRotationDegrees,
-        valueFormatter,
-        tick,
-        tickLength,
-        guideline,
-        itemPlacer,
-        size,
-        titleComponent,
-        title,
-        tickPosition,
-        lineDrawingOrder,
+        line, label, labelRotationDegrees, valueFormatter, tick, tickLength,
+        guideline, itemPlacer, size, titleComponent, title, tickPosition,
+        lineDrawingOrder, separators,
       ) {
         HorizontalAxis(
-          Axis.Position.Horizontal.Bottom,
-          line,
-          label,
-          labelRotationDegrees,
-          valueFormatter,
-          tick,
-          tickLength,
-          guideline,
-          itemPlacer,
-          size,
-          titleComponent,
-          title,
-          tickPosition,
-          lineDrawingOrder,
+          Axis.Position.Horizontal.Bottom, line, label, labelRotationDegrees,
+          valueFormatter, tick, tickLength, guideline, itemPlacer, size,
+          titleComponent, title, tickPosition, lineDrawingOrder, separators,
         )
       }
   }

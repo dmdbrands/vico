@@ -86,7 +86,7 @@ internal fun ChartScreen(navController: NavController, uiFrameworkID: Int, initi
             slideOutHorizontally { -direction * it / 3 } + fadeOut()
         },
       ) { chartID ->
-        Box(Modifier.fillMaxSize().padding(horizontal = 16.dp), Alignment.Center) {
+        Box(Modifier.fillMaxSize(), Alignment.Center) {
           charts[chartID]()
         }
       }

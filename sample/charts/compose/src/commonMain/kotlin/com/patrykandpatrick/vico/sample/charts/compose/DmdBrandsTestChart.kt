@@ -35,16 +35,24 @@ import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.VicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
+import com.patrykandpatrick.vico.compose.common.component.rememberLineComponent
 import com.patrykandpatrick.vico.compose.cartesian.axis.ListItemPlacer
+import com.patrykandpatrick.vico.compose.cartesian.axis.BaseAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.compose.cartesian.data.ScrollAwareRangeProvider
 import com.patrykandpatrick.vico.compose.cartesian.data.lineSeries
 import com.patrykandpatrick.vico.compose.cartesian.data.rememberScrollAwareRangeProvider
+import com.patrykandpatrick.vico.compose.cartesian.layer.CartesianLayerPadding
 import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.common.Fill
+import com.patrykandpatrick.vico.compose.common.Insets
 import com.patrykandpatrick.vico.compose.common.component.ShapeComponent
+import com.patrykandpatrick.vico.compose.common.component.rememberShapeComponent
+import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import com.patrykandpatrick.vico.compose.cartesian.marker.rememberScrubMarkerController
@@ -132,20 +140,20 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
         val maxWindowsPerFling = 3  // Cap: never jump more than 3 windows
         val x = currentXLabel ?: 0.0
         val projected = projectedXLabel ?: x
+        // minX of data — snapping below this should show the content padding area
+        val dataMinX = 0.0
         val target = if (isDrag) {
-          kotlin.math.round(x)
+          kotlin.math.round(x).coerceAtLeast(dataMinX)
         } else {
-          // Compute how many windows the physics wants to jump
           val currentWindow = kotlin.math.floor(x / windowSize)
           val projectedWindow = kotlin.math.round(projected / windowSize)
           val rawWindowDelta = (projectedWindow - currentWindow).toInt()
-          // Clamp to max, ensure at least 1 window in fling direction
           val clampedDelta = if (isForward) {
             rawWindowDelta.coerceIn(1, maxWindowsPerFling)
           } else {
             rawWindowDelta.coerceIn(-maxWindowsPerFling, -1)
           }
-          ((currentWindow + clampedDelta) * windowSize).coerceAtLeast(0.0)
+          ((currentWindow + clampedDelta) * windowSize).coerceAtLeast(dataMinX)
         }
         println("Snap: x=${x.toInt()} projected=${projected.toInt()} isDrag=$isDrag fwd=$isForward → target=${target.toInt()}")
         target
@@ -153,72 +161,57 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
     ),
   )
 
-  // LazyColumn to test gesture conflict:
-  // - Horizontal chart scroll should NOT trigger vertical LazyColumn scroll
-  // - Marker scrub should NOT trigger vertical LazyColumn scroll
-  // - Vertical swipe on cards SHOULD scroll the LazyColumn
-  LazyColumn(modifier = modifier.fillMaxSize()) {
-    item {
-      Text(
-        text = "Scroll-Aware Range + LazyColumn Test",
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(16.dp),
-      )
-    }
-
-    item {
-      CartesianChartHost(
-        chart = rememberCartesianChart(
-          rememberLineCartesianLayer(
-            rangeProvider = rangeProvider,
-            lineProvider = LineCartesianLayer.LineProvider.series(
-              LineCartesianLayer.Line(
-                fill = LineCartesianLayer.LineFill.single(Fill(Color(0xFF6750A4))),
-                interpolator = LineCartesianLayer.Interpolator.monotone(),
-                pointProvider = LineCartesianLayer.PointProvider.single(
-                  LineCartesianLayer.Point(
-                    ShapeComponent(Fill(Color(0xFF6750A4)), CircleShape),
-                    size = 4.dp,
-                  ),
-                ),
+  CartesianChartHost(
+    chart = rememberCartesianChart(
+      rememberLineCartesianLayer(
+        rangeProvider = rangeProvider,
+        lineProvider = LineCartesianLayer.LineProvider.series(
+          LineCartesianLayer.Line(
+            fill = LineCartesianLayer.LineFill.single(Fill(Color(0xFF6750A4))),
+            interpolator = LineCartesianLayer.Interpolator.monotone(),
+            pointProvider = LineCartesianLayer.PointProvider.single(
+              LineCartesianLayer.Point(
+                ShapeComponent(Fill(Color(0xFF6750A4)), CircleShape),
+                size = 4.dp,
               ),
             ),
           ),
-          startAxis = VerticalAxis.rememberStart(
-            itemPlacer = ListItemPlacer(ticks = { rangeProvider.currentTicks }),
-          ),
-          // Feature 5: Fading edges with xStep-based padding
-          fadingEdges = rememberFadingEdges(
-            startPaddingXStep = startPaddingXStep,
-          ),
-          bottomAxis = HorizontalAxis.rememberBottom(),
-          marker = rememberMarker(),
-          markerController = scrubController,
         ),
-        modelProducer = modelProducer,
-        scrollState = scrollState,
-        flingBehavior = snapFling,
-        modifier = Modifier.fillMaxWidth().height(300.dp).padding(horizontal = 16.dp),
-      )
-    }
-
-    // Cards below chart — vertical scroll should work here
-    items(20) { index ->
-      Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-          containerColor = MaterialTheme.colorScheme.surfaceVariant,
+      ),
+      endAxis = VerticalAxis.rememberEnd(
+        itemPlacer = ListItemPlacer(ticks = { rangeProvider.currentTicks }),
+        markerDecoration = VerticalAxis.MarkerDecoration(
+          y = { 170.0 },
+          markerComponent = rememberTextComponent(
+            style = TextStyle(
+              color = Color.White,
+              fontSize = 12.sp,
+            ),
+            padding = Insets(horizontal = 8.dp, vertical = 2.dp),
+            background = rememberShapeComponent(
+              Fill(Color(0xFF458239)),
+              CircleShape,
+            ),
+          ),
+          label = { "170" },
+          outsideRangeOffset = 30f,
+        )
+      ),
+      // Feature 6B: Separators at data boundaries and every 50 X units
+      bottomAxis = HorizontalAxis.rememberBottom(
+        separators = HorizontalAxis.Separators(
+          values = listOf(0.0, 50.0, 100.0, 150.0, 200.0, 250.0, 300.0),
+          line = rememberLineComponent(Fill(Color(0x33000000)), thickness = 2.dp , strokeThickness = 2.dp),
         ),
-      ) {
-        Box(modifier = Modifier.padding(16.dp)) {
-          Text(
-            text = "Card #${index + 1} — Swipe vertically to scroll LazyColumn",
-            style = MaterialTheme.typography.bodyMedium,
-          )
-        }
-      }
-    }
-  }
+      ),
+      marker = rememberMarker(),
+      markerController = scrubController,
+    ),
+    modelProducer = modelProducer,
+    scrollState = scrollState,
+    flingBehavior = snapFling,
+    modifier = modifier.fillMaxWidth().height(300.dp),
+  )
 }
 
 /**

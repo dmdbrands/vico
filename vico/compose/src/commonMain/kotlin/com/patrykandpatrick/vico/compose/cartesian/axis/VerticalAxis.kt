@@ -72,6 +72,7 @@ protected constructor(
   title: (ExtraStore) -> CharSequence?,
   tickPosition: TickPosition,
   lineDrawingOrder: LineDrawingOrder,
+  public val markerDecoration: MarkerDecoration? = null,
 ) :
   BaseAxis<P>(
     line,
@@ -153,6 +154,8 @@ protected constructor(
       )
     }
   }
+
+  // getBoundedVisibleWidth removed — replaced by getBoundedContentX position math
 
   override fun drawUnderLayers(
     context: CartesianDrawingContext,
@@ -240,6 +243,34 @@ protected constructor(
               TITLE_ABS_ROTATION_DEGREES
             },
           maxHeight = bounds.height.toInt(),
+        )
+      }
+
+      // Draw marker decoration (e.g., goal weight indicator)
+      markerDecoration?.let { decoration ->
+        val yRange = ranges.getYRange(position)
+        val markerY = decoration.y(model.extraStore)
+        val markerLabel = decoration.label(model.extraStore)
+
+        // Compute canvas Y — clamp to bounds with offset if outside range
+        val canvasY = if (markerY in yRange.minY..yRange.maxY) {
+          bounds.bottom - bounds.height * ((markerY - yRange.minY) / yRange.length).toFloat()
+        } else if (markerY < yRange.minY) {
+          bounds.bottom - decoration.outsideRangeOffset
+        } else {
+          bounds.top + decoration.outsideRangeOffset
+        }
+
+        val markerX = bounds.center.x
+
+        decoration.markerComponent?.draw(
+          context = this,
+          text = markerLabel,
+          x = markerX,
+          y = canvasY,
+          horizontalPosition = Position.Horizontal.Center,
+          verticalPosition = decoration.verticalLabelPosition,
+          rotationDegrees = decoration.labelRotationDegrees,
         )
       }
     }
@@ -363,9 +394,10 @@ protected constructor(
     model: CartesianChartModel,
   ) {
     val width = getWidth(context, layerHeight)
+    val effectiveWidth = width
     when (position) {
-      Axis.Position.Vertical.Start -> horizontalLayerMargins.ensureValuesAtLeast(start = width)
-      Axis.Position.Vertical.End -> horizontalLayerMargins.ensureValuesAtLeast(end = width)
+      Axis.Position.Vertical.Start -> horizontalLayerMargins.ensureValuesAtLeast(start = effectiveWidth)
+      Axis.Position.Vertical.End -> horizontalLayerMargins.ensureValuesAtLeast(end = effectiveWidth)
     }
   }
 
@@ -492,6 +524,7 @@ protected constructor(
     title: (ExtraStore) -> CharSequence? = this.title,
     tickPosition: TickPosition = this.tickPosition,
     lineDrawingOrder: LineDrawingOrder = this.lineDrawingOrder,
+    markerDecoration: MarkerDecoration? = this.markerDecoration,
   ): VerticalAxis<P> =
     VerticalAxis(
       position,
@@ -510,6 +543,7 @@ protected constructor(
       title,
       tickPosition,
       lineDrawingOrder,
+      markerDecoration,
     )
 
   override fun equals(other: Any?): Boolean =
@@ -517,15 +551,37 @@ protected constructor(
       other is VerticalAxis<*> &&
       horizontalLabelPosition == other.horizontalLabelPosition &&
       verticalLabelPosition == other.verticalLabelPosition &&
-      itemPlacer == other.itemPlacer
+      itemPlacer == other.itemPlacer &&
+      markerDecoration == other.markerDecoration
 
   override fun hashCode(): Int {
     var result = super.hashCode()
     result = 31 * result + horizontalLabelPosition.hashCode()
     result = 31 * result + verticalLabelPosition.hashCode()
     result = 31 * result + itemPlacer.hashCode()
+    result = 31 * result + (markerDecoration?.hashCode() ?: 0)
     return result
   }
+
+  /**
+   * A decoration drawn on the vertical axis at a specific Y value.
+   * Used for goal markers, reference lines, etc.
+   *
+   * @property y returns the Y data value for the decoration position.
+   * @property markerComponent the text component used to draw the decoration label.
+   * @property label returns the label text to display.
+   * @property verticalLabelPosition vertical alignment of the label relative to the Y position.
+   * @property labelRotationDegrees label rotation.
+   * @property outsideRangeOffset pixel offset from axis edge when Y is outside visible range.
+   */
+  public data class MarkerDecoration(
+    public val y: (ExtraStore) -> Double,
+    public val markerComponent: TextComponent? = null,
+    public val label: (ExtraStore) -> CharSequence = { "" },
+    public val verticalLabelPosition: Position.Vertical = Position.Vertical.Center,
+    public val labelRotationDegrees: Float = 0f,
+    public val outsideRangeOffset: Float = 0f,
+  )
 
   /**
    * Defines the horizontal position of each of a vertical axis’s labels relative to the axis line.
@@ -647,6 +703,7 @@ protected constructor(
       tickPosition: TickPosition =
         if (horizontalLabelPosition == Outside) TickPosition.Outside else TickPosition.Inside,
       lineDrawingOrder: LineDrawingOrder = LineDrawingOrder.UnderLayers,
+      markerDecoration: MarkerDecoration? = null,
     ): VerticalAxis<Axis.Position.Vertical.Start> =
       remember(
         line,
@@ -664,6 +721,7 @@ protected constructor(
         title,
         tickPosition,
         lineDrawingOrder,
+        markerDecoration,
       ) {
         VerticalAxis(
           Axis.Position.Vertical.Start,
@@ -682,6 +740,7 @@ protected constructor(
           title,
           tickPosition,
           lineDrawingOrder,
+          markerDecoration,
         )
       }
 
@@ -704,6 +763,7 @@ protected constructor(
       tickPosition: TickPosition =
         if (horizontalLabelPosition == Outside) TickPosition.Outside else TickPosition.Inside,
       lineDrawingOrder: LineDrawingOrder = LineDrawingOrder.UnderLayers,
+      markerDecoration: MarkerDecoration? = null,
     ): VerticalAxis<Axis.Position.Vertical.End> =
       remember(
         line,
@@ -721,6 +781,7 @@ protected constructor(
         title,
         tickPosition,
         lineDrawingOrder,
+        markerDecoration,
       ) {
         VerticalAxis(
           Axis.Position.Vertical.End,
@@ -739,6 +800,7 @@ protected constructor(
           title,
           tickPosition,
           lineDrawingOrder,
+          markerDecoration,
         )
       }
   }
