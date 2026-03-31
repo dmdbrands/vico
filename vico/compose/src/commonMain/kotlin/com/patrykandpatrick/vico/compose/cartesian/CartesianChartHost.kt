@@ -92,7 +92,7 @@ public fun CartesianChartHost(
   }
 
   if (model != null) {
-    ScrollAwareRangeEffect(chart, model) { minY, maxY ->
+    ScrollAwareRangeEffect(chart, model, flingBehavior) { minY, maxY ->
       animatedYRange = minY to maxY
     }
   }
@@ -343,7 +343,8 @@ internal fun CartesianChartHostImpl(
     zoomState.update(measuringContext.value, layerDimensions, chart.layerBounds, scrollState.value)
     scrollState.update(measuringContext.value, chart.layerBounds, layerDimensions)
 
-    // Emit scroll info to ScrollAwareRangeProviders (cached list, deduplicated)
+    // Emit scroll info to ScrollAwareRangeProviders (cached list, deduplicated).
+    // Always emit — the collector-side skips during snap animation.
     if (scrollAwareProviders.isNotEmpty() && layerDimensions.xSpacing > 0f && !chart.layerBounds.isEmpty) {
       val sp = scrollState.value
       val xs = layerDimensions.xSpacing
@@ -352,7 +353,13 @@ internal fun CartesianChartHostImpl(
         lastEmittedScroll = sp
         lastEmittedXSpacing = xs
         lastEmittedChartWidth = cw
-        val scrollInfo = ScrollAwareRangeProvider.ScrollInfo(sp, xs, cw)
+        // Compute visible X range from real chart ranges (not estimated)
+        val visibleRange = measuringContext.value.getVisibleXRange(
+          layerDimensions, chart.layerBounds, scrollState.value,
+        )
+        val scrollInfo = ScrollAwareRangeProvider.ScrollInfo(
+          sp, xs, cw, visibleRange.start, visibleRange.endInclusive,
+        )
         scrollAwareProviders.forEach { it.scrollUpdates.tryEmit(scrollInfo) }
       }
     }
@@ -400,6 +407,7 @@ private fun CartesianChartHostBox(modifier: Modifier, content: @Composable BoxSc
 private fun ScrollAwareRangeEffect(
   chart: CartesianChart,
   model: CartesianChartModel,
+  flingBehavior: FlingBehavior? = null,
   onAnimatedRange: (minY: Double, maxY: Double) -> Unit,
 ) {
   val providers = remember(chart) {
@@ -475,6 +483,8 @@ private fun ScrollAwareRangeEffect(
         .collect { scrollInfo ->
           if (!provider.isCacheReady || isFirstScrollUpdate) return@collect
           if (animMinY.value.isNaN()) return@collect
+          // Skip range update during snap animation — update after snap settles
+          if ((flingBehavior as? ChartSnapFlingBehavior)?.isSnapping == true) return@collect
 
           val visibleEntries = provider.computeVisibleEntries(scrollInfo) ?: return@collect
           val result = provider.computeDisplayRange(visibleEntries) ?: return@collect

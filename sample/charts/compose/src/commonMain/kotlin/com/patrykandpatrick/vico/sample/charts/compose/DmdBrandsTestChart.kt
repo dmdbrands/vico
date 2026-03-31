@@ -48,6 +48,8 @@ import com.patrykandpatrick.vico.compose.common.component.ShapeComponent
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Color
 import com.patrykandpatrick.vico.compose.cartesian.marker.rememberScrubMarkerController
+import com.patrykandpatrick.vico.compose.cartesian.SnapBehaviorConfig
+import com.patrykandpatrick.vico.compose.cartesian.rememberChartSnapFlingBehavior
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.cartesian.Scroll
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
@@ -79,11 +81,15 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
 
   // ScrollAwareRangeProvider with simple nice-scale callback
   val rangeProvider = rememberScrollAwareRangeProvider(
-    paddingEntries = 1,
+    paddingEntries = 3,
     debounceMs = 150,
     animDurationMs = 250,
   ) { visibleEntries ->
-    // Compute range from actual visible entries (+ padding)
+    // Debug: log visible entries to verify correctness
+    println("RangeProvider: entries=${visibleEntries.size}, " +
+      "xRange=[${visibleEntries.firstOrNull()?.first?.toLong()}..${visibleEntries.lastOrNull()?.first?.toLong()}], " +
+      "yRange=[${visibleEntries.minOfOrNull { it.second }?.toInt()}..${visibleEntries.maxOfOrNull { it.second }?.toInt()}]"
+    )
     val visibleMinY = visibleEntries.minOf { it.second }
     val visibleMaxY = visibleEntries.maxOf { it.second }
     val step = niceStep(visibleMaxY - visibleMinY)
@@ -113,6 +119,36 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
   val scrubController = rememberScrubMarkerController(
     scrollState = scrollState,
     delayMs = 200L,
+  )
+
+  // Feature 4: Snap — drag snaps to nearest label, fling jumps to next/prev window
+  val snapFling = rememberChartSnapFlingBehavior(
+    scrollState = scrollState,
+    config = SnapBehaviorConfig(
+      snapToLabel = { currentXLabel, projectedXLabel, isDrag, isForward ->
+        val windowSize = 8.0
+        val maxWindowsPerFling = 3  // Cap: never jump more than 3 windows
+        val x = currentXLabel ?: 0.0
+        val projected = projectedXLabel ?: x
+        val target = if (isDrag) {
+          kotlin.math.round(x)
+        } else {
+          // Compute how many windows the physics wants to jump
+          val currentWindow = kotlin.math.floor(x / windowSize)
+          val projectedWindow = kotlin.math.round(projected / windowSize)
+          val rawWindowDelta = (projectedWindow - currentWindow).toInt()
+          // Clamp to max, ensure at least 1 window in fling direction
+          val clampedDelta = if (isForward) {
+            rawWindowDelta.coerceIn(1, maxWindowsPerFling)
+          } else {
+            rawWindowDelta.coerceIn(-maxWindowsPerFling, -1)
+          }
+          ((currentWindow + clampedDelta) * windowSize).coerceAtLeast(0.0)
+        }
+        println("Snap: x=${"%.1f".format(x)} projected=${"%.1f".format(projected)} isDrag=$isDrag fwd=$isForward → target=${"%.0f".format(target)}")
+        target
+      },
+    ),
   )
 
   // LazyColumn to test gesture conflict:
@@ -155,6 +191,7 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
         ),
         modelProducer = modelProducer,
         scrollState = scrollState,
+        flingBehavior = snapFling,
         modifier = Modifier.fillMaxWidth().height(300.dp).padding(horizontal = 16.dp),
       )
     }

@@ -16,6 +16,7 @@
 
 package com.patrykandpatrick.vico.compose.cartesian
 
+import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollable
@@ -53,10 +54,12 @@ internal fun Modifier.pointerInput(
   consumeMoveEvents: Boolean,
   longPressEnabled: Boolean,
   markerController: CartesianMarkerController? = null,
+  flingBehavior: FlingBehavior? = null,
 ) =
   scrollable(
       state = scrollState.scrollableState,
       orientation = Orientation.Horizontal,
+      flingBehavior = flingBehavior,
       // Disable scroll when ScrubMarkerController is actively scrubbing
       enabled = scrollState.scrollEnabled &&
         (markerController !is ScrubMarkerController || !markerController.isScrubbing),
@@ -150,7 +153,8 @@ internal fun Modifier.pointerInput(
                   }
 
                   InteractionMode.SCROLLING -> {
-                    // Let scrollable handle — don't emit to marker controller
+                    // Do nothing — let events flow to scrollable modifier naturally.
+                    // Back gesture prevention is handled by scrollable's nestedScroll.
                   }
 
                   InteractionMode.NONE -> {

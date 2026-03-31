@@ -106,19 +106,10 @@ public class ScrollAwareRangeProvider(
   internal fun computeVisibleEntries(info: ScrollInfo): List<Pair<Double, Double>>? {
     if (!isCacheReady || allEntries.isEmpty() || info.xSpacing <= 0f) return null
 
-    // Convert scroll pixels to visible X range using xSpacing and xStep from ranges
-    val xStep = if (allEntries.size >= 2) {
-      // Estimate xStep from average spacing (xSpacing maps to xStep in pixel space)
-      // visibleXStart = minX + scrollPixels / xSpacing * xStep
-      // But we don't have xStep here. Use the actual X range and entry count.
-      (allEntries.last().first - allEntries.first().first) / (allEntries.size - 1).toDouble()
-    } else {
-      1.0
-    }
-
-    val minX = allEntries.first().first
-    val visibleXStart = minX + (info.scrollPixels / info.xSpacing) * xStep
-    val visibleXEnd = visibleXStart + (info.chartWidth / info.xSpacing) * xStep
+    // Use the visible X range directly from scroll info.
+    // visibleXStart/End are computed from the actual chart ranges.xStep (not estimated).
+    val visibleXStart = info.visibleXStart
+    val visibleXEnd = info.visibleXEnd
 
     // Binary search for start and end indices
     var startIndex = sortedXValues.binarySearchInsertionPoint(visibleXStart)
@@ -169,6 +160,8 @@ public class ScrollAwareRangeProvider(
     val scrollPixels: Float,
     val xSpacing: Float,
     val chartWidth: Float,
+    val visibleXStart: Double,
+    val visibleXEnd: Double,
   )
 }
 

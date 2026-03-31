@@ -48,6 +48,23 @@ public class VicoScrollState {
   private var context: CartesianMeasuringContext? = null
   private var layerDimensions: CartesianLayerDimensions? = null
   private var bounds: Rect? = null
+  /** Converts a data X value to a scroll pixel value. Returns null if context not ready. */
+  internal fun xToScrollValue(x: Double): Float? {
+    val ctx = context ?: return null
+    val dims = layerDimensions ?: return null
+    return dims.startPadding +
+      ((x - ctx.ranges.minX) / ctx.ranges.xStep).toFloat() * dims.xSpacing
+  }
+
+  /** Converts a scroll pixel value to a data X value. Uses current scroll if [scrollPixels] is null. */
+  internal fun scrollValueToX(scrollPixels: Float? = null): Double? {
+    val ctx = context ?: return null
+    val dims = layerDimensions ?: return null
+    if (dims.xSpacing == 0f) return null
+    val px = scrollPixels ?: value
+    return ctx.ranges.minX + (px - dims.startPadding) / dims.xSpacing * ctx.ranges.xStep
+  }
+
   internal val scrollEnabled: Boolean
   internal val consumedXDeltas = MutableSharedFlow<Float>(extraBufferCapacity = 1)
   internal val unconsumedXDeltas = MutableSharedFlow<Float>(extraBufferCapacity = 1)
