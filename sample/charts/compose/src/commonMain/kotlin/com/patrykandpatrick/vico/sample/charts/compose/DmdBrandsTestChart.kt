@@ -51,6 +51,7 @@ import com.patrykandpatrick.vico.compose.cartesian.marker.rememberScrubMarkerCon
 import com.patrykandpatrick.vico.compose.cartesian.SnapBehaviorConfig
 import com.patrykandpatrick.vico.compose.cartesian.rememberChartSnapFlingBehavior
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
+import com.patrykandpatrick.vico.compose.cartesian.rememberFadingEdges
 import com.patrykandpatrick.vico.compose.cartesian.Scroll
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import kotlin.math.ceil
@@ -74,9 +75,10 @@ import kotlin.math.sin
 @Composable
 fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
   val modelProducer = remember { CartesianChartModelProducer() }
-  // Start scrolled to point 80 (high-value region ~185) to test initial scroll
+  // Feature 5: xWithPadding — start at X=80 with 2 xStep padding from left edge
+  val startPaddingXStep = 2.0
   val scrollState = rememberVicoScrollState(
-    initialScroll = Scroll.Absolute.x(80.0),
+    initialScroll = Scroll.Absolute.xWithPadding(80.0, startPaddingXStep),
   )
 
   // ScrollAwareRangeProvider with simple nice-scale callback
@@ -145,7 +147,7 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
           }
           ((currentWindow + clampedDelta) * windowSize).coerceAtLeast(0.0)
         }
-        println("Snap: x=${"%.1f".format(x)} projected=${"%.1f".format(projected)} isDrag=$isDrag fwd=$isForward → target=${"%.0f".format(target)}")
+        println("Snap: x=${x.toInt()} projected=${projected.toInt()} isDrag=$isDrag fwd=$isForward → target=${target.toInt()}")
         target
       },
     ),
@@ -184,6 +186,10 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
           ),
           startAxis = VerticalAxis.rememberStart(
             itemPlacer = ListItemPlacer(ticks = { rangeProvider.currentTicks }),
+          ),
+          // Feature 5: Fading edges with xStep-based padding
+          fadingEdges = rememberFadingEdges(
+            startPaddingXStep = startPaddingXStep,
           ),
           bottomAxis = HorizontalAxis.rememberBottom(),
           marker = rememberMarker(),
