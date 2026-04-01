@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianDrawingContext
+import com.patrykandpatrick.vico.compose.cartesian.getMaxScrollDistance
 import com.patrykandpatrick.vico.compose.cartesian.CartesianMeasuringContext
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis.HorizontalLabelPosition.Inside
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis.HorizontalLabelPosition.Outside
@@ -174,21 +175,30 @@ protected constructor(
           bounds.bottom - bounds.height * ((lineValue - yRange.minY) / yRange.length).toFloat() +
             getLineCanvasYCorrection(guidelineThickness, lineValue)
 
-        guideline
-          ?.takeIf {
-            isNotInRestrictedBounds(
-              left = layerBounds.left,
-              top = centerY - guidelineThickness.half,
-              right = layerBounds.right,
-              bottom = centerY + guidelineThickness.half,
-            )
-          }
-          ?.drawHorizontal(
+        if (size is Size.Scroll) {
+          guideline?.drawHorizontal(
             context = context,
             left = layerBounds.left,
             right = layerBounds.right,
             y = centerY,
           )
+        } else {
+          guideline
+            ?.takeIf {
+              isNotInRestrictedBounds(
+                left = layerBounds.left,
+                top = centerY - guidelineThickness.half,
+                right = layerBounds.right,
+                bottom = centerY + guidelineThickness.half,
+              )
+            }
+            ?.drawHorizontal(
+              context = context,
+              left = layerBounds.left,
+              right = layerBounds.right,
+              y = centerY,
+            )
+        }
       }
       if (lineDrawingOrder == LineDrawingOrder.UnderLayers) drawLineAndTicks(context)
     }
@@ -280,14 +290,31 @@ protected constructor(
     with(context) {
       val topExtension = if (itemPlacer.getShiftTopLines(this)) tickThickness else 0f
       val bottomExtension = tickThickness
+      val isScrollMode = size is Size.Scroll
+
+      val effectiveScroll = if (isScrollMode) {
+        if (position.isLeft(this)) -scroll else getMaxScrollDistance() - scroll
+      } else 0f
+
+      val lineX = if (position.isLeft(this)) {
+        bounds.right - lineThickness.half
+      } else {
+        bounds.left + lineThickness.half
+      }
+
+      if (isScrollMode) {
+        canvas.save()
+        canvas.clipRect(
+          layerBounds.left - lineThickness,
+          bounds.top,
+          layerBounds.right + lineThickness,
+          bounds.bottom,
+        )
+      }
+
       line?.drawVertical(
         context = context,
-        x =
-          if (position.isLeft(this)) {
-            bounds.right - lineThickness.half
-          } else {
-            bounds.left + lineThickness.half
-          },
+        x = lineX + effectiveScroll,
         top = bounds.top - topExtension,
         bottom = bounds.bottom + bottomExtension,
       )
@@ -303,12 +330,25 @@ protected constructor(
             getLineCanvasYCorrection(tickThickness, labelValue)
         tick?.drawHorizontal(
           context = context,
-          left = tickLeftX,
-          right = tickRightX,
+          left = tickLeftX + effectiveScroll,
+          right = tickRightX + effectiveScroll,
           y = tickCenterY,
         )
       }
+
+      if (isScrollMode) {
+        canvas.restore()
+      }
     }
+  }
+
+  private var scrollValue: Float = 0f
+  private var maxScroll: Float = 0f
+
+  /** Called by CartesianChartHost before prepare() — provides current scroll for dynamic margin. */
+  internal fun updateScrollState(scroll: Float, maxScroll: Float) {
+    this.scrollValue = scroll
+    this.maxScroll = maxScroll
   }
 
   override fun updateLayerDimensions(
@@ -394,7 +434,11 @@ protected constructor(
     model: CartesianChartModel,
   ) {
     val width = getWidth(context, layerHeight)
-    val effectiveWidth = width
+    val scrollSize = size as? Size.Scroll
+    val scrollOffset = if (scrollSize != null && scrollSize.isLabelsScrollable && context.scrollEnabled) {
+      if (position == Axis.Position.Vertical.Start) scrollValue else maxScroll - scrollValue
+    } else 0f
+    val effectiveWidth = (width - scrollOffset).coerceAtLeast(0f)
     when (position) {
       Axis.Position.Vertical.Start -> horizontalLayerMargins.ensureValuesAtLeast(start = effectiveWidth)
       Axis.Position.Vertical.End -> horizontalLayerMargins.ensureValuesAtLeast(end = effectiveWidth)
@@ -462,6 +506,7 @@ protected constructor(
         }
         is Size.Fixed -> size.value.pixels
         is Size.Fraction -> canvasSize.width * size.fraction
+        is Size.Scroll -> size.value.pixels
         is Size.Text ->
           titleComponent
             ?.getWidth(context = this, text = size.text, rotationDegrees = labelRotationDegrees)

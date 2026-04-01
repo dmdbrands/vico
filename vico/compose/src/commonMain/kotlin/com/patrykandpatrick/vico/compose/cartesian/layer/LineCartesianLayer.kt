@@ -852,8 +852,8 @@ protected constructor(
         xSpacing = xSpacing,
         scalableStartPadding = layerPadding.scalableStart.pixels,
         scalableEndPadding = layerPadding.scalableEnd.pixels,
-        unscalableStartPadding = maxPointSize.half + layerPadding.unscalableStart.pixels,
-        unscalableEndPadding = maxPointSize.half + layerPadding.unscalableEnd.pixels,
+        unscalableStartPadding = layerPadding.unscalableStart.pixels,
+        unscalableEndPadding = layerPadding.unscalableEnd.pixels,
       )
     }
   }
@@ -886,7 +886,7 @@ protected constructor(
     model: LineCartesianLayerModel,
   ) {
     with(context) {
-      val verticalMargin =
+      val maxMargin =
         (0..<model.series.size)
           .mapNotNull { lineProvider.getLine(it, model.extraStore) }
           .maxOf {
@@ -896,7 +896,12 @@ protected constructor(
             )
           }
           .half
-      layerMargins.ensureValuesAtLeast(top = verticalMargin, bottom = verticalMargin)
+      layerMargins.ensureValuesAtLeast(
+        start = maxMargin,
+        top = maxMargin,
+        end = maxMargin,
+        bottom = maxMargin,
+      )
     }
   }
 

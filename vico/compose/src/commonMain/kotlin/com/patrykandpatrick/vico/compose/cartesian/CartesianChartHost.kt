@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.cartesian.axis.Axis
+import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.compose.cartesian.data.*
 import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.layer.MutableCartesianLayerDimensions
@@ -336,6 +337,8 @@ internal fun CartesianChartHostImpl(
     measuringContext.value.canvasSize = size
 
     layerDimensions.clear()
+    (chart.startAxis as? VerticalAxis<*>)?.updateScrollState(scrollState.value, scrollState.maxValue)
+    (chart.endAxis as? VerticalAxis<*>)?.updateScrollState(scrollState.value, scrollState.maxValue)
     chart.prepare(measuringContext.value, layerDimensions)
 
     if (chart.layerBounds.isEmpty) return@Canvas

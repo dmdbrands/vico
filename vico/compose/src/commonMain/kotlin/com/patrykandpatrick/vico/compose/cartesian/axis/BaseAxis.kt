@@ -204,5 +204,18 @@ public abstract class BaseAxis<P : Axis.Position>(
 
       override fun hashCode(): Int = text.hashCode()
     }
+
+    /**
+     * The axis uses the given size and its line scrolls with chart content.
+     *
+     * @property value the size.
+     * @property isLabelsScrollable if true, labels and marker decorations also scroll.
+     */
+    public class Scroll(public val value: Dp, public val isLabelsScrollable: Boolean = false) : Size() {
+      override fun equals(other: Any?): Boolean =
+        this === other || other is Scroll && value == other.value && isLabelsScrollable == other.isLabelsScrollable
+
+      override fun hashCode(): Int = 31 * value.hashCode() + isLabelsScrollable.hashCode()
+    }
   }
 }

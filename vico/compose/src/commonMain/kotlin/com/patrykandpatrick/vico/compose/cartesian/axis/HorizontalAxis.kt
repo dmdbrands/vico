@@ -574,6 +574,7 @@ protected constructor(
         }
         is Size.Fixed -> size.value.pixels
         is Size.Fraction -> canvasSize.height * size.fraction
+        is Size.Scroll -> size.value.pixels
         is Size.Text ->
           label
             ?.getHeight(context = this, text = size.text, rotationDegrees = labelRotationDegrees)
