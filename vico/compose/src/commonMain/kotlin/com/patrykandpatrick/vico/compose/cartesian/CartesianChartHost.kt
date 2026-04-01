@@ -78,8 +78,10 @@ public fun CartesianChartHost(
   val (model, previousModel, initialRanges, extraStore) = modelWrapper
 
   // Scroll-aware range: wrap initialRanges with animated Y values.
-  var animatedYRange by remember { mutableStateOf(Double.NaN to Double.NaN) }
-  val hasValidAnimatedRange = !animatedYRange.first.isNaN() && !animatedYRange.second.isNaN()
+  // Two separate vars instead of Pair to avoid boxing/allocation per animation frame.
+  var animatedMinY by remember { mutableStateOf(Double.NaN) }
+  var animatedMaxY by remember { mutableStateOf(Double.NaN) }
+  val hasValidAnimatedRange = !animatedMinY.isNaN() && !animatedMaxY.isNaN()
   val isInitialRangesReady = initialRanges !== CartesianChartRanges.Empty
 
   val hasScrollAwareProvider = remember(chart) {
@@ -87,14 +89,15 @@ public fun CartesianChartHost(
   }
 
   val ranges = if (hasValidAnimatedRange && isInitialRangesReady) {
-    AnimatedYCartesianChartRanges(initialRanges, animatedYRange.first, animatedYRange.second)
+    AnimatedYCartesianChartRanges(initialRanges, animatedMinY, animatedMaxY)
   } else {
     initialRanges
   }
 
   if (model != null) {
     ScrollAwareRangeEffect(chart, model, flingBehavior) { minY, maxY ->
-      animatedYRange = minY to maxY
+      animatedMinY = minY
+      animatedMaxY = maxY
     }
   }
 

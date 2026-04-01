@@ -186,15 +186,12 @@ protected constructor(
 
       val clipLeft = bounds.left -
         itemPlacer.getStartLayerMargin(this, layerDimensions, tickThickness, maxLabelWidth)
-      println("HAXIS: clipLeft=$clipLeft boundsLeft=${bounds.left} baseCanvasX=$baseCanvasX startPadding=${layerDimensions.startPadding} layerBoundsLeft=${layerBounds.left}")
-
       labelValues.forEachIndexed { index, x ->
         val canvasX =
           baseCanvasX +
             ((x - ranges.minX) / ranges.xStep).toFloat() *
               layerDimensions.xSpacing *
               layoutDirectionMultiplier
-        if (x == 0.0) println("HAXIS: x=0 canvasX=$canvasX clipLeft=$clipLeft")
         label?.draw(
           context = this,
           text =

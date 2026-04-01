@@ -193,6 +193,7 @@ internal class PaddedFadingEdges(
   private val startPaddingXStep: Double?,
   private val endPaddingXStep: Double?,
 ) : FadingEdges(startWidth, endWidth, visibilityThreshold, visibilityEasing) {
+  private val fadePaint = Paint().apply { blendMode = BlendMode.DstOut }
 
   internal fun draw(context: CartesianDrawingContext, xSpacing: Float) {
     // Override effective widths based on xStep padding
@@ -210,16 +211,14 @@ internal class PaddedFadingEdges(
         endWidth.pixels
       }
 
-      val paint = Paint().apply { blendMode = BlendMode.DstOut }
-
       if (scrollEnabled && effectiveStartWidth > 0f && scroll > 0f) {
         val fadeAlpha = (scroll / visibilityThreshold.pixels).coerceAtMost(1f)
         val rect = Rect(layerBounds.left, layerBounds.top, layerBounds.left + effectiveStartWidth, layerBounds.bottom)
         Brush.horizontalGradient(
           colors = listOf(Color.Black.copy(alpha = visibilityEasing.transform(fadeAlpha)), Color.Transparent),
           startX = rect.left, endX = rect.right, tileMode = TileMode.Clamp,
-        ).applyTo(size = rect.size, p = paint, alpha = 1f)
-        canvas.drawRect(rect, paint)
+        ).applyTo(size = rect.size, p = fadePaint, alpha = 1f)
+        canvas.drawRect(rect, fadePaint)
       }
 
       if (scrollEnabled && effectiveEndWidth > 0f && scroll < maxScroll) {
@@ -228,8 +227,8 @@ internal class PaddedFadingEdges(
         Brush.horizontalGradient(
           colors = listOf(Color.Transparent, Color.Black.copy(alpha = visibilityEasing.transform(fadeAlpha))),
           startX = rect.left, endX = rect.right, tileMode = TileMode.Clamp,
-        ).applyTo(size = rect.size, p = paint, alpha = 1f)
-        canvas.drawRect(rect, paint)
+        ).applyTo(size = rect.size, p = fadePaint, alpha = 1f)
+        canvas.drawRect(rect, fadePaint)
       }
     }
   }

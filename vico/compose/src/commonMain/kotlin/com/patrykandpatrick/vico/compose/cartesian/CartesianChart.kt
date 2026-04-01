@@ -76,7 +76,7 @@ internal constructor(
 
   private val layerMargins = CartesianLayerMargins()
   private val axisManager = AxisManager()
-  private val _markerTargets = mutableMapOf<Double, MutableList<CartesianMarker.Target>>()
+  private val _markerTargets = java.util.TreeMap<Double, MutableList<CartesianMarker.Target>>()
 
   private val drawingConsumer =
     object : ModelAndLayerConsumer {
@@ -293,9 +293,7 @@ internal constructor(
       withCanvas(layerCanvas) {
         model.forEachWithLayer(drawingConsumer.apply { this.context = context })
       }
-      val sortedMarkerTargetPairs = _markerTargets.toList().sortedBy { it.first }
-      _markerTargets.clear()
-      _markerTargets.putAll(sortedMarkerTargetPairs)
+      // TreeMap keeps _markerTargets sorted by key — no per-frame sort needed
       forEachPersistentMarker { marker, targets -> marker.drawUnderLayers(context, targets) }
       val markerTargets = getMarkerTargets(markerX, markerSeriesIndex).ifEmpty {
         // If markerX doesn't match a data point, synthesize an interpolated target
@@ -499,22 +497,25 @@ internal constructor(
 
   /**
    * Finds the colors of the nearest real marker target's points (one per series).
-   * Single pass over sorted targets — O(targets) total, not O(targets × series).
+   * Single pass over sorted TreeMap — O(targets) total. Reuses list to avoid allocation.
    */
+  private val cachedNearestColors = mutableListOf<Color>()
+
   private fun findNearestColors(x: Double): List<Color> {
-    var bestColors = emptyList<Color>()
+    cachedNearestColors.clear()
     var bestDelta = Double.MAX_VALUE
     for ((key, targets) in _markerTargets) {
       val delta = abs(key - x)
-      if (delta > bestDelta) break // sorted, distance increasing
+      if (delta > bestDelta) break
       for (target in targets) {
         if (target is LineCartesianLayerMarkerTarget) {
-          bestColors = target.points.map { it.color }
+          cachedNearestColors.clear()
+          for (point in target.points) cachedNearestColors.add(point.color)
           bestDelta = delta
         }
       }
     }
-    return bestColors
+    return cachedNearestColors
   }
 
   protected inline fun <reified T : CartesianLayerModel> MutableList<CartesianLayerModel>.consume(

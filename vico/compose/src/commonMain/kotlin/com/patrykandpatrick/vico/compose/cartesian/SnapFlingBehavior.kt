@@ -96,10 +96,6 @@ internal class ChartSnapFlingBehavior(
     val clampedTarget = targetPixels.coerceIn(0f, scrollState.maxValue)
     val delta = clampedTarget - scrollState.value
 
-    println("SnapFling: currentX=${currentX?.toInt()} " +
-      "projected=${projectedX?.toInt()} " +
-      "vel=${initialVelocity.toInt()} isDrag=$isDrag " +
-      "target=${targetDataX.toInt()} delta=${delta.toInt()}")
 
     if (abs(delta) < 0.5f) return 0f
 

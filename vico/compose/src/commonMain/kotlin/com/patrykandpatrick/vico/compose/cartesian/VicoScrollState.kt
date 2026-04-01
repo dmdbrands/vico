@@ -121,6 +121,7 @@ public class VicoScrollState {
    * Computes interpolated Y values for the given [xValues] across all series in the current model.
    * Returns one inner list per series. Each inner list has the same size as [xValues].
    * Uses the current chart model's data — returns empty if model not ready.
+   * Zero Pair allocation — works directly on Entry objects.
    */
   public fun getInterpolatedYValues(
     xValues: List<Double>,
@@ -132,10 +133,13 @@ public class VicoScrollState {
     for (layerModel in model.models) {
       if (layerModel is LineCartesianLayerModel) {
         for (series in layerModel.series) {
-          val entries = series.map { it.x to it.y }
           val yValues = when (interpolationType) {
-            InterpolationType.MONOTONE -> MonotoneInterpolator.getYValues(xValues, entries)
-            InterpolationType.LINEAR -> xValues.map { x -> linearInterpolate(x, entries) }
+            InterpolationType.MONOTONE -> xValues.map { x ->
+              MonotoneInterpolator.getYAtXFromEntries(x, series)
+            }
+            InterpolationType.LINEAR -> xValues.map { x ->
+              linearInterpolateFromEntries(x, series)
+            }
           }
           results.add(yValues)
         }
@@ -144,13 +148,16 @@ public class VicoScrollState {
     return results
   }
 
-  private fun linearInterpolate(x: Double, entries: List<Pair<Double, Double>>): Double? {
-    if (entries.size < 2) return entries.firstOrNull()?.second
-    if (x <= entries.first().first) return entries.first().second
-    if (x >= entries.last().first) return entries.last().second
+  private fun linearInterpolateFromEntries(
+    x: Double,
+    entries: List<LineCartesianLayerModel.Entry>,
+  ): Double? {
+    if (entries.size < 2) return entries.firstOrNull()?.y
+    if (x <= entries.first().x) return entries.first().y
+    if (x >= entries.last().x) return entries.last().y
     for (i in 0 until entries.lastIndex) {
-      val (x0, y0) = entries[i]
-      val (x1, y1) = entries[i + 1]
+      val x0 = entries[i].x; val y0 = entries[i].y
+      val x1 = entries[i + 1].x; val y1 = entries[i + 1].y
       if (x in x0..x1) {
         val t = (x - x0) / (x1 - x0)
         return y0 + t * (y1 - y0)
