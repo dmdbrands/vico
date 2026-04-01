@@ -63,9 +63,31 @@ CartesianChartHost(
 | File | Change |
 |------|--------|
 | `SnapFlingBehavior.kt` | NEW — SnapBehaviorConfig + ChartSnapFlingBehavior |
-| `VicoScrollState.kt` | Added `xToScrollValue()` and `scrollValueToX()` helpers |
+| `VicoScrollState.kt` | Added `xToScrollValue()`, `scrollValueToX()`, `xToScrollValueWithPadding()`, `visibleXRange` |
 | `Modifier.kt` | `flingBehavior` parameter passed to `scrollable()` |
 | `CartesianChartHost.kt` | `flingBehavior` threaded through to `CartesianChartHostImpl` + snap suppression for range provider |
+
+## Scroll State Helpers
+
+### visibleXRange
+Public property returning the visible X data range. Zero allocation — computed from
+stored context on access. Replaces old `onScrollStopped` callback.
+
+```kotlin
+// Observe scroll settling in meApp (no recomposition):
+LaunchedEffect(scrollState) {
+  snapshotFlow { scrollState.value }
+    .debounce(100)
+    .collect {
+      val range = scrollState.visibleXRange ?: return@collect
+      onScrollUpdate(range.start.toLong(), range.endInclusive.toLong())
+    }
+}
+```
+
+### xToScrollValueWithPadding
+Converts X data value to scroll pixels with padding offset. Used by snap behavior
+when `scrollPaddingXStep > 0` to position targets at padding offset from chart edge.
 
 ## Range Provider Integration
 

@@ -56,6 +56,18 @@ public class VicoScrollState {
       ((x - ctx.ranges.minX) / ctx.ranges.xStep).toFloat() * dims.xSpacing
   }
 
+  /** The currently visible X data range, or null if context not ready. */
+  public val visibleXRange: ClosedFloatingPointRange<Double>?
+    get() {
+      val ctx = context ?: return null
+      val dims = layerDimensions ?: return null
+      val b = bounds ?: return null
+      if (dims.xSpacing == 0f) return null
+      val start = ctx.ranges.minX + (value - dims.startPadding) / dims.xSpacing * ctx.ranges.xStep
+      val end = start + b.width / dims.xSpacing * ctx.ranges.xStep
+      return start..end
+    }
+
   /** Like [xToScrollValue] but subtracts [paddingXStep] * xSpacing — positions X at padding offset from edge. */
   internal fun xToScrollValueWithPadding(x: Double, paddingXStep: Double): Float? {
     val ctx = context ?: return null
