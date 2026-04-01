@@ -27,14 +27,18 @@ import com.patrykandpatrick.vico.compose.cartesian.CartesianChart.PersistentMark
 import com.patrykandpatrick.vico.compose.cartesian.axis.Axis
 import com.patrykandpatrick.vico.compose.cartesian.axis.AxisManager
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModel
+import androidx.compose.ui.graphics.Color
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartRanges
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianLayerModel
+import com.patrykandpatrick.vico.compose.cartesian.data.LineCartesianLayerModel
 import com.patrykandpatrick.vico.compose.cartesian.data.MutableCartesianChartRanges
 import com.patrykandpatrick.vico.compose.cartesian.decoration.Decoration
 import com.patrykandpatrick.vico.compose.cartesian.layer.*
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarkerController
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarkerVisibilityListener
+import com.patrykandpatrick.vico.compose.cartesian.marker.LineCartesianLayerMarkerTarget
+import com.patrykandpatrick.vico.compose.cartesian.marker.MutableLineCartesianLayerMarkerTarget
 import com.patrykandpatrick.vico.compose.common.*
 import com.patrykandpatrick.vico.compose.common.data.CacheStore
 import com.patrykandpatrick.vico.compose.common.data.ExtraStore
@@ -292,7 +296,10 @@ internal constructor(
       _markerTargets.clear()
       _markerTargets.putAll(sortedMarkerTargetPairs)
       forEachPersistentMarker { marker, targets -> marker.drawUnderLayers(context, targets) }
-      val markerTargets = getMarkerTargets(markerX, markerSeriesIndex)
+      val markerTargets = getMarkerTargets(markerX, markerSeriesIndex).ifEmpty {
+        // If markerX doesn't match a data point, synthesize an interpolated target
+        markerX?.let { synthesizeInterpolatedTargets(context, it) } ?: emptyList()
+      }
       val drawMarker = markerTargets.isNotEmpty()
       if (drawMarker) marker?.drawUnderLayers(context, markerTargets)
       canvas.drawImage(layerBitmap, Offset.Zero, EmptyPaint)
@@ -429,6 +436,79 @@ internal constructor(
       previousMarkerTargetHashCode = targetHashCode
       targets
     }
+  }
+
+  /**
+   * Synthesizes a marker target at an arbitrary X by interpolating Y from the model data.
+   * Used when the consumer's callback returns an X that doesn't match any data point.
+   *
+   * Performance: zero list allocations — uses [MonotoneInterpolator.getYAtX] overload that
+   * works directly on Entry objects with O(log n) binary search per series.
+   */
+  private fun synthesizeInterpolatedTargets(
+    context: CartesianDrawingContext,
+    x: Double,
+  ): List<CartesianMarker.Target> {
+    val ranges = context.ranges
+    val layerDimensions = context.layerDimensions
+    val layerBounds = context.layerBounds
+
+    // Compute canvasX for the target X
+    val drawingStart = layerBounds.getStart(context.isLtr) +
+      context.layoutDirectionMultiplier * layerDimensions.startPadding - context.scroll
+    val canvasX = drawingStart +
+      context.layoutDirectionMultiplier * layerDimensions.xSpacing *
+      ((x - ranges.minX) / ranges.xStep).toFloat()
+
+    // Out of visible bounds — don't synthesize
+    if (canvasX < layerBounds.left - 1 || canvasX > layerBounds.right + 1) return emptyList()
+
+    val target = MutableLineCartesianLayerMarkerTarget(x, canvasX)
+
+    // Cache Y-range and nearest colors outside the series loop
+    val lineLayer = layers.firstOrNull { it is LineCartesianLayer } as? LineCartesianLayer
+    val yRange = ranges.getYRange(lineLayer?.internalVerticalAxisPosition)
+    val nearestColors = findNearestColors(x)
+
+    // For each LineCartesianLayerModel series, interpolate Y and add a Point
+    for (layerModel in context.model.models) {
+      if (layerModel !is LineCartesianLayerModel) continue
+      for ((seriesIndex, series) in layerModel.series.withIndex()) {
+        // Zero-allocation: works directly on Entry list, O(log n) binary search
+        val interpolatedY = MonotoneInterpolator.getYAtXFromEntries(x, series) ?: continue
+
+        val canvasY = layerBounds.bottom -
+          ((interpolatedY - yRange.minY) / yRange.length).toFloat() * layerBounds.height
+
+        target.points += LineCartesianLayerMarkerTarget.Point(
+          entry = LineCartesianLayerModel.Entry(x, interpolatedY),
+          canvasY = canvasY.coerceIn(layerBounds.top, layerBounds.bottom),
+          color = nearestColors.getOrElse(seriesIndex) { Color.Black },
+        )
+      }
+    }
+
+    return if (target.points.isNotEmpty()) listOf(target) else emptyList()
+  }
+
+  /**
+   * Finds the colors of the nearest real marker target's points (one per series).
+   * Single pass over sorted targets — O(targets) total, not O(targets × series).
+   */
+  private fun findNearestColors(x: Double): List<Color> {
+    var bestColors = emptyList<Color>()
+    var bestDelta = Double.MAX_VALUE
+    for ((key, targets) in _markerTargets) {
+      val delta = abs(key - x)
+      if (delta > bestDelta) break // sorted, distance increasing
+      for (target in targets) {
+        if (target is LineCartesianLayerMarkerTarget) {
+          bestColors = target.points.map { it.color }
+          bestDelta = delta
+        }
+      }
+    }
+    return bestColors
   }
 
   protected inline fun <reified T : CartesianLayerModel> MutableList<CartesianLayerModel>.consume(

@@ -19,6 +19,7 @@ package com.patrykandpatrick.vico.compose.cartesian.layer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import com.patrykandpatrick.vico.compose.cartesian.CartesianDrawingContext
+import com.patrykandpatrick.vico.compose.cartesian.data.LineCartesianLayerModel
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -100,7 +101,7 @@ internal object MonotoneInterpolator : LineCartesianLayer.Interpolator {
    * Computes the interpolated Y value at any X position using Fritsch-Carlson monotone cubic.
    * [entries] must be sorted by X. Returns null if X is outside the data range or entries < 2.
    */
-  internal fun getYAtX(x: Double, entries: List<Pair<Double, Double>>): Double? {
+  public fun getYAtX(x: Double, entries: List<Pair<Double, Double>>): Double? {
     if (entries.size < 2) return entries.firstOrNull()?.second
     if (x <= entries.first().first) return entries.first().second
     if (x >= entries.last().first) return entries.last().second
@@ -132,6 +133,119 @@ internal object MonotoneInterpolator : LineCartesianLayer.Interpolator {
     val t = (x - x0) / dx
 
     // Hermite basis functions
+    val h00 = (1 + 2 * t) * (1 - t) * (1 - t)
+    val h10 = t * (1 - t) * (1 - t)
+    val h01 = t * t * (3 - 2 * t)
+    val h11 = t * t * (t - 1)
+
+    return h00 * y0 + h10 * dx * t0 + h01 * y1 + h11 * dx * t1
+  }
+
+  /**
+   * Batch interpolation — computes Y values for multiple X positions efficiently.
+   * Precomputes secants and tangents once, then evaluates each X with binary search.
+   * [entries] must be sorted by X. Returns null for X values outside the data range.
+   */
+  public fun getYValues(
+    xValues: Collection<Double>,
+    entries: List<Pair<Double, Double>>,
+  ): List<Double?> {
+    val n = entries.size
+    if (n == 0) return xValues.map { null }
+    if (n == 1) return xValues.map { entries[0].second }
+
+    val xMin = entries.first().first
+    val xMax = entries.last().first
+
+    // Precompute secants once
+    val secants = DoubleArray(n - 1) { i ->
+      val dx = entries[i + 1].first - entries[i].first
+      if (dx != 0.0) (entries[i + 1].second - entries[i].second) / dx else 0.0
+    }
+
+    // Precompute tangents once
+    val tangents = DoubleArray(n)
+    tangents[0] = secants[0]
+    tangents[n - 1] = secants[n - 2]
+    for (i in 1 until n - 1) {
+      tangents[i] = computeMonotoneTangentD(secants[i - 1], secants[i])
+    }
+
+    return xValues.map { x ->
+      when {
+        x <= xMin -> entries.first().second
+        x >= xMax -> entries.last().second
+        else -> {
+          // Binary search for bracketing segment
+          var lo = 0
+          var hi = n - 2
+          while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (entries[mid + 1].first < x) lo = mid + 1 else hi = mid
+          }
+          val seg = lo
+          val x0 = entries[seg].first
+          val x1 = entries[seg + 1].first
+          val y0 = entries[seg].second
+          val y1 = entries[seg + 1].second
+          val dx = x1 - x0
+          val t = (x - x0) / dx
+          val h00 = (1 + 2 * t) * (1 - t) * (1 - t)
+          val h10 = t * (1 - t) * (1 - t)
+          val h01 = t * t * (3 - 2 * t)
+          val h11 = t * t * (t - 1)
+          h00 * y0 + h10 * dx * tangents[seg] + h01 * y1 + h11 * dx * tangents[seg + 1]
+        }
+      }
+    }
+  }
+
+  /**
+   * Zero-allocation version of [getYAtX] that works directly on [LineCartesianLayerModel.Entry].
+   * Avoids `series.map { it.x to it.y }` allocation on every call.
+   * Uses binary search for O(log n) segment lookup, computes only the 2-3 secants needed.
+   */
+  public fun getYAtXFromEntries(x: Double, series: List<LineCartesianLayerModel.Entry>): Double? {
+    val n = series.size
+    if (n < 2) return series.firstOrNull()?.y
+    if (x <= series.first().x) return series.first().y
+    if (x >= series.last().x) return series.last().y
+
+    // Binary search for bracketing segment
+    var lo = 0
+    var hi = n - 2
+    while (lo < hi) {
+      val mid = (lo + hi) ushr 1
+      if (series[mid + 1].x < x) lo = mid + 1 else hi = mid
+    }
+    val seg = lo
+
+    // Compute only the secants needed for this segment's tangents
+    val secantPrev = if (seg > 0) {
+      val dx = series[seg].x - series[seg - 1].x
+      if (dx != 0.0) (series[seg].y - series[seg - 1].y) / dx else 0.0
+    } else 0.0
+
+    val secantCur = run {
+      val dx = series[seg + 1].x - series[seg].x
+      if (dx != 0.0) (series[seg + 1].y - series[seg].y) / dx else 0.0
+    }
+
+    val secantNext = if (seg + 2 < n) {
+      val dx = series[seg + 2].x - series[seg + 1].x
+      if (dx != 0.0) (series[seg + 2].y - series[seg + 1].y) / dx else 0.0
+    } else 0.0
+
+    val t0 = if (seg == 0) secantCur else computeMonotoneTangentD(secantPrev, secantCur)
+    val t1 = if (seg == n - 2) secantCur else computeMonotoneTangentD(secantCur, secantNext)
+
+    val x0 = series[seg].x
+    val x1 = series[seg + 1].x
+    val y0 = series[seg].y
+    val y1 = series[seg + 1].y
+    val dx = x1 - x0
+    val t = (x - x0) / dx
+
     val h00 = (1 + 2 * t) * (1 - t) * (1 - t)
     val h10 = t * (1 - t) * (1 - t)
     val h01 = t * t * (3 - 2 * t)

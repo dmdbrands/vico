@@ -27,8 +27,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.geometry.Rect
+import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModel
+import com.patrykandpatrick.vico.compose.cartesian.data.LineCartesianLayerModel
 import com.patrykandpatrick.vico.compose.cartesian.layer.CartesianLayerDimensions
+import com.patrykandpatrick.vico.compose.cartesian.layer.MonotoneInterpolator
 import com.patrykandpatrick.vico.compose.common.rangeWith
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
@@ -84,6 +87,76 @@ public class VicoScrollState {
     if (dims.xSpacing == 0f) return null
     val px = scrollPixels ?: value
     return ctx.ranges.minX + (px - dims.startPadding) / dims.xSpacing * ctx.ranges.xStep
+  }
+
+  /**
+   * Returns the aligned axis label X values visible in the current scroll window.
+   * For custom label placement (e.g., month boundaries, Sundays), pass [labelProvider]
+   * which receives the visible X range and full X range.
+   */
+  public fun getVisibleAxisLabels(
+    itemPlacer: HorizontalAxis.ItemPlacer? = null,
+    labelProvider: ((visibleXRange: ClosedFloatingPointRange<Double>, fullXRange: ClosedFloatingPointRange<Double>) -> List<Double>)? = null,
+  ): List<Double> {
+    val ctx = context ?: return emptyList()
+    val range = visibleXRange ?: return emptyList()
+    val fullRange = ctx.ranges.minX..ctx.ranges.maxX
+
+    // If consumer provides a label provider, use it
+    if (labelProvider != null) return labelProvider(range, fullRange)
+
+    // Default: aligned labels at xStep intervals
+    val xStep = ctx.ranges.xStep
+    if (xStep <= 0.0) return emptyList()
+    val labels = mutableListOf<Double>()
+    val startK = kotlin.math.ceil((range.start - ctx.ranges.minX) / xStep).toLong()
+    val endK = kotlin.math.floor((range.endInclusive - ctx.ranges.minX) / xStep).toLong()
+    for (k in startK..endK) {
+      labels.add(ctx.ranges.minX + k * xStep)
+    }
+    return labels
+  }
+
+  /**
+   * Computes interpolated Y values for the given [xValues] across all series in the current model.
+   * Returns one inner list per series. Each inner list has the same size as [xValues].
+   * Uses the current chart model's data — returns empty if model not ready.
+   */
+  public fun getInterpolatedYValues(
+    xValues: List<Double>,
+    interpolationType: InterpolationType = InterpolationType.MONOTONE,
+  ): List<List<Double?>> {
+    val ctx = context ?: return emptyList()
+    val model = ctx.model
+    val results = mutableListOf<List<Double?>>()
+    for (layerModel in model.models) {
+      if (layerModel is LineCartesianLayerModel) {
+        for (series in layerModel.series) {
+          val entries = series.map { it.x to it.y }
+          val yValues = when (interpolationType) {
+            InterpolationType.MONOTONE -> MonotoneInterpolator.getYValues(xValues, entries)
+            InterpolationType.LINEAR -> xValues.map { x -> linearInterpolate(x, entries) }
+          }
+          results.add(yValues)
+        }
+      }
+    }
+    return results
+  }
+
+  private fun linearInterpolate(x: Double, entries: List<Pair<Double, Double>>): Double? {
+    if (entries.size < 2) return entries.firstOrNull()?.second
+    if (x <= entries.first().first) return entries.first().second
+    if (x >= entries.last().first) return entries.last().second
+    for (i in 0 until entries.lastIndex) {
+      val (x0, y0) = entries[i]
+      val (x1, y1) = entries[i + 1]
+      if (x in x0..x1) {
+        val t = (x - x0) / (x1 - x0)
+        return y0 + t * (y1 - y0)
+      }
+    }
+    return null
   }
 
   internal val scrollEnabled: Boolean

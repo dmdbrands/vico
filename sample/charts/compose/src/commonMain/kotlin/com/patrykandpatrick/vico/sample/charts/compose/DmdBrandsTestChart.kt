@@ -126,9 +126,21 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
     }
   }
 
+  // Feature 8: Marker at any X — consumer decides where marker lands
   val scrubController = rememberScrubMarkerController(
     scrollState = scrollState,
     delayMs = 200L,
+    onMarkerIndexChanged = { clickX, targets ->
+      if (clickX == null) {
+        null // dismiss
+      } else {
+        // Snap to nearest visible axis label (interpolated Y if not a data point)
+        val visibleLabels = scrollState.getVisibleAxisLabels()
+        val nearest = visibleLabels.minByOrNull { kotlin.math.abs(it - clickX) } ?: clickX
+        println("Marker: clickX=${clickX.toInt()} → nearest label=${nearest.toInt()}")
+        nearest
+      }
+    },
   )
 
   // Feature 4: Snap — drag snaps to nearest label, fling jumps to next/prev window
