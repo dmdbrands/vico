@@ -163,8 +163,10 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
 
   CartesianChartHost(
     chart = rememberCartesianChart(
+      // Feature 7: pointSpacingProvider — show exactly 10 entries in visible window
       rememberLineCartesianLayer(
         rangeProvider = rangeProvider,
+        pointSpacingProvider = { availableWidth -> availableWidth / 8f },
         lineProvider = LineCartesianLayer.LineProvider.series(
           LineCartesianLayer.Line(
             fill = LineCartesianLayer.LineFill.single(Fill(Color(0xFF6750A4))),
