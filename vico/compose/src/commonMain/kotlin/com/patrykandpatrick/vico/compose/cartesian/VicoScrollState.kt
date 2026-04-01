@@ -56,6 +56,15 @@ public class VicoScrollState {
       ((x - ctx.ranges.minX) / ctx.ranges.xStep).toFloat() * dims.xSpacing
   }
 
+  /** Like [xToScrollValue] but subtracts [paddingXStep] * xSpacing — positions X at padding offset from edge. */
+  internal fun xToScrollValueWithPadding(x: Double, paddingXStep: Double): Float? {
+    val ctx = context ?: return null
+    val dims = layerDimensions ?: return null
+    return dims.startPadding +
+      ((x - ctx.ranges.minX) / ctx.ranges.xStep).toFloat() * dims.xSpacing -
+      (paddingXStep * dims.xSpacing).toFloat()
+  }
+
   /** Converts a scroll pixel value to a data X value. Uses current scroll if [scrollPixels] is null. */
   internal fun scrollValueToX(scrollPixels: Float? = null): Double? {
     val ctx = context ?: return null

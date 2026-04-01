@@ -84,7 +84,7 @@ import kotlin.math.sin
 fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
   val modelProducer = remember { CartesianChartModelProducer() }
   // Feature 5: xWithPadding — start at X=80 with 2 xStep padding from left edge
-  val startPaddingXStep = 2.0
+  val startPaddingXStep = 0.5
   val scrollState = rememberVicoScrollState(
     initialScroll = Scroll.Absolute.xWithPadding(80.0, startPaddingXStep),
   )
@@ -135,6 +135,7 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
   val snapFling = rememberChartSnapFlingBehavior(
     scrollState = scrollState,
     config = SnapBehaviorConfig(
+      scrollPaddingXStep = startPaddingXStep,
       snapToLabel = { currentXLabel, projectedXLabel, isDrag, isForward ->
         val windowSize = 8.0
         val maxWindowsPerFling = 3  // Cap: never jump more than 3 windows

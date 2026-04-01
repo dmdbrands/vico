@@ -4,7 +4,8 @@
 
 Custom snap/fling behavior for scrollable charts. After drag or fling, the chart snaps
 to a position determined by a consumer callback. Uses physics-based projection for
-natural fling distance.
+natural fling distance. Supports `scrollPaddingXStep` to position snap targets at a
+padding offset from the chart edge (matching `xWithPadding` initial scroll).
 
 ## Gesture Types
 
