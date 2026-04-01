@@ -66,10 +66,17 @@ val scrubController = rememberScrubMarkerController(
 
 | File | Change |
 |------|--------|
-| `CartesianChart.kt` | `synthesizeInterpolatedTargets()`, `findNearestColors()` |
+| `CartesianChart.kt` | `synthesizeInterpolatedTargets()`, `findNearestColors()`, persistent marker fallback |
 | `MonotoneInterpolator.kt` | `getYAtXFromEntries()` — zero-alloc overload |
 | `CartesianChartHost.kt` | No change — existing callback flow handles it |
 | `ScrubMarkerController.kt` | No change — callback already returns arbitrary X |
+
+## Persistent Markers
+
+`forEachPersistentMarker` also falls back to `synthesizeInterpolatedTargets` when a
+persistent marker's X doesn't match a data point. This means persistent markers at
+arbitrary X positions (e.g., goal lines, annotations between data points) render with
+interpolated Y — same zero-alloc path as interactive markers.
 
 ## Complementary APIs on VicoScrollState
 

@@ -284,6 +284,7 @@ internal constructor(
   }
 
   internal fun draw(context: CartesianDrawingContext) {
+    drawingContext = context
     with(context) {
       if (fadingEdges != null) canvas.saveLayer(Rect(Offset.Zero, canvasSize), EmptyPaint)
       decorations.forEach { it.drawUnderLayers(context) }
@@ -313,6 +314,7 @@ internal constructor(
       legend?.draw(context)
       if (drawMarker) marker?.drawOverLayers(context, markerTargets)
     }
+    drawingContext = null
   }
 
   internal fun updateRanges(ranges: MutableCartesianChartRanges, model: CartesianChartModel) {
@@ -379,11 +381,15 @@ internal constructor(
     }
   }
 
+  private var drawingContext: CartesianDrawingContext? = null
+
   private inline fun forEachPersistentMarker(
     block: (CartesianMarker, List<CartesianMarker.Target>) -> Unit
   ) {
     persistentMarkerMap.forEach { (x, marker) ->
-      markerTargets[x]?.also { targets -> block(marker, targets) }
+      val targets = markerTargets[x]
+        ?: drawingContext?.let { synthesizeInterpolatedTargets(it, x) }?.takeIf { it.isNotEmpty() }
+      if (targets != null) block(marker, targets)
     }
   }
 
