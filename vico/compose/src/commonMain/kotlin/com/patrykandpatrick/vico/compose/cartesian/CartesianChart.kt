@@ -76,7 +76,7 @@ internal constructor(
 
   private val layerMargins = CartesianLayerMargins()
   private val axisManager = AxisManager()
-  private val _markerTargets = java.util.TreeMap<Double, MutableList<CartesianMarker.Target>>()
+  private val _markerTargets = mutableMapOf<Double, MutableList<CartesianMarker.Target>>()
 
   private val drawingConsumer =
     object : ModelAndLayerConsumer {
@@ -497,7 +497,7 @@ internal constructor(
 
   /**
    * Finds the colors of the nearest real marker target's points (one per series).
-   * Single pass over sorted TreeMap — O(targets) total. Reuses list to avoid allocation.
+   * Full scan — O(targets). Reuses list to avoid allocation.
    */
   private val cachedNearestColors = mutableListOf<Color>()
 
@@ -506,12 +506,13 @@ internal constructor(
     var bestDelta = Double.MAX_VALUE
     for ((key, targets) in _markerTargets) {
       val delta = abs(key - x)
-      if (delta > bestDelta) break
-      for (target in targets) {
-        if (target is LineCartesianLayerMarkerTarget) {
-          cachedNearestColors.clear()
-          for (point in target.points) cachedNearestColors.add(point.color)
-          bestDelta = delta
+      if (delta < bestDelta) {
+        for (target in targets) {
+          if (target is LineCartesianLayerMarkerTarget) {
+            cachedNearestColors.clear()
+            for (point in target.points) cachedNearestColors.add(point.color)
+            bestDelta = delta
+          }
         }
       }
     }

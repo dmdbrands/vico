@@ -84,7 +84,7 @@ import kotlin.math.sin
 fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
   val modelProducer = remember { CartesianChartModelProducer() }
   // Feature 5: xWithPadding — start at X=80 with 2 xStep padding from left edge
-  val startPaddingXStep = 0.5
+  val startPaddingXStep = 02.5
   val scrollState = rememberVicoScrollState(
     initialScroll = Scroll.Absolute.xWithPadding(80.0, startPaddingXStep),
   )
@@ -192,6 +192,12 @@ fun DmdBrandsTestChart(modifier: Modifier = Modifier) {
             ),
           ),
         ),
+      ),
+      startAxis = VerticalAxis.rememberStart(
+        guideline = null,
+        label = null,
+        tick = null,
+        size = BaseAxis.Size.Scroll(8.dp , isLabelsScrollable = true)
       ),
       endAxis = VerticalAxis.rememberEnd(
         itemPlacer = ListItemPlacer(ticks = { rangeProvider.currentTicks }),
