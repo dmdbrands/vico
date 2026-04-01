@@ -163,21 +163,20 @@ protected constructor(
       val fullXRange = internalGetFullXRange(layerDimensions)
       val maxLabelWidth = getMaxLabelWidth(layerDimensions, fullXRange)
 
-      val lineLeft = getLineLeft(context, maxLabelWidth, axisDimensions)
-      val lineRight = getLineRight(context, maxLabelWidth, axisDimensions)
-
-      clipPath.rewind()
-      clipPath.addRect(
-        Rect(
-          lineLeft,
-          min(bounds.top, layerBounds.top),
-          lineRight,
-          max(bounds.bottom, layerBounds.bottom),
-        ),
-        Path.Direction.Clockwise,
+      val startMargin = maxOf(
+        itemPlacer.getStartLayerMargin(this, layerDimensions, tickThickness, maxLabelWidth),
+        maxLabelWidth.half,
       )
-
-      canvas.clipPath(clipPath)
+      val endMargin = maxOf(
+        itemPlacer.getEndLayerMargin(this, layerDimensions, tickThickness, maxLabelWidth),
+        maxLabelWidth.half,
+      )
+      canvas.clipRect(
+        bounds.left - startMargin,
+        min(bounds.top, layerBounds.top),
+        bounds.right + endMargin,
+        max(bounds.bottom, layerBounds.bottom),
+      )
 
       val baseCanvasX =
         bounds.getStart(isLtr) - scroll + layerDimensions.startPadding * layoutDirectionMultiplier
@@ -185,17 +184,17 @@ protected constructor(
       val labelValues = itemPlacer.getLabelValues(this, visibleXRange, fullXRange, maxLabelWidth)
       val lineValues = itemPlacer.getLineValues(this, visibleXRange, fullXRange, maxLabelWidth)
 
+      val clipLeft = bounds.left -
+        itemPlacer.getStartLayerMargin(this, layerDimensions, tickThickness, maxLabelWidth)
+      println("HAXIS: clipLeft=$clipLeft boundsLeft=${bounds.left} baseCanvasX=$baseCanvasX startPadding=${layerDimensions.startPadding} layerBoundsLeft=${layerBounds.left}")
+
       labelValues.forEachIndexed { index, x ->
         val canvasX =
           baseCanvasX +
             ((x - ranges.minX) / ranges.xStep).toFloat() *
               layerDimensions.xSpacing *
               layoutDirectionMultiplier
-        val previousX = labelValues.getOrNull(index - 1) ?: (fullXRange.start.doubled - x)
-        val nextX = labelValues.getOrNull(index + 1) ?: (fullXRange.endInclusive.doubled - x)
-        val maxWidth =
-          ceil(min(x - previousX, nextX - x) / ranges.xStep * layerDimensions.xSpacing).toInt()
-
+        if (x == 0.0) println("HAXIS: x=0 canvasX=$canvasX clipLeft=$clipLeft")
         label?.draw(
           context = this,
           text =
@@ -203,7 +202,6 @@ protected constructor(
           x = canvasX,
           y = textY,
           verticalPosition = position.textVerticalPosition,
-          maxWidth = maxWidth,
           maxHeight = (bounds.height - outwardTickLength - lineThickness.half).toInt(),
           rotationDegrees = labelRotationDegrees,
         )
@@ -285,26 +283,23 @@ protected constructor(
       val tickBottom = tickTop + lineThickness + this.tickLength
       val fullXRange = internalGetFullXRange(layerDimensions)
       val maxLabelWidth = getMaxLabelWidth(layerDimensions, fullXRange)
-      val lineLeft = getLineLeft(context, maxLabelWidth, axisDimensions)
-      val lineRight = getLineRight(context, maxLabelWidth, axisDimensions)
+      val clipLeft = bounds.left -
+        itemPlacer.getStartLayerMargin(this, layerDimensions, tickThickness, maxLabelWidth)
+      val clipRight = bounds.right +
+        itemPlacer.getEndLayerMargin(this, layerDimensions, tickThickness, maxLabelWidth)
 
       canvas.save()
-      clipPath.rewind()
-      clipPath.addRect(
-        Rect(
-          lineLeft,
-          min(bounds.top, layerBounds.top),
-          lineRight,
-          max(bounds.bottom, layerBounds.bottom),
-        ),
-        Path.Direction.Clockwise,
+      canvas.clipRect(
+        clipLeft,
+        min(bounds.top, layerBounds.top),
+        clipRight,
+        max(bounds.bottom, layerBounds.bottom),
       )
-      canvas.clipPath(clipPath)
 
       line?.drawHorizontal(
         context = this,
-        left = lineLeft,
-        right = lineRight,
+        left = clipLeft,
+        right = clipRight,
         y = if (isTop) bounds.bottom - lineThickness.half else bounds.top + lineThickness.half,
       )
 
@@ -461,61 +456,12 @@ protected constructor(
     if (lineDrawingOrder == LineDrawingOrder.OverLayers) drawLineAndTicks(context, axisDimensions)
   }
 
+  // v3 computed unscalableStartPadding/unscalableEndPadding here but never applied them.
+  // Matching v3: no-op. No label padding shift.
   override fun updateLayerDimensions(
     context: CartesianMeasuringContext,
     layerDimensions: MutableCartesianLayerDimensions,
-  ) {
-    val label = label ?: return
-    val ranges = context.ranges
-    val maxLabelWidth =
-      context.getMaxLabelWidth(layerDimensions, context.internalGetFullXRange(layerDimensions))
-    val firstLabelValue = itemPlacer.getFirstLabelValue(context, maxLabelWidth)
-    val lastLabelValue = itemPlacer.getLastLabelValue(context, maxLabelWidth)
-    if (firstLabelValue != null) {
-      val text =
-        valueFormatter.formatForAxis(
-          context = context,
-          value = firstLabelValue,
-          verticalAxisPosition = null,
-        )
-      var unscalableStartPadding =
-        label
-          .getWidth(
-            context = context,
-            text = text,
-            rotationDegrees = labelRotationDegrees,
-            pad = true,
-          )
-          .half
-      if (!context.zoomEnabled) {
-        unscalableStartPadding -=
-          (firstLabelValue - ranges.minX).toFloat() * layerDimensions.xSpacing
-      }
-      layerDimensions.ensureValuesAtLeast(unscalableStartPadding = unscalableStartPadding)
-    }
-    if (lastLabelValue != null) {
-      val text =
-        valueFormatter.formatForAxis(
-          context = context,
-          value = lastLabelValue,
-          verticalAxisPosition = null,
-        )
-      var unscalableEndPadding =
-        label
-          .getWidth(
-            context = context,
-            text = text,
-            rotationDegrees = labelRotationDegrees,
-            pad = true,
-          )
-          .half
-      if (!context.zoomEnabled) {
-        unscalableEndPadding -=
-          ((ranges.maxX - lastLabelValue) * layerDimensions.xSpacing).toFloat()
-      }
-      layerDimensions.ensureValuesAtLeast(unscalableEndPadding = unscalableEndPadding)
-    }
-  }
+  ): Unit = Unit
 
   override fun updateLayerMargins(
     context: CartesianMeasuringContext,
