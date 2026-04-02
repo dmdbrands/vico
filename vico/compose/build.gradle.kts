@@ -101,6 +101,8 @@ afterEvaluate {
             (it as? groovy.util.Node)?.name()?.toString()?.contains("dependencies") == true
           }
         }
+        // Suppress .module file — Gradle prefers it over POM and it declares transitive deps
+        tasks.withType<GenerateModuleMetadata>().configureEach { enabled = false }
       }
     }
     repositories {
