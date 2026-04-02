@@ -15,10 +15,11 @@
  */
 
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import java.util.Properties
 
 plugins {
   `dokka-convention`
-  `gpr-publishing-convention`
+  `maven-publish`
   id("com.android.kotlin.multiplatform.library")
   id("org.jetbrains.compose")
   id("org.jetbrains.kotlin.multiplatform")
@@ -78,5 +79,39 @@ if (testTask != null) {
     group = LifecycleBasePlugin.VERIFICATION_GROUP
     description = "Runs the vico-compose test suite on the JVM (Android host tests)."
     dependsOn("testAndroidHostTest")
+  }
+}
+
+// GPR publishing — same approach as v3: publish AAR directly, no transitive deps
+val localProps = Properties()
+val localPropsFile = rootProject.file("gradle-local.properties")
+if (localPropsFile.exists()) localProps.load(localPropsFile.inputStream())
+
+// Note: run `./gradlew :vico:compose:compileKotlinDesktop` first to generate AAR
+
+publishing {
+  publications {
+    create<MavenPublication>("gpr") {
+      groupId = "com.dmdbrands.lib"
+      artifactId = "vico-gg"
+      version = Versions.VICO
+      artifact("build/outputs/aar/compose-release.aar")
+    }
+  }
+  repositories {
+    maven {
+      name = "GitHubPackages"
+      url = uri("https://maven.pkg.github.com/dmdbrands/vico")
+      credentials {
+        username = localProps.getProperty("gpr.user") as String?
+          ?: project.findProperty("gpr.user") as String?
+          ?: System.getenv("GITHUB_USERNAME")
+          ?: "Selva-GG"
+        password = localProps.getProperty("gpr.token") as String?
+          ?: project.findProperty("gpr.token") as String?
+          ?: System.getenv("GITHUB_TOKEN")
+          ?: ""
+      }
+    }
   }
 }

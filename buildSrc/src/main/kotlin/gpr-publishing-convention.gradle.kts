@@ -25,8 +25,13 @@ afterEvaluate {
                     groupId = "com.dmdbrands.lib"
                     artifactId = "vico-gg"
                     version = Versions.VICO
-                    // Publish AAR directly — no transitive dependencies
-                    artifact(tasks.named("bundleReleaseAar"))
+                    from(component)
+                    // Strip all dependencies from POM — our artifact is self-contained
+                    pom.withXml {
+                        asNode().children().removeAll {
+                            (it as? groovy.util.Node)?.name()?.toString()?.contains("dependencies") == true
+                        }
+                    }
                 }
             }
             repositories {
