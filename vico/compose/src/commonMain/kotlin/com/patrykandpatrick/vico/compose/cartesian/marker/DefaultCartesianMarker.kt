@@ -59,6 +59,7 @@ public open class DefaultCartesianMarker(
   protected val indicator: ((Color) -> Component)? = null,
   protected val indicatorSize: Dp = Defaults.MARKER_INDICATOR_SIZE.dp,
   protected val guideline: LineComponent? = null,
+  protected val contentPadding: Insets = Insets.Zero,
 ) : CartesianMarker {
 
   protected val markerCornerBasedShape: MarkerCornerBasedShape? =
@@ -145,13 +146,13 @@ public open class DefaultCartesianMarker(
       when (labelPosition) {
         LabelPosition.Top -> {
           tickPosition = MarkerCornerBasedShape.TickPosition.Bottom
-          y = context.layerBounds.top - tickSize.pixels
+          y = context.layerBounds.top - tickSize.pixels - contentPadding.bottom.pixels
           verticalPosition = Position.Vertical.Top
         }
 
         LabelPosition.Bottom -> {
           tickPosition = MarkerCornerBasedShape.TickPosition.Top
-          y = context.layerBounds.bottom + tickSize.pixels
+          y = context.layerBounds.bottom + tickSize.pixels + contentPadding.top.pixels
           verticalPosition = Position.Vertical.Bottom
         }
 
@@ -223,10 +224,40 @@ public open class DefaultCartesianMarker(
     }
 
   protected fun CartesianDrawingContext.drawGuideline(targets: List<CartesianMarker.Target>) {
+    val guidelineTop = when (labelPosition) {
+      LabelPosition.Top -> layerBounds.top - tickSize.pixels - contentPadding.bottom.pixels
+      LabelPosition.AbovePoint, LabelPosition.AroundPoint -> {
+        val topPointY = targets.minOf { target ->
+          when (target) {
+            is LineCartesianLayerMarkerTarget -> target.points.minOf { it.canvasY }
+            is ColumnCartesianLayerMarkerTarget -> target.columns.minOf { it.canvasY }
+            is CandlestickCartesianLayerMarkerTarget -> target.highCanvasY
+            else -> layerBounds.top
+          }
+        }
+        topPointY - tickSize.pixels - contentPadding.top.pixels
+      }
+      else -> layerBounds.top
+    }
+    val guidelineBottom = when (labelPosition) {
+      LabelPosition.Bottom -> layerBounds.bottom + tickSize.pixels + contentPadding.bottom.pixels
+      LabelPosition.BelowPoint -> {
+        val bottomPointY = targets.maxOf { target ->
+          when (target) {
+            is LineCartesianLayerMarkerTarget -> target.points.maxOf { it.canvasY }
+            is ColumnCartesianLayerMarkerTarget -> target.columns.maxOf { it.canvasY }
+            is CandlestickCartesianLayerMarkerTarget -> target.lowCanvasY
+            else -> layerBounds.bottom
+          }
+        }
+        bottomPointY + tickSize.pixels + contentPadding.bottom.pixels
+      }
+      else -> layerBounds.bottom
+    }
     targets
       .map { it.canvasX }
       .toSet()
-      .forEach { x -> guideline?.drawVertical(this, x, layerBounds.top, layerBounds.bottom) }
+      .forEach { x -> guideline?.drawVertical(this, x, guidelineTop, guidelineBottom) }
   }
 
   override fun updateLayerMargins(
@@ -236,16 +267,19 @@ public open class DefaultCartesianMarker(
     model: CartesianChartModel,
   ) {
     with(context) {
+      // Fixed height prevents chart jump when marker shows/hides (matching v3)
+      // contentPadding is NOT included — it only affects label draw position, not chart margin
+      val fixedLabelHeight = 24f * density.density
       when (labelPosition) {
         LabelPosition.Top,
         LabelPosition.AbovePoint ->
-          layerMargins.ensureValuesAtLeast(top = label.getHeight(context) + tickSize.pixels)
+          layerMargins.ensureValuesAtLeast(top = fixedLabelHeight + tickSize.pixels)
 
         LabelPosition.Bottom,
         LabelPosition.BelowPoint ->
-          layerMargins.ensureValuesAtLeast(bottom = label.getHeight(context) + tickSize.pixels)
+          layerMargins.ensureValuesAtLeast(bottom = fixedLabelHeight + tickSize.pixels)
 
-        LabelPosition.AroundPoint -> Unit // Will be inside the chart
+        LabelPosition.AroundPoint -> Unit
       }
     }
   }
@@ -425,8 +459,9 @@ public fun rememberDefaultCartesianMarker(
   indicator: ((Color) -> Component)? = null,
   indicatorSize: Dp = Defaults.MARKER_INDICATOR_SIZE.dp,
   guideline: LineComponent? = null,
+  contentPadding: Insets = Insets.Zero,
 ): DefaultCartesianMarker =
-  remember(label, valueFormatter, labelPosition, indicator, indicatorSize, guideline) {
+  remember(label, valueFormatter, labelPosition, indicator, indicatorSize, guideline, contentPadding) {
     DefaultCartesianMarker(
       label = label,
       valueFormatter = valueFormatter,
@@ -434,5 +469,6 @@ public fun rememberDefaultCartesianMarker(
       indicator = indicator,
       indicatorSize = indicatorSize,
       guideline = guideline,
+      contentPadding = contentPadding,
     )
   }
