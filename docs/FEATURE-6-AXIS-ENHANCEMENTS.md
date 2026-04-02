@@ -58,3 +58,41 @@ HorizontalAxis.rememberBottom(
 
 ### Files:
 - `HorizontalAxis.kt` — `Separators` data class + `separators` param + `drawSeparators()` method + wired into `rememberTop`/`rememberBottom`
+
+## Label Positioning (v3 Parity)
+
+Two new parameters on `HorizontalAxis` restore v3's `horizontalLabelPosition` behavior, which controlled both vertical offset and horizontal alignment of axis labels relative to ticks.
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `labelVerticalMode` | `LabelVerticalMode` | `Center` | Vertical offset of label relative to tick |
+| `labelHorizontalPosition` | `Position.Horizontal` | `Center` | Horizontal alignment of label at tick X |
+
+### LabelVerticalMode
+
+| Mode | Tick Offset | v3 Equivalent |
+|------|-------------|---------------|
+| `Inside` | 0 (at axis line) | `horizontalLabelPosition = End` |
+| `Center` | tickLength / 2 (tick midpoint) | `horizontalLabelPosition = Center` |
+| `Outside` | tickLength (below tick) | `horizontalLabelPosition = Start` |
+
+### Usage
+
+```kotlin
+HorizontalAxis.rememberBottom(
+  tickLength = 20.dp,
+  labelVerticalMode = HorizontalAxis.LabelVerticalMode.Inside,
+  labelHorizontalPosition = Position.Horizontal.End,
+)
+```
+
+### Additional Fixes
+
+- `AXIS_LABEL_VERTICAL_PADDING` changed from 4 to 2 (matching v3 value in `Defaults.kt`)
+- `getHeight` only adds `lineThickness` for `Bottom` position (matching v3)
+
+### Files:
+- `HorizontalAxis.kt` — `LabelVerticalMode` enum, `labelVerticalMode` + `labelHorizontalPosition` params, `tickOffset` in `drawUnderLayers`, `getHeight` fix
+- `Defaults.kt` — `AXIS_LABEL_VERTICAL_PADDING = 2`

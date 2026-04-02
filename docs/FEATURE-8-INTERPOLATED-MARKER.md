@@ -86,3 +86,35 @@ For scroll-stopped use cases (not marker rendering):
 - `getInterpolatedYValues(xValues, interpolationType)` — batch Y interpolation per series
 
 These use the `Pair`-based `getYValues()` batch path (precomputes all tangents once).
+
+## Marker contentPadding (v3 Parity)
+
+`DefaultCartesianMarker` now accepts a `contentPadding: Insets` parameter that offsets the label from `layerBounds` without affecting chart margin calculations.
+
+### Behavior
+
+| LabelPosition | Effect |
+|---------------|--------|
+| `Top` | Label Y shifts up by `contentPadding.bottom` |
+| `Bottom` | Label Y shifts down by `contentPadding.top` |
+| `AbovePoint` / `AroundPoint` | contentPadding offsets from point |
+
+### Guideline Extension
+
+The guideline now extends beyond `layerBounds` to reach the label when contentPadding pushes it outside. The extension is computed per `labelPosition` — e.g., for `Top`, the guideline top extends to `layerBounds.top - tickSize - contentPadding.bottom`.
+
+### Fixed Margin Height
+
+`updateLayerMargins` uses a fixed 24dp height instead of dynamic `label.getHeight()`. This prevents chart jump when the marker shows/hides (matching v3 behavior). `contentPadding` is intentionally excluded from the margin — it only affects the label draw position.
+
+### Usage
+
+```kotlin
+rememberDefaultCartesianMarker(
+  label = rememberTextComponent(...),
+  contentPadding = Insets(vertical = 16.dp),
+)
+```
+
+### Files:
+- `DefaultCartesianMarker.kt` — `contentPadding` param, guideline top/bottom calculation, fixed margin height, wired into `rememberDefaultCartesianMarker`
