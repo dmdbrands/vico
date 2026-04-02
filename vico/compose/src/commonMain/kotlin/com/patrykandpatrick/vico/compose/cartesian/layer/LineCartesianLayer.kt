@@ -60,7 +60,6 @@ public open class LineCartesianLayer
 protected constructor(
   protected val lineProvider: LineProvider,
   protected val pointSpacing: Dp = Defaults.POINT_SPACING.dp,
-  protected val pointSpacingProvider: ((availableWidth: Float) -> Float)? = null,
   protected val rangeProvider: CartesianLayerRangeProvider = CartesianLayerRangeProvider.auto(),
   protected val verticalAxisPosition: Axis.Position.Vertical? = null,
   protected val drawingModelInterpolator:
@@ -502,7 +501,6 @@ protected constructor(
   public constructor(
     lineProvider: LineProvider,
     pointSpacing: Dp = Defaults.POINT_SPACING.dp,
-    pointSpacingProvider: ((availableWidth: Float) -> Float)? = null,
     rangeProvider: CartesianLayerRangeProvider = CartesianLayerRangeProvider.auto(),
     verticalAxisPosition: Axis.Position.Vertical? = null,
     drawingModelInterpolator:
@@ -514,7 +512,6 @@ protected constructor(
   ) : this(
     lineProvider,
     pointSpacing,
-    pointSpacingProvider,
     rangeProvider,
     verticalAxisPosition,
     drawingModelInterpolator,
@@ -841,13 +838,7 @@ protected constructor(
               .orZero
           }
           .pixels
-      val xSpacing = if (pointSpacingProvider != null) {
-        // Provider computes spacing from available chart width — for "N entries fit on screen"
-        val availableWidth = canvasSize.width
-        maxPointSize + pointSpacingProvider.invoke(availableWidth)
-      } else {
-        maxPointSize + pointSpacing.pixels
-      }
+      val xSpacing = maxPointSize + pointSpacing.pixels
       dimensions.ensureValuesAtLeast(
         xSpacing = xSpacing,
         scalableStartPadding = layerPadding.scalableStart.pixels,
@@ -949,12 +940,10 @@ protected constructor(
         LineCartesianLayerDrawingModel,
       > =
       this.drawingModelInterpolator,
-    pointSpacingProvider: ((availableWidth: Float) -> Float)? = this.pointSpacingProvider,
   ): LineCartesianLayer =
     LineCartesianLayer(
       lineProvider,
       pointSpacing,
-      pointSpacingProvider,
       rangeProvider,
       verticalAxisPosition,
       drawingModelInterpolator,
@@ -1006,7 +995,6 @@ public fun rememberLineCartesianLayer(
       }
     ),
   pointSpacing: Dp = Defaults.POINT_SPACING.dp,
-  pointSpacingProvider: ((availableWidth: Float) -> Float)? = null,
   rangeProvider: CartesianLayerRangeProvider = remember { CartesianLayerRangeProvider.auto() },
   verticalAxisPosition: Axis.Position.Vertical? = null,
   drawingModelInterpolator:
@@ -1022,7 +1010,6 @@ public fun rememberLineCartesianLayer(
   return remember(
     lineProvider,
     pointSpacing,
-    pointSpacingProvider,
     rangeProvider,
     verticalAxisPosition,
     drawingModelInterpolator,
@@ -1034,12 +1021,10 @@ public fun rememberLineCartesianLayer(
         rangeProvider,
         verticalAxisPosition,
         drawingModelInterpolator,
-        pointSpacingProvider,
       )
         ?: LineCartesianLayer(
           lineProvider,
           pointSpacing,
-          pointSpacingProvider,
           rangeProvider,
           verticalAxisPosition,
           drawingModelInterpolator,

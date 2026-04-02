@@ -1,57 +1,49 @@
-# Feature 7: pointSpacingProvider — Dynamic Entry Spacing
+# Feature 7: visibleLabelsCount (replaced pointSpacingProvider)
 
 ## Overview
 
-Controls how many data entries fit in the visible chart window. A lambda that receives
-the available chart width and returns the pixel spacing between entries.
+`visibleLabelsCount` on `CartesianChart` controls how many data entries are visible
+in the chart window. It scales `xSpacing` in `prepare()` so exactly N entries fit.
 
-## Problem
-
-Upstream's `pointSpacing: Dp` is a fixed value — it doesn't know the chart width.
-For segment-based views (week=7 entries, month=~30, year=~365), the spacing must
-adapt to screen size so exactly N entries fit on screen.
-
-## Solution
-
-`pointSpacingProvider: ((availableWidth: Float) -> Float)?` — evaluated during
-`updateDimensions` (measure phase, not composition). When provided, overrides
-`pointSpacing`. Zero extra recomposition.
+Replaced the layer-level `pointSpacingProvider` lambda — `visibleLabelsCount` is
+simpler (just a number), chart-level (applies to all layers), and evaluated once
+during prepare (no per-measure lambda invocation).
 
 ## Usage
 
 ```kotlin
-rememberLineCartesianLayer(
-  pointSpacingProvider = { availableWidth ->
-    availableWidth / visibleLabelsCount.toFloat()
-  },
+rememberCartesianChart(
+  rememberLineCartesianLayer(...),
+  visibleLabelsCount = 8.0,  // 8 entries visible in the window
 )
 ```
 
-### Per segment:
+In meApp:
 ```kotlin
 val visibleLabelsCount = when (segment) {
-  WEEK -> 7.0
-  MONTH -> 32.0 / 7.0
-  YEAR -> 366.0 / 31.0
-  TOTAL -> 365.0 / 31.0
+  GraphSegment.WEEK -> 7.0
+  GraphSegment.MONTH -> 5.0
+  GraphSegment.YEAR -> 12.0
+  GraphSegment.TOTAL -> 0.0  // 0 = auto (fit all)
 }
-
-rememberLineCartesianLayer(
-  pointSpacingProvider = { it / visibleLabelsCount.toFloat() },
-)
 ```
 
-## Performance vs old approach
+## How It Works
 
-| | Old (visibleLabelsCount on CartesianChart) | New (pointSpacingProvider) |
-|---|---|---|
-| Where | CartesianChart.prepare() — scale factor post-layout | LineCartesianLayer.updateDimensions() — inline |
-| Layout passes | 2 (compute → scale → recompute) | 1 (correct from start) |
-| Recomposition | Scale change triggers redraw | Lambda is stable, no recomposition |
-| Vico changes | Modified CartesianChart + CartesianDrawingContext | LineCartesianLayer only |
+In `CartesianChart.prepare()`:
+```
+desiredSpacing = availableWidth / visibleLabelsCount
+scaleFactor = desiredSpacing / currentXSpacing
+layerDimensions.scale(scaleFactor)
+```
 
-## Files
+Scales all layer dimensions proportionally — xSpacing, scalable padding.
 
-| File | Change |
-|------|--------|
-| `LineCartesianLayer.kt` | `pointSpacingProvider` on primary constructor, public constructor, copy(), rememberLineCartesianLayer() |
+## Migration from pointSpacingProvider
+
+| Before (pointSpacingProvider) | After (visibleLabelsCount) |
+|-------------------------------|---------------------------|
+| Layer-level lambda | Chart-level number |
+| Evaluated per measure | Evaluated once in prepare |
+| `{ availableWidth -> availableWidth / 8f }` | `visibleLabelsCount = 8.0` |
+| Adds to `maxPointSize` | Scales existing xSpacing |

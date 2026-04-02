@@ -64,6 +64,7 @@ internal constructor(
   protected val decorations: List<Decoration> = emptyList(),
   protected val persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
   protected val getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
+  public val visibleLabelsCount: Double = 0.0,
   public val markerController: CartesianMarkerController = CartesianMarkerController.showOnPress(),
   internal val id: Uuid = Uuid.random(),
   private var previousMarkerTargetHashCode: Int? = null,
@@ -275,7 +276,25 @@ internal constructor(
         right = canvasSize.width,
         bottom = layerBounds.bottom + layerMargins.bottom + legendHeight,
       )
+
+      // Apply spacing adjustment for visible labels if specified (after layerBounds is set)
+      if (visibleLabelsCount > 0) {
+        val scaleFactor = calculateLabelSpacingScale(layerDimensions)
+        if (scaleFactor != 1f) {
+          layerDimensions.scale(scaleFactor)
+        }
+      }
     }
+  }
+
+  private fun calculateLabelSpacingScale(
+    layerDimensions: MutableCartesianLayerDimensions,
+  ): Float {
+    val availableWidth = layerBounds.width
+    val currentSpacing = layerDimensions.xSpacing
+    if (currentSpacing <= 0f || availableWidth <= 0f) return 1f
+    val desiredSpacing = availableWidth / visibleLabelsCount
+    return (desiredSpacing / currentSpacing).toFloat()
   }
 
   private fun updatePersistentMarkers(extraStore: ExtraStore) {
@@ -547,6 +566,7 @@ internal constructor(
     decorations: List<Decoration> = this.decorations,
     persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = this.persistentMarkers,
     getXStep: ((CartesianChartModel) -> Double) = this.getXStep,
+    visibleLabelsCount: Double = this.visibleLabelsCount,
     markerController: CartesianMarkerController = CartesianMarkerController.showOnPress(),
   ): CartesianChart =
     CartesianChart(
@@ -563,6 +583,7 @@ internal constructor(
       decorations = decorations,
       persistentMarkers = persistentMarkers,
       getXStep = getXStep,
+      visibleLabelsCount = visibleLabelsCount,
       markerController = markerController,
       id = id,
       previousMarkerTargetHashCode = previousMarkerTargetHashCode,
@@ -656,6 +677,7 @@ public fun rememberCartesianChart(
   decorations: List<Decoration> = emptyList(),
   persistentMarkers: (PersistentMarkerScope.(ExtraStore) -> Unit)? = null,
   getXStep: ((CartesianChartModel) -> Double) = { it.getXDeltaGcd() },
+  visibleLabelsCount: Double = 0.0,
   markerController: CartesianMarkerController = CartesianMarkerController.rememberShowOnPress(),
 ): CartesianChart {
   val wrapper = remember { ValueWrapper<CartesianChart?>(null) }
@@ -673,6 +695,7 @@ public fun rememberCartesianChart(
     decorations,
     persistentMarkers,
     getXStep,
+    visibleLabelsCount,
     markerController,
   ) {
     val cartesianChart =
@@ -690,6 +713,7 @@ public fun rememberCartesianChart(
         decorations = decorations,
         persistentMarkers = persistentMarkers,
         getXStep = getXStep,
+        visibleLabelsCount = visibleLabelsCount,
         markerController = markerController,
       )
         ?: CartesianChart(
@@ -706,6 +730,7 @@ public fun rememberCartesianChart(
           decorations = decorations,
           persistentMarkers = persistentMarkers,
           getXStep = getXStep,
+          visibleLabelsCount = visibleLabelsCount,
           markerController = markerController,
         )
     wrapper.value = cartesianChart

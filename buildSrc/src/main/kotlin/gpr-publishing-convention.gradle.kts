@@ -45,11 +45,15 @@ afterEvaluate {
                 }
             }
         }
-        // Skip signing for GPR publication
+        // Skip signing for GPR publications
         signing {
             setRequired(false)
         }
-        tasks.matching { it.name.contains("signGpr") }.configureEach {
+        tasks.matching { it.name.contains("sign") && it.name.contains("Gpr") }.configureEach {
+            enabled = false
+        }
+        // Also disable signing for KMP-generated publications routed to GPR
+        tasks.matching { it.name.contains("sign") && it.name.contains("GitHubPackages") }.configureEach {
             enabled = false
         }
     }

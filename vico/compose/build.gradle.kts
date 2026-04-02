@@ -18,7 +18,6 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
   `dokka-convention`
-  `publishing-convention`
   `gpr-publishing-convention`
   id("com.android.kotlin.multiplatform.library")
   id("org.jetbrains.compose")

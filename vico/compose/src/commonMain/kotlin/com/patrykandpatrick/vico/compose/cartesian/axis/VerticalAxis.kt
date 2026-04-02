@@ -170,6 +170,8 @@ protected constructor(
         itemPlacer.getLineValues(this, bounds.height, maxLabelHeight, position)
           ?: itemPlacer.getLabelValues(this, bounds.height, maxLabelHeight, position)
 
+      if (yRange.length == 0.0) return@with // Guard: avoid NaN from division by zero
+
       lineValues.forEach { lineValue ->
         centerY =
           bounds.bottom - bounds.height * ((lineValue - yRange.minY) / yRange.length).toFloat() +
@@ -217,6 +219,7 @@ protected constructor(
       val tickRightX = tickLeftX + lineThickness + this.tickLength
       val labelX = if (areLabelsOutsideAtStartOrInsideAtEnd == isLtr) tickLeftX else tickRightX
       val yRange = ranges.getYRange(position)
+      if (yRange.length == 0.0) return  // Guard: avoid NaN from division by zero
 
       labelValues.forEach { labelValue ->
         val tickCenterY =
