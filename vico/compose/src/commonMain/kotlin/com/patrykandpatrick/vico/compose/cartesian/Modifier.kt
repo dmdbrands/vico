@@ -121,19 +121,31 @@ internal fun Modifier.pointerInput(
 
                 when (interactionMode) {
                   InteractionMode.DECIDING -> {
+                    // Check if movement is primarily horizontal
+                    val dx = initialPressPosition?.let { abs(position.x - it.x) } ?: 0f
+                    val dy = initialPressPosition?.let { abs(position.y - it.y) } ?: 0f
+
                     if (movement > MOVEMENT_THRESHOLD) {
-                      // Big movement before timer — enter scroll mode
-                      interactionMode = InteractionMode.SCROLLING
-                      delayJob?.cancel()
-                      delayJob = null
-                      scrubController.isScrubbing = false
-                      // Dismiss marker if active — emit Release so onInteraction sets markerX=null
-                      if (scrubController.hasActiveMarker) {
-                        scrubController.onDismiss()
-                        onInteraction(Interaction.Release(pointerPosition))
+                      if (dx > dy) {
+                        // Primarily horizontal — enter scroll mode
+                        interactionMode = InteractionMode.SCROLLING
+                        delayJob?.cancel()
+                        delayJob = null
+                        scrubController.isScrubbing = false
+                        if (scrubController.hasActiveMarker) {
+                          scrubController.onDismiss()
+                          onInteraction(Interaction.Release(pointerPosition))
+                        }
+                      } else {
+                        // Primarily vertical — let parent LazyColumn handle it
+                        interactionMode = InteractionMode.NONE
+                        delayJob?.cancel()
+                        delayJob = null
                       }
+                    } else {
+                      // Small movement: consume to prevent LazyColumn from stealing gesture
+                      event.changes.forEach { it.consume() }
                     }
-                    // Small movement: stay in DECIDING, let timer decide
                   }
 
                   InteractionMode.MARKER_SELECTION -> {
