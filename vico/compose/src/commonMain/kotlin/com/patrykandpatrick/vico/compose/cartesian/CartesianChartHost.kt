@@ -383,6 +383,7 @@ internal fun CartesianChartHostImpl(
         chart.layerBounds,
         scrollState.value,
         zoomState.value,
+        
         MutableDrawScope(this),
       )
 
