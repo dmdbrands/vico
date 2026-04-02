@@ -27,7 +27,7 @@ internal object Animation {
 internal object Defaults {
   const val AXIS_LABEL_HORIZONTAL_PADDING: Int = 4
   const val AXIS_LABEL_MAX_LINES: Int = 1
-  const val AXIS_LABEL_VERTICAL_PADDING: Int = 4
+  const val AXIS_LABEL_VERTICAL_PADDING: Int = 2
   const val AXIS_LABEL_SIZE: Int = 12
   const val AXIS_LABEL_HORIZONTAL_MARGIN: Int = 0
   const val AXIS_LABEL_VERTICAL_MARGIN: Int = 0

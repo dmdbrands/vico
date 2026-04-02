@@ -66,6 +66,10 @@ protected constructor(
   tickPosition: TickPosition,
   lineDrawingOrder: LineDrawingOrder,
   public val separators: Separators? = null,
+  /** Controls label placement relative to tick: Inside (at axis line), Center (at tick midpoint), Outside (below tick). */
+  public val labelVerticalMode: LabelVerticalMode = LabelVerticalMode.Center,
+  /** Controls horizontal label alignment relative to tick: Center, Start (right of tick in LTR), End (left of tick in LTR). */
+  public val labelHorizontalPosition: Position.Horizontal = Position.Horizontal.Center,
 ) :
   BaseAxis<P>(
     line,
@@ -154,12 +158,16 @@ protected constructor(
           TickPosition.Inside -> 0f
           TickPosition.Cross -> this.tickLength / 2
         }
-      val textY =
-        if (isTop) {
-          bounds.bottom - lineThickness - outwardTickLength
-        } else {
-          bounds.top + lineThickness + outwardTickLength
-        }
+      val tickOffset = when (labelVerticalMode) {
+        LabelVerticalMode.Inside -> 0f
+        LabelVerticalMode.Center -> outwardTickLength / 2
+        LabelVerticalMode.Outside -> outwardTickLength
+      }
+      val textY = if (isTop) {
+        bounds.bottom - lineThickness - tickOffset
+      } else {
+        bounds.top + lineThickness + tickOffset
+      }
       val fullXRange = internalGetFullXRange(layerDimensions)
       val maxLabelWidth = getMaxLabelWidth(layerDimensions, fullXRange)
 
@@ -198,6 +206,7 @@ protected constructor(
             valueFormatter.formatForAxis(context = this, value = x, verticalAxisPosition = null),
           x = canvasX,
           y = textY,
+          horizontalPosition = labelHorizontalPosition,
           verticalPosition = position.textVerticalPosition,
           maxHeight = (bounds.height - outwardTickLength - lineThickness.half).toInt(),
           rotationDegrees = labelRotationDegrees,
@@ -511,7 +520,9 @@ protected constructor(
                 )
               }
               .orZero
-          (labelHeight + titleComponentHeight + lineThickness + outwardTickLength)
+          (labelHeight + titleComponentHeight +
+            (if (position == Axis.Position.Horizontal.Bottom) lineThickness else 0f) +
+            outwardTickLength)
             .coerceAtMost(canvasSize.height / MAX_HEIGHT_DIVISOR)
             .coerceIn(size.min.pixels, size.max.pixels)
         }
@@ -787,17 +798,30 @@ protected constructor(
       tickPosition: TickPosition = TickPosition.Outside,
       lineDrawingOrder: LineDrawingOrder = LineDrawingOrder.UnderLayers,
       separators: Separators? = null,
+      labelVerticalMode: LabelVerticalMode = LabelVerticalMode.Center,
+      labelHorizontalPosition: Position.Horizontal = Position.Horizontal.Center,
     ): HorizontalAxis<Axis.Position.Horizontal.Bottom> =
       remember(
         line, label, labelRotationDegrees, valueFormatter, tick, tickLength,
         guideline, itemPlacer, size, titleComponent, title, tickPosition,
-        lineDrawingOrder, separators,
+        lineDrawingOrder, separators, labelVerticalMode, labelHorizontalPosition,
       ) {
         HorizontalAxis(
           Axis.Position.Horizontal.Bottom, line, label, labelRotationDegrees,
           valueFormatter, tick, tickLength, guideline, itemPlacer, size,
           titleComponent, title, tickPosition, lineDrawingOrder, separators,
+          labelVerticalMode, labelHorizontalPosition,
         )
       }
+  }
+
+  /** Controls vertical label placement relative to the tick. */
+  public enum class LabelVerticalMode {
+    /** Labels at axis line, no tick offset (v3 Position.Horizontal.End). */
+    Inside,
+    /** Labels at tick midpoint. */
+    Center,
+    /** Labels below full tick (v3 Position.Horizontal.Start). */
+    Outside,
   }
 }
