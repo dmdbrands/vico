@@ -889,9 +889,9 @@ protected constructor(
           .half
       layerMargins.ensureValuesAtLeast(
         start = maxMargin,
-        top = maxMargin,
+        top = maxMargin * 2,
         end = maxMargin,
-        bottom = maxMargin,
+        bottom = maxMargin * 2,
       )
     }
   }

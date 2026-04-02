@@ -394,7 +394,7 @@ internal fun CartesianChartHostImpl(
 
 @Composable
 private fun CartesianChartHostBox(modifier: Modifier, content: @Composable BoxScope.() -> Unit) {
-  Box(modifier = modifier.heightIn(max = CHART_HEIGHT.dp).fillMaxWidth(), content = content)
+  Box(modifier = modifier.fillMaxWidth(), content = content)
 }
 
 /**
