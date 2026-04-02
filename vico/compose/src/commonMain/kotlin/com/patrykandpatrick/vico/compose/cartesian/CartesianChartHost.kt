@@ -489,8 +489,6 @@ private fun ScrollAwareRangeEffect(
         .collect { scrollInfo ->
           if (!provider.isCacheReady || isFirstScrollUpdate) return@collect
           if (animMinY.value.isNaN()) return@collect
-          // Skip range update during snap animation — update after snap settles
-          if ((flingBehavior as? ChartSnapFlingBehavior)?.isSnapping == true) return@collect
 
           val visibleEntries = provider.computeVisibleEntries(scrollInfo) ?: return@collect
           val result = provider.computeDisplayRange(visibleEntries) ?: return@collect

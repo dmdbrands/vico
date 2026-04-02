@@ -217,7 +217,7 @@ protected constructor(
       val labelValues = itemPlacer.getLabelValues(this, bounds.height, maxLabelHeight, position)
       val tickLeftX = getTickLeftX()
       val tickRightX = tickLeftX + lineThickness + this.tickLength
-      val labelX = if (areLabelsOutsideAtStartOrInsideAtEnd == isLtr) tickLeftX else tickRightX
+      val labelX = bounds.center.x
       val yRange = ranges.getYRange(position)
       if (yRange.length == 0.0) return  // Guard: avoid NaN from division by zero
 
@@ -400,7 +400,7 @@ protected constructor(
           text = label,
           x = labelX,
           y = tickCenterY + offsetFromTickCenterY,
-          horizontalPosition = textHorizontalPosition,
+          horizontalPosition = Position.Horizontal.Center,
           verticalPosition = verticalLabelPosition,
           rotationDegrees = labelRotationDegrees,
           maxWidth = (maxLabelWidth ?: (layerBounds.width.half - this.tickLength)).toInt(),
