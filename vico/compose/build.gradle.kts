@@ -87,30 +87,36 @@ val localProps = Properties()
 val localPropsFile = rootProject.file("gradle-local.properties")
 if (localPropsFile.exists()) localProps.load(localPropsFile.inputStream())
 
-// Note: run `./gradlew :vico:compose:compileKotlinDesktop` first to generate AAR
-
-publishing {
-  publications {
-    create<MavenPublication>("gpr") {
-      groupId = "com.dmdbrands.lib"
-      artifactId = "vico-gg"
-      version = Versions.VICO
-      artifact("build/outputs/aar/compose-release.aar")
+afterEvaluate {
+  publishing {
+    publications {
+      create<MavenPublication>("gpr") {
+        groupId = "com.dmdbrands.lib"
+        artifactId = "vico-gg"
+        version = Versions.VICO
+        from(components.findByName("android") ?: components.findByName("release") ?: components.findByName("kotlin")!!)
+        // Strip transitive dependencies from POM
+        pom.withXml {
+          asNode().children().removeAll {
+            (it as? groovy.util.Node)?.name()?.toString()?.contains("dependencies") == true
+          }
+        }
+      }
     }
-  }
-  repositories {
-    maven {
-      name = "GitHubPackages"
-      url = uri("https://maven.pkg.github.com/dmdbrands/vico")
-      credentials {
-        username = localProps.getProperty("gpr.user") as String?
-          ?: project.findProperty("gpr.user") as String?
-          ?: System.getenv("GITHUB_USERNAME")
-          ?: "Selva-GG"
-        password = localProps.getProperty("gpr.token") as String?
-          ?: project.findProperty("gpr.token") as String?
-          ?: System.getenv("GITHUB_TOKEN")
-          ?: ""
+    repositories {
+      maven {
+        name = "GitHubPackages"
+        url = uri("https://maven.pkg.github.com/dmdbrands/vico")
+        credentials {
+          username = localProps.getProperty("gpr.user") as String?
+            ?: project.findProperty("gpr.user") as String?
+            ?: System.getenv("GITHUB_USERNAME")
+            ?: "Selva-GG"
+          password = localProps.getProperty("gpr.token") as String?
+            ?: project.findProperty("gpr.token") as String?
+            ?: System.getenv("GITHUB_TOKEN")
+            ?: ""
+        }
       }
     }
   }
