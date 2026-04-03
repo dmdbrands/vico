@@ -124,6 +124,12 @@ val scrubController = rememberScrubMarkerController(
    Modifier.kt handles tap/long-press internally via delay timer. The upstream
    detectTapGestures is only used for non-scrub controllers.
 
+7. **shouldAcceptInteraction accepts empty targets** — Tap/LongPress return `true` even
+   when `targets` is empty. This matches v3's `onChartClick` which always passed the click
+   position regardless of nearby data points. The consumer callback handles empty windows
+   (e.g., snap to nearest label via `getTargetPoints`). CartesianChartHost also passes
+   `clickX` to the callback even when `narrowedTargets` is empty.
+
 ## Usage API
 
 ```kotlin

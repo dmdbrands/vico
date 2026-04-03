@@ -17,6 +17,8 @@ val rangeProvider = rememberScrollAwareRangeProvider(
   paddingEntries = 1,   // 1 extra entry before/after visible window
   debounceMs = 150,
   animDurationMs = 250,
+  minX = state.chartMinX ?: Double.NaN,  // X range override from ViewModel state
+  maxX = state.chartMaxX ?: Double.NaN,
 ) { visibleEntries ->   // List<Pair<Double, Double>> — (x, y) pairs
   val minY = visibleEntries.minOf { it.second }
   val maxY = visibleEntries.maxOf { it.second }
@@ -24,6 +26,13 @@ val rangeProvider = rememberScrollAwareRangeProvider(
   (niceMin..niceMax) to ticks
 }
 ```
+
+### X Range Override
+
+`minX`/`maxX` params override `getMinX`/`getMaxX` on the provider. Computed by ViewModel
+(matching v3's `CartesianRangeValues.minX/maxX`), stored in state, passed as composable params.
+Set during composition via plain var assignment — available before first `prepare()` call.
+Without override, falls back to data's actual min/max X.
 
 ## Visible Entry Computation
 
@@ -121,14 +130,20 @@ Each animation frame:
 ## Initial Load (Zero Flash)
 
 ```
-Frame 0:  model loads, initialRanges = full dataset (e.g., 140-200)
+Frame 0:  model loads, initialRanges from provider (Y=NaN until computed, X=from state)
           animatedYRange = NaN → chartAlpha = 0f (invisible)
-          Canvas runs → emits ScrollInfo → LaunchedEffect receives immediately
+          Canvas runs → emits ScrollInfo (replay=1 ensures delivery)
 
-Frame 1:  First scroll event → snapTo visible range (e.g., 160-175)
-          animatedYRange set → chartAlpha = 1f (visible)
-          Chart appears with CORRECT range — zero flash of full-dataset range
+Frame 1:  LaunchedEffect receives scroll event → computeVisibleEntries (visible only, never all)
+          → snapTo visible range → animatedYRange set → chartAlpha = 1f
 ```
+
+### modelStructureKey
+
+`LaunchedEffect` and `Animatable` keyed on the layer's structure (series count + point counts),
+NOT on model identity. Renormalization (same structure, different Y values) does NOT restart
+the effect or reset Animatables. Only structural changes (layer added/removed, point count change)
+trigger a restart.
 
 ## Performance Characteristics
 

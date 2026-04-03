@@ -60,14 +60,25 @@ val scrubController = rememberScrubMarkerController(
 - `getYAtXFromEntries` works directly on `LineCartesianLayerModel.Entry` — no `map` to `Pair`
 - Binary search for segment: O(log n) instead of O(n) linear scan
 - Only computes 2-3 secants (the segment's neighbors), not all n-1
-- Y-range and colors cached outside the series loop
+
+### Interpolated Points — No Indicator Dot
+
+`LineCartesianLayerMarkerTarget.Point` has `isInterpolated: Boolean = false`. When `true`,
+`DefaultCartesianMarker` skips the indicator dot but still renders the guideline and label
+(the label reads `entry.y` for the formatted value). `synthesizeInterpolatedTargets` marks
+all points as `isInterpolated = true` with `color = Transparent`.
+
+Removed: `findNearestColors`, `cachedNearestColors`, `getLineColor` — no longer needed since
+interpolated points don't draw indicators.
 
 ## Architecture
 
 | File | Change |
 |------|--------|
-| `CartesianChart.kt` | `synthesizeInterpolatedTargets()`, `findNearestColors()`, persistent marker fallback |
+| `CartesianChart.kt` | `synthesizeInterpolatedTargets()`, persistent marker fallback |
 | `MonotoneInterpolator.kt` | `getYAtXFromEntries()` — zero-alloc overload |
+| `LineCartesianLayerMarkerTarget.kt` | `isInterpolated` flag on `Point` |
+| `DefaultCartesianMarker.kt` | Skip indicator draw for `isInterpolated` points |
 | `CartesianChartHost.kt` | No change — existing callback flow handles it |
 | `ScrubMarkerController.kt` | No change — callback already returns arbitrary X |
 
