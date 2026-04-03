@@ -488,54 +488,27 @@ internal constructor(
 
     val target = MutableLineCartesianLayerMarkerTarget(x, canvasX)
 
-    // Cache Y-range and nearest colors outside the series loop
     val lineLayer = layers.firstOrNull { it is LineCartesianLayer } as? LineCartesianLayer
     val yRange = ranges.getYRange(lineLayer?.internalVerticalAxisPosition)
-    val nearestColors = findNearestColors(x)
 
-    // For each LineCartesianLayerModel series, interpolate Y and add a Point
+    // Interpolate Y values for label display, but mark as interpolated (no indicator dot)
     for (layerModel in context.model.models) {
       if (layerModel !is LineCartesianLayerModel) continue
-      for ((seriesIndex, series) in layerModel.series.withIndex()) {
-        // Zero-allocation: works directly on Entry list, O(log n) binary search
+      for ((_, series) in layerModel.series.withIndex()) {
         val interpolatedY = MonotoneInterpolator.getYAtXFromEntries(x, series) ?: continue
-
         val canvasY = layerBounds.bottom -
           ((interpolatedY - yRange.minY) / yRange.length).toFloat() * layerBounds.height
 
         target.points += LineCartesianLayerMarkerTarget.Point(
           entry = LineCartesianLayerModel.Entry(x, interpolatedY),
           canvasY = canvasY.coerceIn(layerBounds.top, layerBounds.bottom),
-          color = nearestColors.getOrElse(seriesIndex) { Color.Black },
+          color = Color.Transparent,
+          isInterpolated = true,
         )
       }
     }
 
     return if (target.points.isNotEmpty()) listOf(target) else emptyList()
-  }
-
-  /**
-   * Finds the colors of the nearest real marker target's points (one per series).
-   * Full scan — O(targets). Reuses list to avoid allocation.
-   */
-  private val cachedNearestColors = mutableListOf<Color>()
-
-  private fun findNearestColors(x: Double): List<Color> {
-    cachedNearestColors.clear()
-    var bestDelta = Double.MAX_VALUE
-    for ((key, targets) in _markerTargets) {
-      val delta = abs(key - x)
-      if (delta < bestDelta) {
-        for (target in targets) {
-          if (target is LineCartesianLayerMarkerTarget) {
-            cachedNearestColors.clear()
-            for (point in target.points) cachedNearestColors.add(point.color)
-            bestDelta = delta
-          }
-        }
-      }
-    }
-    return cachedNearestColors
   }
 
   protected inline fun <reified T : CartesianLayerModel> MutableList<CartesianLayerModel>.consume(

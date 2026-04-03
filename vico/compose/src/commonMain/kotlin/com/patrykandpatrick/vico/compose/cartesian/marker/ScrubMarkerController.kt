@@ -70,8 +70,10 @@ public class ScrubMarkerController(
     interaction: Interaction,
     targets: List<CartesianMarker.Target>,
   ): Boolean = when (interaction) {
-    is Interaction.Tap -> targets.isNotEmpty()
-    is Interaction.LongPress -> targets.isNotEmpty()
+    // Accept taps/long-press even without nearby targets — consumer callback
+    // handles empty windows (e.g., snap to nearest label via interpolation)
+    is Interaction.Tap -> true
+    is Interaction.LongPress -> true
     is Interaction.Move -> isScrubbing
     is Interaction.Press -> false
     is Interaction.Release -> true

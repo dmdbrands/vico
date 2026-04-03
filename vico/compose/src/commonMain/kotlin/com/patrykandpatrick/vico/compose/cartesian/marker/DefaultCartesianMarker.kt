@@ -102,7 +102,9 @@ public open class DefaultCartesianMarker(
 
           is LineCartesianLayerMarkerTarget -> {
             target.points.forEach { point ->
-              drawIndicator(target.canvasX, point.canvasY, point.color, halfIndicatorSize)
+              if (!point.isInterpolated) {
+                drawIndicator(target.canvasX, point.canvasY, point.color, halfIndicatorSize)
+              }
             }
           }
         }
