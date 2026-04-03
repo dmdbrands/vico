@@ -36,6 +36,7 @@ public class CartesianChartModelProducer {
   private suspend fun update(
     partials: List<CartesianLayerModel.Partial>,
     transactionExtraStore: MutableExtraStore,
+    animate: Boolean = true,
   ) {
     coroutineScope {
       mutex.withLock {
@@ -47,7 +48,7 @@ public class CartesianChartModelProducer {
           return@coroutineScope
         }
         updateReceivers.values
-          .map { launch { it.handleUpdate(immutablePartials, transactionExtraStore) } }
+          .map { launch { it.handleUpdate(immutablePartials, transactionExtraStore, animate = animate) } }
           .joinAll()
         lastPartials = immutablePartials
         lastTransactionExtraStore = transactionExtraStore
@@ -106,7 +107,7 @@ public class CartesianChartModelProducer {
         )
       mutex.withLock {
         updateReceivers[key] = receiver
-        receiver.handleUpdate(lastPartials, lastTransactionExtraStore, restoredModel)
+        receiver.handleUpdate(lastPartials, lastTransactionExtraStore, restoredModel, animate = false)
       }
     }
   }
@@ -149,13 +150,16 @@ public class CartesianChartModelProducer {
    * (1) Creates a [Transaction], (2) invokes [block], and (3) runs a data update, returning once
    * the update is complete. Between steps 2 and 3, if there’s already an update in progress, the
    * current coroutine is suspended until the ongoing update’s completion.
+   *
+   * @param animate Whether to animate the difference between old and new data. When `false`,
+   *   the new data is applied instantly without interpolation.
    */
-  public suspend fun runTransaction(block: Transaction.() -> Unit) {
-    withContext(Dispatchers.Default) { Transaction().also(block).commit() }
+  public suspend fun runTransaction(animate: Boolean = true, block: Transaction.() -> Unit) {
+    withContext(Dispatchers.Default) { Transaction(animate).also(block).commit() }
   }
 
   /** Handles data updates. This is used via [runTransaction]. */
-  public inner class Transaction internal constructor() {
+  public inner class Transaction internal constructor(private val animate: Boolean = true) {
     private val newPartials = mutableListOf<CartesianLayerModel.Partial>()
     private val newExtraStore = MutableExtraStore()
 
@@ -173,7 +177,7 @@ public class CartesianChartModelProducer {
     }
 
     internal suspend fun commit() {
-      update(newPartials, newExtraStore)
+      update(newPartials, newExtraStore, animate)
     }
   }
 
@@ -191,6 +195,7 @@ public class CartesianChartModelProducer {
       partials: List<CartesianLayerModel.Partial>,
       transactionExtraStore: ExtraStore,
       restoredModel: CartesianChartModel? = null,
+      animate: Boolean = true,
     ) {
       cancelAnimation()
       val model =
@@ -200,8 +205,14 @@ public class CartesianChartModelProducer {
           getModel(partials, transactionExtraStore)
         }
       val ranges = updateRanges(model)
-      prepareForTransformation(model, hostExtraStore, ranges)
-      startAnimation { key, fraction -> transform(key, fraction, model, ranges) }
+      if (animate) {
+        prepareForTransformation(model, hostExtraStore, ranges)
+        startAnimation { key, fraction -> transform(key, fraction, model, ranges) }
+      } else {
+        prepareForTransformation(model, hostExtraStore, ranges)
+        transform(hostExtraStore, 1f)
+        onUpdate(model, ranges, hostExtraStore.copy())
+      }
     }
   }
 
