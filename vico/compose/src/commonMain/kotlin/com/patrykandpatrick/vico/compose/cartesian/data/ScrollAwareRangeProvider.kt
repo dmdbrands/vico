@@ -58,6 +58,7 @@ public class ScrollAwareRangeProvider(
   internal var currentMinY: Double = Double.NaN
   internal var currentMaxY: Double = Double.NaN
 
+
   // X range override — set during composition via direct property access.
   // Plain var, not Compose State — no recomposition from provider side.
   public var xRangeMin: Double = Double.NaN

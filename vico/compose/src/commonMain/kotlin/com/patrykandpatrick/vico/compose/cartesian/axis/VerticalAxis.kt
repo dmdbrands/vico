@@ -265,13 +265,15 @@ protected constructor(
         val markerY = decoration.y(model.extraStore)
         val markerLabel = decoration.label(model.extraStore)
 
-        // Compute canvas Y — clamp to bounds with offset if outside range
-        val canvasY = if (markerY in yRange.minY..yRange.maxY) {
+        // Use animated range — marker moves smoothly with Y-axis animation
+        val canvasY = if (yRange.length > 0 && markerY in yRange.minY..yRange.maxY) {
           bounds.bottom - bounds.height * ((markerY - yRange.minY) / yRange.length).toFloat()
         } else if (markerY < yRange.minY) {
-          bounds.bottom - decoration.outsideRangeOffset
+          // Below range — position below the axis
+          bounds.bottom + decoration.outsideRangeOffset
         } else {
-          bounds.top + decoration.outsideRangeOffset
+          // Above range — position above the axis
+          bounds.bottom - bounds.height - decoration.outsideRangeOffset
         }
 
         val markerX = bounds.center.x
@@ -628,7 +630,7 @@ protected constructor(
     public val label: (ExtraStore) -> CharSequence = { "" },
     public val verticalLabelPosition: Position.Vertical = Position.Vertical.Center,
     public val labelRotationDegrees: Float = 0f,
-    public val outsideRangeOffset: Float = 0f,
+    public val outsideRangeOffset: Float = 60f,
   )
 
   /**
