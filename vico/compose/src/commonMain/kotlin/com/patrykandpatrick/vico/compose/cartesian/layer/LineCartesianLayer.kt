@@ -74,6 +74,7 @@ protected constructor(
   internal val internalRangeProvider: CartesianLayerRangeProvider get() = rangeProvider
   internal val internalVerticalAxisPosition: Axis.Position.Vertical? get() = verticalAxisPosition
 
+
   /**
    * Defines the appearance of a line in a line chart.
    *
