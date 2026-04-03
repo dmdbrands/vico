@@ -58,6 +58,11 @@ public class ScrollAwareRangeProvider(
   internal var currentMinY: Double = Double.NaN
   internal var currentMaxY: Double = Double.NaN
 
+  // X range override — set during composition via direct property access.
+  // Plain var, not Compose State — no recomposition from provider side.
+  public var xRangeMin: Double = Double.NaN
+  public var xRangeMax: Double = Double.NaN
+
   // Whether entries have been loaded at least once.
   internal var isCacheReady: Boolean = false
 
@@ -66,12 +71,19 @@ public class ScrollAwareRangeProvider(
     internal set
 
   // Flow for scroll updates — CartesianChartHost emits to this.
-  internal val scrollUpdates = MutableSharedFlow<ScrollInfo>(extraBufferCapacity = 10)
+  // replay = 1: Canvas emits before LaunchedEffect subscribes. Replay ensures first emission isn't lost.
+  internal val scrollUpdates = MutableSharedFlow<ScrollInfo>(replay = 1, extraBufferCapacity = 10)
 
   // Cache: avoid recomputing if visible window hasn't changed.
   private var lastVisibleStartIndex: Int = -1
   private var lastVisibleEndIndex: Int = -1
   private var lastVisibleEntries: List<Pair<Double, Double>> = emptyList()
+
+  override fun getMinX(minX: Double, maxX: Double, extraStore: ExtraStore): Double =
+    if (!xRangeMin.isNaN()) xRangeMin else minX
+
+  override fun getMaxX(minX: Double, maxX: Double, extraStore: ExtraStore): Double =
+    if (!xRangeMax.isNaN()) xRangeMax else maxX
 
   override fun getMinY(minY: Double, maxY: Double, extraStore: ExtraStore): Double =
     if (isCacheReady && !currentMinY.isNaN()) currentMinY else minY
@@ -193,12 +205,18 @@ public fun rememberScrollAwareRangeProvider(
   paddingEntries: Int = 1,
   debounceMs: Long = 100L,
   animDurationMs: Int = 300,
+  minX: Double = Double.NaN,
+  maxX: Double = Double.NaN,
   onVisibleEntries: (visibleEntries: List<Pair<Double, Double>>) -> Pair<ClosedRange<Double>, List<Double>>,
 ): ScrollAwareRangeProvider {
   val callbackRef = rememberUpdatedState(onVisibleEntries)
-  return remember(paddingEntries, debounceMs, animDurationMs) {
+  val provider = remember(paddingEntries, debounceMs, animDurationMs) {
     ScrollAwareRangeProvider(paddingEntries, debounceMs, animDurationMs) { entries ->
       callbackRef.value(entries)
     }
   }
+  // Update X range from params — no recomposition from provider side (plain var)
+  provider.xRangeMin = minX
+  provider.xRangeMax = maxX
+  return provider
 }

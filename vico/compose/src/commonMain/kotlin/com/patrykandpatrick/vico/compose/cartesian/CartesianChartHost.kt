@@ -101,8 +101,8 @@ public fun CartesianChartHost(
     }
   }
 
-  // When using ScrollAwareRangeProvider, hide chart until visible-window range is ready.
-  // Canvas still runs (to emit scroll info) but is invisible — zero flash of wrong range.
+  // Hide chart until visible-window range is computed by LaunchedEffect.
+  // Canvas still draws (to emit scroll info via replay=1 flow).
   val chartAlpha = if (hasScrollAwareProvider && !hasValidAnimatedRange) 0f else 1f
 
   CartesianChartHostBox(modifier.alpha(chartAlpha)) {
@@ -258,9 +258,10 @@ internal fun CartesianChartHostImpl(
             // If ScrubMarkerController has a callback, let the consumer decide markerX
             val scrubCallback = (chart.markerController as? ScrubMarkerController)?.onMarkerIndexChanged
             if (scrubCallback != null) {
-              if (shouldShow && narrowedTargets.isNotEmpty()) {
-                // Pass ALL marker target X values, not just narrowed ones.
-                // Consumer's callback can find nearest match from full set.
+              if (shouldShow) {
+                // Pass tap X and ALL marker target X values to consumer.
+                // Even when narrowedTargets is empty (no data points in window),
+                // consumer can still handle it (e.g., snap to nearest label).
                 val allTargetXValues = chart.allMarkerTargetXValues
                 val userMarkerX = scrubCallback(x, allTargetXValues)
                 if (userMarkerX != null) {
@@ -387,6 +388,7 @@ internal fun CartesianChartHostImpl(
         MutableDrawScope(this),
       )
 
+    scrollState.drawingContext = drawingContext
     chart.draw(drawingContext)
     measuringContext.value.cacheStore.purge()
   }
@@ -434,53 +436,48 @@ private fun ScrollAwareRangeEffect(
     key(provider) {
     val layerIndex = remember(chart, layer) { chart.layers.indexOf(layer) }
 
-    // Animatable keyed on model — reinitializes with NaN on model/config change.
-    // Correct values are set in LaunchedEffect(model) via snapTo().
-    val animMinY = remember(model) { Animatable(Float.NaN) }
-    val animMaxY = remember(model) { Animatable(Float.NaN) }
+    // Structural key: only reset when THIS layer's series count or point counts change.
+    // Adding/removing other layers (e.g., secondary metric toggle) won't restart.
+    val modelStructureKey = remember(model) {
+      val layerModel = model.models.getOrNull(layerIndex) as? LineCartesianLayerModel
+      if (layerModel != null) {
+        layerModel.series.size to layerModel.series.map { it.size }
+      } else {
+        null
+      }
+    }
+
+    val animMinY = remember(modelStructureKey) { Animatable(Float.NaN) }
+    val animMaxY = remember(modelStructureKey) { Animatable(Float.NaN) }
     // Track whether the first visible-range update has happened.
     // First update uses snapTo (no animation) because the initial range
     // is computed from the FULL dataset, not the visible window.
     var isFirstScrollUpdate by remember { mutableStateOf(true) }
 
-    // Build cache and set initial range, then wait for first scroll to correct it.
-    LaunchedEffect(model) {
+    // Build cache, initial range, and wait for first scroll. Only runs on structural change.
+    // Renormalization (same structure, different Y values) does NOT restart this.
+    // Build cache + compute initial visible range atomically.
+    // replay = 1 on scrollUpdates ensures first Canvas emission isn't lost.
+    LaunchedEffect(modelStructureKey) {
       val layerModel = model.models.getOrNull(layerIndex) as? LineCartesianLayerModel
         ?: return@LaunchedEffect
       provider.buildCache(layerModel.series)
 
-      // Set initial range from full dataset (alpha=0 hides this)
-      val allEntries = layerModel.series.first().map { it.x to it.y }
-      val initialResult = provider.computeDisplayRange(allEntries)
-      if (initialResult != null) {
-        val (range, ticks) = initialResult
-        provider.currentMinY = range.start
-        provider.currentMaxY = range.endInclusive
-        provider.currentTicks = ticks
-        animMinY.snapTo(range.start.toFloat())
-        animMaxY.snapTo(range.endInclusive.toFloat())
-        onAnimatedRange(range.start, range.endInclusive)
-      }
-
-      // Now wait for first scroll event to correct to visible-window range.
-      // This runs AFTER cache is built, so isCacheReady is true.
+      // Wait for first Canvas draw to provide visible-window scroll info.
       isFirstScrollUpdate = true
       val firstScrollInfo = provider.scrollUpdates.first()
       val visibleEntries = provider.computeVisibleEntries(firstScrollInfo)
       val result = visibleEntries?.let { provider.computeDisplayRange(it) }
       if (result != null) {
         val (range, ticks) = result
-        isFirstScrollUpdate = false
         provider.currentMinY = range.start
         provider.currentMaxY = range.endInclusive
         provider.currentTicks = ticks
         animMinY.snapTo(range.start.toFloat())
         animMaxY.snapTo(range.endInclusive.toFloat())
         onAnimatedRange(range.start, range.endInclusive)
-      } else {
-        // No visible range computed — still show the full dataset range
-        isFirstScrollUpdate = false
       }
+      isFirstScrollUpdate = false
     }
 
     // Subsequent scroll events: debounced + animated (iOS-like).
