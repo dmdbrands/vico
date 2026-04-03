@@ -49,6 +49,7 @@ public class VicoScrollState {
   private val _maxValue = mutableFloatStateOf(0f)
   private var initialScrollHandled: Boolean
   private var context: CartesianMeasuringContext? = null
+  internal var drawingContext: CartesianDrawingContext? = null
   private var layerDimensions: CartesianLayerDimensions? = null
   private var bounds: Rect? = null
   /** Converts a data X value to a scroll pixel value. Returns null if context not ready. */
@@ -104,6 +105,11 @@ public class VicoScrollState {
 
     // If consumer provides a label provider, use it
     if (labelProvider != null) return labelProvider(range, fullRange)
+
+    // If item placer provided, use its label values via drawing context
+    if (itemPlacer != null && drawingContext != null) {
+      return itemPlacer.getLabelValues(drawingContext!!, range, fullRange, 0f)
+    }
 
     // Default: aligned labels at xStep intervals
     val xStep = ctx.ranges.xStep
