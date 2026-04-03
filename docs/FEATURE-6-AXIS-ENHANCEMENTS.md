@@ -27,8 +27,10 @@ VerticalAxis.rememberEnd(
 ```
 
 ### Behavior:
-- Drawn at the Y position computed from `yRange`
-- When Y is outside visible range: positions at top/bottom edge with `outsideRangeOffset`
+- Drawn at the Y position computed from animated `yRange` — moves smoothly with Y-axis animation
+- When Y is below visible range: positioned **below** the axis (`bounds.bottom + outsideRangeOffset`)
+- When Y is above visible range: positioned **above** the axis (`bounds.bottom - height - outsideRangeOffset`)
+- Default `outsideRangeOffset = 60f` (matching v3)
 - Centered horizontally in the axis bounds
 - Zero per-frame allocations — all components are `remember`ed
 
