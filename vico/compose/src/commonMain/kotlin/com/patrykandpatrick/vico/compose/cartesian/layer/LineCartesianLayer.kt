@@ -27,6 +27,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.compose.cartesian.CartesianMeasuringContext
+import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartRanges
+import com.patrykandpatrick.vico.compose.common.Animation
+import com.patrykandpatrick.vico.compose.cartesian.getVisibleXRange
 import com.patrykandpatrick.vico.compose.cartesian.ColorScale
 import com.patrykandpatrick.vico.compose.cartesian.axis.Axis
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
@@ -69,10 +72,22 @@ protected constructor(
     > =
     CartesianLayerDrawingModelInterpolator.default(),
   protected val drawingModelKey: ExtraStore.Key<LineCartesianLayerDrawingModel>,
+  /** Transforms Y values at draw time. Receives full series, Y range, and visible X range.
+   *  Returns DoubleArray of transformed Y values (same size as series), or null for no transform. */
+  protected val yTransform: ((
+    series: List<LineCartesianLayerModel.Entry>,
+    yRange: CartesianChartRanges.YRange,
+    visibleXRange: ClosedFloatingPointRange<Double>,
+  ) -> DoubleArray?)? = null,
 ) : BaseCartesianLayer<LineCartesianLayerModel>() {
   // Internal accessors for CartesianChartHost scroll-aware range support.
   internal val internalRangeProvider: CartesianLayerRangeProvider get() = rangeProvider
   internal val internalVerticalAxisPosition: Axis.Position.Vertical? get() = verticalAxisPosition
+
+  // yTransform cache — no animation, just snap to correct values
+  private var transformCacheKey: Long = 0L
+  private var transformCacheResult: DoubleArray? = null
+  private var transformIndexMap: Map<Double, Int>? = null
 
 
   /**
@@ -510,6 +525,11 @@ protected constructor(
         LineCartesianLayerDrawingModel,
       > =
       CartesianLayerDrawingModelInterpolator.default(),
+    yTransform: ((
+      series: List<LineCartesianLayerModel.Entry>,
+      yRange: CartesianChartRanges.YRange,
+      visibleXRange: ClosedFloatingPointRange<Double>,
+    ) -> DoubleArray?)? = null,
   ) : this(
     lineProvider,
     pointSpacing,
@@ -517,6 +537,7 @@ protected constructor(
     verticalAxisPosition,
     drawingModelInterpolator,
     ExtraStore.Key(),
+    yTransform,
   )
 
   override fun drawInternal(context: CartesianDrawingContext, model: LineCartesianLayerModel) {
@@ -722,6 +743,19 @@ protected constructor(
     val minX = ranges.minX
     val maxX = ranges.maxX
     val xStep = ranges.xStep
+    val yRange = ranges.getYRange(verticalAxisPosition)
+
+    // Compute yTransform — cached by (series + yRange). Snap to correct values.
+    val transformedY: DoubleArray? = if (yTransform != null) {
+      val key = 31L * series.hashCode() + yRange.minY.toBits() + yRange.maxY.toBits() * 37
+      if (key != transformCacheKey || transformCacheResult == null) {
+        val visibleXRange = getVisibleXRange()
+        transformCacheKey = key
+        transformCacheResult = yTransform.invoke(series, yRange, visibleXRange)
+        transformIndexMap = series.withIndex().associate { (i, e) -> e.x to i }
+      }
+      transformCacheResult
+    } else null
 
     val boundsStart = layerBounds.getStart(isLtr = isLtr)
     val boundsEnd = boundsStart + layoutDirectionMultiplier * layerBounds.width
@@ -731,10 +765,13 @@ protected constructor(
         layoutDirectionMultiplier * layerDimensions.xSpacing * ((entry.x - minX) / xStep).toFloat()
 
     fun getDrawY(entry: LineCartesianLayerModel.Entry): Float {
-      val yRange = ranges.getYRange(verticalAxisPosition)
-      return layerBounds.bottom -
-        (pointInfoMap?.get(entry.x)?.y ?: ((entry.y - yRange.minY) / yRange.length).toFloat()) *
-          layerBounds.height
+      val y = pointInfoMap?.get(entry.x)?.y?.let { it * layerBounds.height }
+        ?: run {
+          val idx = transformIndexMap?.get(entry.x)
+          val rawY = if (idx != null && transformedY != null) transformedY[idx] else entry.y
+          ((rawY - yRange.minY) / yRange.length).toFloat() * layerBounds.height
+        }
+      return layerBounds.bottom - y
     }
 
     var visibleStart = -1
@@ -798,8 +835,10 @@ protected constructor(
 
     fun getDrawY(entry: LineCartesianLayerModel.Entry): Float {
       val yRange = ranges.getYRange(verticalAxisPosition)
+      val idx = transformIndexMap?.get(entry.x)
+      val rawY = if (idx != null && transformCacheResult != null) transformCacheResult!![idx] else entry.y
       return layerBounds.bottom -
-        (pointInfoMap?.get(entry.x)?.y ?: ((entry.y - yRange.minY) / yRange.length).toFloat()) *
+        (pointInfoMap?.get(entry.x)?.y ?: ((rawY - yRange.minY) / yRange.length).toFloat()) *
           layerBounds.height
     }
 
@@ -941,6 +980,11 @@ protected constructor(
         LineCartesianLayerDrawingModel,
       > =
       this.drawingModelInterpolator,
+    yTransform: ((
+      series: List<LineCartesianLayerModel.Entry>,
+      yRange: CartesianChartRanges.YRange,
+      visibleXRange: ClosedFloatingPointRange<Double>,
+    ) -> DoubleArray?)? = this.yTransform,
   ): LineCartesianLayer =
     LineCartesianLayer(
       lineProvider,
@@ -949,6 +993,7 @@ protected constructor(
       verticalAxisPosition,
       drawingModelInterpolator,
       drawingModelKey,
+      yTransform,
     )
 
   override fun equals(other: Any?): Boolean =
@@ -1006,6 +1051,11 @@ public fun rememberLineCartesianLayer(
     remember {
       CartesianLayerDrawingModelInterpolator.default()
     },
+  yTransform: ((
+    series: List<LineCartesianLayerModel.Entry>,
+    yRange: CartesianChartRanges.YRange,
+    visibleXRange: ClosedFloatingPointRange<Double>,
+  ) -> DoubleArray?)? = null,
 ): LineCartesianLayer {
   var lineCartesianLayerWrapper by remember { ValueWrapper<LineCartesianLayer?>(null) }
   return remember(
@@ -1022,6 +1072,7 @@ public fun rememberLineCartesianLayer(
         rangeProvider,
         verticalAxisPosition,
         drawingModelInterpolator,
+        yTransform,
       )
         ?: LineCartesianLayer(
           lineProvider,
@@ -1029,6 +1080,7 @@ public fun rememberLineCartesianLayer(
           rangeProvider,
           verticalAxisPosition,
           drawingModelInterpolator,
+          yTransform,
         )
     lineCartesianLayerWrapper = lineCartesianLayer
     lineCartesianLayer

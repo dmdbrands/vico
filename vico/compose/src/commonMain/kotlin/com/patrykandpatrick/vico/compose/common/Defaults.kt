@@ -22,6 +22,8 @@ internal object Animation {
   val range: ClosedFloatingPointRange<Float> = 0f..1f
   const val DIFF_DURATION: Int = 500
   const val PIE_DIFF_DURATION: Int = 1_000
+  /** Duration for Y-range and yTransform animations (shared so they stay in sync). */
+  const val RANGE_ANIM_DURATION: Int = 300
 }
 
 internal object Defaults {
