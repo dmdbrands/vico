@@ -142,10 +142,9 @@ internal fun Modifier.pointerInput(
                         delayJob?.cancel()
                         delayJob = null
                       }
-                    } else {
-                      // Small movement: consume to prevent LazyColumn from stealing gesture
-                      event.changes.forEach { it.consume() }
                     }
+                    // Don't consume small movements — let scrollable handle them.
+                    // This allows scrollable to cancel ongoing fling/snap animations.
                   }
 
                   InteractionMode.MARKER_SELECTION -> {

@@ -102,19 +102,23 @@ internal class ChartSnapFlingBehavior(
     // Animate within ScrollScope using scrollBy — the only way to scroll
     // from inside performFling without conflicting with scrollableState lock.
     isSnapping = true
-    var previous = 0f
-    AnimationState(initialValue = 0f).animateTo(
-      targetValue = delta,
-      animationSpec = tween(
-        durationMillis = config.animation.snapDurationMillis,
-        easing = config.animation.snapEasing,
-      ),
-    ) {
-      val step = value - previous
-      previous = value
-      scrollBy(step)
+    try {
+      var previous = 0f
+      AnimationState(initialValue = 0f).animateTo(
+        targetValue = delta,
+        animationSpec = tween(
+          durationMillis = config.animation.snapDurationMillis,
+          easing = config.animation.snapEasing,
+        ),
+      ) {
+        val step = value - previous
+        previous = value
+        scrollBy(step)
+      }
+    } finally {
+      // Always reset — even if cancelled by a new scroll gesture
+      isSnapping = false
     }
-    isSnapping = false
 
     return 0f
   }
