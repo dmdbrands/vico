@@ -180,3 +180,38 @@ When merging a new upstream release:
    - If upstream renames/restructures, update the accessor and the skip check
 
 3. **New files** (no risk): ScrollAwareRangeProvider.kt, ListItemPlacer.kt, DmdBrandsTestChart.kt
+
+## yTransform (Feature 11)
+
+Render-time Y value transformation on `LineCartesianLayer`. Eliminates ViewModel-based
+renormalization for secondary metrics.
+
+### API
+
+```kotlin
+rememberLineCartesianLayer(
+  yTransform = { series, yRange, visibleXRange ->
+    // Returns DoubleArray of transformed Y values (same size as series)
+    // Called during draw, cached by series hash + yRange
+    GraphUtil.normalizeYValues(series, yRange.minY, yRange.maxY, ...)
+  }
+)
+```
+
+### Cache Strategy
+
+- Key: `series.hashCode() + yRange.minY.toBits() + yRange.maxY.toBits()`
+- During scroll (yRange constant): cached, zero computation
+- On scroll settle (yRange animates): cache invalidates, recomputes per animation frame
+- `transformIndexMap`: `entry.x → index` for O(1) lookup in both `getDrawY` functions
+
+### Shared Constants
+
+`Animation.RANGE_ANIM_DURATION` (300ms) — shared between ScrollAwareRangeProvider Y-range
+animation and any future yTransform animation.
+
+### Provider Deduplication
+
+When multiple layers share the same `ScrollAwareRangeProvider` instance,
+`ScrollAwareRangeEffect` deduplicates via `distinctBy { it.first }` — `buildCache` runs
+once for the first layer (primary), preventing secondary data from overwriting the cache.
