@@ -19,6 +19,7 @@ package com.patrykandpatrick.vico.compose.cartesian.data
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import com.patrykandpatrick.vico.compose.common.Animation
 import com.patrykandpatrick.vico.compose.common.data.ExtraStore
 import kotlinx.coroutines.flow.MutableSharedFlow
 
@@ -40,8 +41,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 public class ScrollAwareRangeProvider(
   private val paddingEntries: Int = 1,
   internal val debounceMs: Long = 100L,
-  internal val animDurationMs: Int = 300,
-  private val onVisibleEntries: (visibleEntries: List<Pair<Double, Double>>) -> Pair<ClosedRange<Double>, List<Double>>,
+  internal val animDurationMs: Int = Animation.RANGE_ANIM_DURATION,
+  private val onVisibleEntries: (visibleEntries: List<Pair<Double, Double>>, visibleXRange: ClosedRange<Double>) -> Pair<ClosedRange<Double>, List<Double>>,
 ) : CartesianLayerRangeProvider {
 
   init {
@@ -57,6 +58,7 @@ public class ScrollAwareRangeProvider(
   // Current animated range values — set by ScrollAwareRangeEffect animation.
   internal var currentMinY: Double = Double.NaN
   internal var currentMaxY: Double = Double.NaN
+
 
 
   // X range override — set during composition via direct property access.
@@ -156,10 +158,11 @@ public class ScrollAwareRangeProvider(
    */
   internal fun computeDisplayRange(
     visibleEntries: List<Pair<Double, Double>>,
+    visibleXRange: ClosedRange<Double>,
   ): Pair<ClosedRange<Double>, List<Double>>? {
     if (visibleEntries.isEmpty()) return null
     val result = try {
-      onVisibleEntries(visibleEntries)
+      onVisibleEntries(visibleEntries, visibleXRange)
     } catch (_: Exception) {
       return null
     }
@@ -208,12 +211,12 @@ public fun rememberScrollAwareRangeProvider(
   animDurationMs: Int = 300,
   minX: Double = Double.NaN,
   maxX: Double = Double.NaN,
-  onVisibleEntries: (visibleEntries: List<Pair<Double, Double>>) -> Pair<ClosedRange<Double>, List<Double>>,
+  onVisibleEntries: (visibleEntries: List<Pair<Double, Double>>, visibleXRange: ClosedRange<Double>) -> Pair<ClosedRange<Double>, List<Double>>,
 ): ScrollAwareRangeProvider {
   val callbackRef = rememberUpdatedState(onVisibleEntries)
   val provider = remember(paddingEntries, debounceMs, animDurationMs) {
-    ScrollAwareRangeProvider(paddingEntries, debounceMs, animDurationMs) { entries ->
-      callbackRef.value(entries)
+    ScrollAwareRangeProvider(paddingEntries, debounceMs, animDurationMs) { entries, xRange ->
+      callbackRef.value(entries, xRange)
     }
   }
   // Update X range from params — no recomposition from provider side (plain var)

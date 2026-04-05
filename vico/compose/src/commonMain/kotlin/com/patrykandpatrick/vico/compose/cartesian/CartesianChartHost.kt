@@ -419,6 +419,8 @@ private fun ScrollAwareRangeEffect(
   flingBehavior: FlingBehavior? = null,
   onAnimatedRange: (minY: Double, maxY: Double) -> Unit,
 ) {
+  // Deduplicate by provider identity — same instance shared by multiple layers
+  // only processes once (uses the first layer for buildCache)
   val providers = remember(chart) {
     chart.layers.mapNotNull { layer ->
       if (layer is LineCartesianLayer) {
@@ -426,7 +428,7 @@ private fun ScrollAwareRangeEffect(
       } else {
         null
       }
-    }
+    }.distinctBy { it.first }
   }
   if (providers.isEmpty()) return
 
@@ -467,7 +469,8 @@ private fun ScrollAwareRangeEffect(
       isFirstScrollUpdate = true
       val firstScrollInfo = provider.scrollUpdates.first()
       val visibleEntries = provider.computeVisibleEntries(firstScrollInfo)
-      val result = visibleEntries?.let { provider.computeDisplayRange(it) }
+      val xRange = firstScrollInfo.visibleXStart..firstScrollInfo.visibleXEnd
+      val result = visibleEntries?.let { provider.computeDisplayRange(it, xRange) }
       if (result != null) {
         val (range, ticks) = result
         provider.currentMinY = range.start
@@ -489,7 +492,8 @@ private fun ScrollAwareRangeEffect(
           if (animMinY.value.isNaN()) return@collect
 
           val visibleEntries = provider.computeVisibleEntries(scrollInfo) ?: return@collect
-          val result = provider.computeDisplayRange(visibleEntries) ?: return@collect
+          val xRange = scrollInfo.visibleXStart..scrollInfo.visibleXEnd
+          val result = provider.computeDisplayRange(visibleEntries, xRange) ?: return@collect
           val (range, newTicks) = result
           val targetMinY = range.start.toFloat()
           val targetMaxY = range.endInclusive.toFloat()
