@@ -179,15 +179,25 @@ public class VicoScrollState {
   internal val consumedXDeltas = MutableSharedFlow<Float>(extraBufferCapacity = 1)
   internal val unconsumedXDeltas = MutableSharedFlow<Float>(extraBufferCapacity = 1)
 
+  /** When true, scroll position is frozen (scrubbing). ScrollableState still claims deltas
+   *  to keep nestedScroll active (blocking parent LazyColumn), but position doesn't change. */
+  internal var isScrollFrozen: Boolean = false
+
   internal val scrollableState = ScrollableState { delta ->
-    val oldValue = value
-    value += delta
-    val consumedValue = value - oldValue
-    if (oldValue + delta == value) {
+    if (isScrollFrozen) {
+      // Claim the delta (nestedScroll sees it as consumed → parent blocked)
+      // but don't actually move the scroll position
       delta
     } else {
-      unconsumedXDeltas.tryEmit(consumedValue - delta)
-      consumedValue
+      val oldValue = value
+      value += delta
+      val consumedValue = value - oldValue
+      if (oldValue + delta == value) {
+        delta
+      } else {
+        unconsumedXDeltas.tryEmit(consumedValue - delta)
+        consumedValue
+      }
     }
   }
 

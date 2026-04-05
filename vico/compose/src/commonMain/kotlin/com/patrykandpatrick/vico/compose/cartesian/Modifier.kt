@@ -60,9 +60,9 @@ internal fun Modifier.pointerInput(
       state = scrollState.scrollableState,
       orientation = Orientation.Horizontal,
       flingBehavior = flingBehavior,
-      // Disable scroll when ScrubMarkerController is actively scrubbing
-      enabled = scrollState.scrollEnabled &&
-        (markerController !is ScrubMarkerController || !markerController.isScrubbing),
+      // Keep scrollable enabled even during scrubbing — nestedScroll blocks parent LazyColumn.
+      // Scroll position is frozen via ScrollableState during scrubbing.
+      enabled = scrollState.scrollEnabled,
       reverseDirection = true,
     )
     .pointerInput(onZoom, onInteraction, markerController) {
@@ -106,6 +106,7 @@ internal fun Modifier.pointerInput(
                     // Timer fired — enter marker selection / scrub mode
                     interactionMode = InteractionMode.MARKER_SELECTION
                     scrubController.isScrubbing = true
+                    scrollState.isScrollFrozen = true
                     onInteraction(Interaction.LongPress(pointerPosition))
                   }
                 }
@@ -132,6 +133,7 @@ internal fun Modifier.pointerInput(
                         delayJob?.cancel()
                         delayJob = null
                         scrubController.isScrubbing = false
+                        scrollState.isScrollFrozen = false
                         if (scrubController.hasActiveMarker) {
                           scrubController.onDismiss()
                           onInteraction(Interaction.Release(pointerPosition))
@@ -141,6 +143,7 @@ internal fun Modifier.pointerInput(
                         interactionMode = InteractionMode.NONE
                         delayJob?.cancel()
                         delayJob = null
+                        scrollState.isScrollFrozen = false
                       }
                     }
                     // Don't consume small movements — let scrollable handle them.
@@ -200,6 +203,7 @@ internal fun Modifier.pointerInput(
                     // End scrub — consume release to prevent parent scroll
                     event.changes.forEach { it.consume() }
                     scrubController.isScrubbing = false
+                    scrollState.isScrollFrozen = false
                     onInteraction(Interaction.Release(pointerPosition))
                   }
 
