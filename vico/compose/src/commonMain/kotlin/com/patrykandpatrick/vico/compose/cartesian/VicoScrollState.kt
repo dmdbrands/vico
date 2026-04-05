@@ -50,6 +50,9 @@ public class VicoScrollState {
   private var initialScrollHandled: Boolean
   private var context: CartesianMeasuringContext? = null
   internal var drawingContext: CartesianDrawingContext? = null
+
+  /** Whether the chart is currently being scrolled by the user. */
+  public val isScrolling: Boolean get() = scrollableState.isScrollInProgress
   private var layerDimensions: CartesianLayerDimensions? = null
   private var bounds: Rect? = null
   /** Converts a data X value to a scroll pixel value. Returns null if context not ready. */

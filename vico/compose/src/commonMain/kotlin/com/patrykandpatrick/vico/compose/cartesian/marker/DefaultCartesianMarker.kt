@@ -18,6 +18,7 @@ package com.patrykandpatrick.vico.compose.cartesian.marker
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -60,6 +61,8 @@ public open class DefaultCartesianMarker(
   protected val indicatorSize: Dp = Defaults.MARKER_INDICATOR_SIZE.dp,
   protected val guideline: LineComponent? = null,
   protected val contentPadding: Insets = Insets.Zero,
+  /** Callback invoked with interpolated Y values per series when marker is drawn. Used for chart header updates. */
+  protected val yLabelCallback: ((List<List<Double>>) -> Unit)? = null,
 ) : CartesianMarker {
 
   protected val markerCornerBasedShape: MarkerCornerBasedShape? =
@@ -109,6 +112,13 @@ public open class DefaultCartesianMarker(
           }
         }
       }
+      // Invoke Y label callback with Y values per target (for chart header / metric info)
+      yLabelCallback?.invoke(
+        targets.map { target ->
+          if (target is LineCartesianLayerMarkerTarget) target.points.map { it.entry.y }
+          else emptyList()
+        }
+      )
       drawLabel(context, targets)
     }
   }
@@ -462,8 +472,10 @@ public fun rememberDefaultCartesianMarker(
   indicatorSize: Dp = Defaults.MARKER_INDICATOR_SIZE.dp,
   guideline: LineComponent? = null,
   contentPadding: Insets = Insets.Zero,
-): DefaultCartesianMarker =
-  remember(label, valueFormatter, labelPosition, indicator, indicatorSize, guideline, contentPadding) {
+  yLabelCallback: ((List<List<Double>>) -> Unit)? = null,
+): DefaultCartesianMarker {
+  val callbackRef = rememberUpdatedState(yLabelCallback)
+  return remember(label, valueFormatter, labelPosition, indicator, indicatorSize, guideline, contentPadding) {
     DefaultCartesianMarker(
       label = label,
       valueFormatter = valueFormatter,
@@ -472,5 +484,7 @@ public fun rememberDefaultCartesianMarker(
       indicatorSize = indicatorSize,
       guideline = guideline,
       contentPadding = contentPadding,
+      yLabelCallback = { values -> callbackRef.value?.invoke(values) },
     )
   }
+}
