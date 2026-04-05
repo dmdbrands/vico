@@ -129,3 +129,23 @@ rememberDefaultCartesianMarker(
 
 ### Files:
 - `DefaultCartesianMarker.kt` — `contentPadding` param, guideline top/bottom calculation, fixed margin height, wired into `rememberDefaultCartesianMarker`
+
+## yLabelCallback (v3 Parity)
+
+`DefaultCartesianMarker` accepts `yLabelCallback: ((List<List<Double>>) -> Unit)?` — invoked on every
+marker draw with Y values per target. Used by meApp to update chart header / metric info when marker
+is shown.
+
+```kotlin
+rememberDefaultCartesianMarker(
+  label = ...,
+  yLabelCallback = { yValues ->
+    // yValues: List<List<Double>> — one inner list per target, Y values per series point
+    val data = state.data.filter { ... } .ifEmpty { createFallBackData(yValues) }
+    viewModel.handleIntent(GraphIntent.UpdateTarget(data))
+  },
+)
+```
+
+Callback ref is held via `rememberUpdatedState` — stays fresh across recompositions while marker
+instance remains stable (`remember`ed).

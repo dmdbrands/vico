@@ -94,3 +94,18 @@ when `scrollPaddingXStep > 0` to position targets at padding offset from chart e
 During snap animation, the range provider's debounce collector skips updates (`isSnapping` flag).
 After snap completes, the next scroll info triggers a range update at the final position.
 Scroll info always emits (for dedup cache) — only the collector-side skips during snap.
+
+## Continuous Scroll Fix
+
+`performFling` uses `try/finally` to reset `isSnapping` even when cancelled by a new gesture.
+Without this, `isSnapping` stays `true` forever if the user starts a new scroll during snap — blocking
+subsequent scroll/snap operations.
+
+The pointer input modifier in DECIDING mode does NOT consume events — lets them flow to the `scrollable`
+modifier. This allows `scrollable` to detect a new touch during an ongoing fling/snap and cancel it.
+Previously, event consumption in DECIDING mode blocked the scrollable from seeing new gestures.
+
+## VicoScrollState.isScrolling
+
+Public `val` reading `scrollableState.isScrollInProgress`. Used by meApp to skip header updates
+when marker is dismissed by scroll (scroll debounce handles the update instead).
