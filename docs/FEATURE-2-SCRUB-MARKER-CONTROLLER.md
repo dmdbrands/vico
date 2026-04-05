@@ -61,14 +61,16 @@ markerX (CartesianChartHostImpl)  ← SINGLE SOURCE OF TRUTH for marker visibili
 
 ```kotlin
 scrollable(
-  enabled = scrollState.scrollEnabled &&
-    (markerController !is ScrubMarkerController || !markerController.isScrubbing)
+  enabled = scrollState.scrollEnabled,  // ALWAYS enabled — nestedScroll blocks parent
 )
 ```
 
-When `isScrubbing = true`, the `scrollable` modifier is disabled. All move events
-are consumed (`event.changes.forEach { it.consume() }`) to also prevent parent
-LazyColumn from scrolling.
+Scrollable stays **enabled** during scrubbing. `isScrollFrozen` on `VicoScrollState`
+freezes the scroll position — `ScrollableState` claims deltas (nestedScroll sees them
+as consumed → parent LazyColumn blocked) but position doesn't move. Move events are
+still consumed in MARKER_SCRUBBING for marker position tracking.
+
+Better than disabling scrollable: no race condition window, nestedScroll stays active.
 
 ### Scroll-Dismiss Flow
 
