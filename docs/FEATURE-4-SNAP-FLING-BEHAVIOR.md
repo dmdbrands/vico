@@ -109,3 +109,15 @@ Previously, event consumption in DECIDING mode blocked the scrollable from seein
 
 Public `val` reading `scrollableState.isScrollInProgress`. Used by meApp to skip header updates
 when marker is dismissed by scroll (scroll debounce handles the update instead).
+
+## Initial Scroll Fix
+
+`VicoScrollState.update()` re-applies `initialScroll` when `maxValue` changes and `prevMaxValue > 0`.
+This handles stale model data from `initializeImmediateData` — when the correct model arrives with
+different data, `maxValue` changes → `initialScroll` re-applies with correct `context.ranges`.
+
+`rememberVicoScrollState` accepts a `key` param (matching v3). When `key` changes (e.g., segment
+switch), the scroll state is recreated with `initialScrollHandled = false`.
+
+No `chartAlpha = 0` hiding — chart renders immediately so `initialScroll` applies with the first
+available model data. Matches v3 approach.
