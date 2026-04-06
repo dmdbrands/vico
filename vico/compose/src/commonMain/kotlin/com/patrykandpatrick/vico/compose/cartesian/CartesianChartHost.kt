@@ -101,11 +101,9 @@ public fun CartesianChartHost(
     }
   }
 
-  // Hide chart until visible-window range is computed by LaunchedEffect.
-  // Canvas still draws (to emit scroll info via replay=1 flow).
-  val chartAlpha = if (hasScrollAwareProvider && !hasValidAnimatedRange) 0f else 1f
-
-  CartesianChartHostBox(modifier.alpha(chartAlpha)) {
+  // No alpha hiding — v3 approach. Chart renders immediately so initialScroll
+  // applies with correct context.ranges. Brief flash of default range is acceptable.
+  CartesianChartHostBox(modifier) {
     if (model != null) {
       CartesianChartHostImpl(
         chart,

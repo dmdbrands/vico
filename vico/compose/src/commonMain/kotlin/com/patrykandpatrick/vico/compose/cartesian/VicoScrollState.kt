@@ -284,8 +284,10 @@ public class VicoScrollState {
     this.context = context
     this.layerDimensions = layerDimensions
     this.bounds = bounds
+    val prevMaxValue = maxValue
     maxValue = context.getMaxScrollDistance(bounds.width, layerDimensions)
-    if (!initialScrollHandled) {
+    if (!initialScrollHandled || (prevMaxValue != maxValue && prevMaxValue > 0f)) {
+      // Apply/re-apply initialScroll when maxValue changes (model updated with different data)
       value = initialScroll.getValue(context, layerDimensions, bounds, maxValue)
       initialScrollHandled = true
     }
@@ -363,15 +365,17 @@ public fun rememberVicoScrollState(
   autoScroll: Scroll = initialScroll,
   autoScrollCondition: AutoScrollCondition = AutoScrollCondition.Never,
   autoScrollAnimationSpec: AnimationSpec<Float> = spring(),
+  key: Any? = null,
 ): VicoScrollState =
   rememberSaveable(
+    key,
     scrollEnabled,
     initialScroll,
     autoScroll,
     autoScrollCondition,
     autoScrollAnimationSpec,
     saver =
-      remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec) {
+      remember(key, scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec) {
         VicoScrollState.Saver(
           scrollEnabled,
           initialScroll,
