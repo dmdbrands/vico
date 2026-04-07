@@ -96,8 +96,8 @@ public class ScrollAwareRangeProvider(
 
   /**
    * Builds the entry list from model data. Called when the model changes.
-   * Merges all series: for each X position, stores min and max Y across all series
-   * so the range callback sees the full Y span (important for multi-line charts like BP).
+   * Merges all series: for each X, stores min and max Y so the range callback
+   * sees the full Y span (needed for multi-line charts like BP).
    */
   internal fun buildCache(series: List<List<LineCartesianLayerModel.Entry>>) {
     if (series.isEmpty() || series.first().isEmpty()) {
@@ -108,15 +108,12 @@ public class ScrollAwareRangeProvider(
       return
     }
     if (series.size == 1) {
-      // Single series — use directly (no merging overhead)
       val entries = series.first().sortedBy { it.x }
       allEntries = entries.map { it.x to it.y }
       sortedXValues = DoubleArray(entries.size) { entries[it].x }
     } else {
-      // Multi-series — merge Y values per X position.
-      // For each unique X, emit two entries: (x, minY) and (x, maxY).
-      // This ensures the range callback spans all series.
-      val byX = linkedMapOf<Double, Pair<Double, Double>>() // x → (minY, maxY)
+      // Multi-series: merge min/max Y per X across all series
+      val byX = linkedMapOf<Double, Pair<Double, Double>>()
       for (s in series) {
         for (entry in s) {
           val prev = byX[entry.x]
@@ -127,12 +124,10 @@ public class ScrollAwareRangeProvider(
           }
         }
       }
-      val merged = byX.entries.sortedBy { it.key }.flatMap { (x, minMax) ->
+      allEntries = byX.entries.sortedBy { it.key }.flatMap { (x, minMax) ->
         if (minMax.first == minMax.second) listOf(x to minMax.first)
         else listOf(x to minMax.first, x to minMax.second)
       }
-      allEntries = merged
-      // Sorted unique X values for binary search
       sortedXValues = byX.keys.sorted().toDoubleArray()
     }
     isCacheReady = true
