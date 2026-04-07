@@ -22,31 +22,65 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.PaintingStyle
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.compose.cartesian.CartesianMeasuringContext
-import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartRanges
-import com.patrykandpatrick.vico.compose.common.Animation
-import com.patrykandpatrick.vico.compose.cartesian.getVisibleXRange
 import com.patrykandpatrick.vico.compose.cartesian.ColorScale
 import com.patrykandpatrick.vico.compose.cartesian.axis.Axis
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
-import com.patrykandpatrick.vico.compose.cartesian.data.*
+import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartRanges
+import com.patrykandpatrick.vico.compose.cartesian.data.CartesianLayerRangeProvider
+import com.patrykandpatrick.vico.compose.cartesian.data.CartesianValueFormatter
+import com.patrykandpatrick.vico.compose.cartesian.data.LineCartesianLayerDrawingModel
+import com.patrykandpatrick.vico.compose.cartesian.data.LineCartesianLayerModel
+import com.patrykandpatrick.vico.compose.cartesian.data.MutableCartesianChartRanges
+import com.patrykandpatrick.vico.compose.cartesian.data.ScrollAwareRangeProvider
+import com.patrykandpatrick.vico.compose.cartesian.data.forEachIn
+import com.patrykandpatrick.vico.compose.cartesian.getVisibleXRange
+import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer.Interpolator.Companion.catmullRom
 import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer.Line
 import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer.PointConnector
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.marker.LineCartesianLayerMarkerTarget
 import com.patrykandpatrick.vico.compose.cartesian.marker.MutableLineCartesianLayerMarkerTarget
-import com.patrykandpatrick.vico.compose.common.*
+import com.patrykandpatrick.vico.compose.common.Defaults
+import com.patrykandpatrick.vico.compose.common.EmptyPaint
+import com.patrykandpatrick.vico.compose.common.Fill
+import com.patrykandpatrick.vico.compose.common.Position
+import com.patrykandpatrick.vico.compose.common.ValueWrapper
 import com.patrykandpatrick.vico.compose.common.component.Component
 import com.patrykandpatrick.vico.compose.common.component.TextComponent
 import com.patrykandpatrick.vico.compose.common.data.CacheStore
 import com.patrykandpatrick.vico.compose.common.data.CartesianLayerDrawingModelInterpolator
 import com.patrykandpatrick.vico.compose.common.data.ExtraStore
 import com.patrykandpatrick.vico.compose.common.data.MutableExtraStore
-import kotlin.math.*
+import com.patrykandpatrick.vico.compose.common.doubled
+import com.patrykandpatrick.vico.compose.common.getBitmap
+import com.patrykandpatrick.vico.compose.common.getPixel
+import com.patrykandpatrick.vico.compose.common.getRepeating
+import com.patrykandpatrick.vico.compose.common.getStart
+import com.patrykandpatrick.vico.compose.common.getValue
+import com.patrykandpatrick.vico.compose.common.half
+import com.patrykandpatrick.vico.compose.common.inBounds
+import com.patrykandpatrick.vico.compose.common.orZero
+import com.patrykandpatrick.vico.compose.common.saveLayer
+import com.patrykandpatrick.vico.compose.common.setValue
+import com.patrykandpatrick.vico.compose.common.vicoTheme
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * Draws the content of line charts.
@@ -66,9 +100,9 @@ protected constructor(
   protected val rangeProvider: CartesianLayerRangeProvider = CartesianLayerRangeProvider.auto(),
   protected val verticalAxisPosition: Axis.Position.Vertical? = null,
   protected val drawingModelInterpolator:
-    CartesianLayerDrawingModelInterpolator<
-      LineCartesianLayerDrawingModel.Entry,
-      LineCartesianLayerDrawingModel,
+  CartesianLayerDrawingModelInterpolator<
+    LineCartesianLayerDrawingModel.Entry,
+    LineCartesianLayerDrawingModel,
     > =
     CartesianLayerDrawingModelInterpolator.default(),
   protected val drawingModelKey: ExtraStore.Key<LineCartesianLayerDrawingModel>,
@@ -208,7 +242,7 @@ protected constructor(
           ColorScale(
             colors = { extraStore -> buildColorScale(extraStore, colors) },
             verticalAxisPosition = verticalAxisPosition,
-          )
+          ),
         )
 
       /**
@@ -305,7 +339,7 @@ protected constructor(
           ColorScale(
             colors = { extraStore -> buildColorScale(extraStore, colors) },
             verticalAxisPosition = verticalAxisPosition,
-          )
+          ),
         )
 
       /**
@@ -349,7 +383,7 @@ protected constructor(
       @Suppress("DEPRECATION")
       @Deprecated("Use `Interpolator.cubic`.", ReplaceWith("Interpolator.cubic()"))
       public fun cubic(
-        @FloatRange(from = 0.0, to = 1.0, fromInclusive = false) curvature: Float = 0.5f
+        @FloatRange(from = 0.0, to = 1.0, fromInclusive = false) curvature: Float = 0.5f,
       ): PointConnector = CubicPointConnector(curvature)
     }
   }
@@ -400,7 +434,7 @@ protected constructor(
        * Uses cubic Bézier curves. [curvature], which must be in ([0, 1]], defines their strength.
        */
       public fun cubic(
-        @FloatRange(from = 0.0, to = 1.0, fromInclusive = false) curvature: Float = 0.5f
+        @FloatRange(from = 0.0, to = 1.0, fromInclusive = false) curvature: Float = 0.5f,
       ): Interpolator = CubicInterpolator(curvature)
 
       /**
@@ -410,7 +444,7 @@ protected constructor(
        * segments for collinear points.
        */
       public fun catmullRom(
-        @FloatRange(from = 0.0, to = 1.0, toInclusive = false) alpha: Float = 0f
+        @FloatRange(from = 0.0, to = 1.0, toInclusive = false) alpha: Float = 0f,
       ): Interpolator = CatmullRomInterpolator(alpha)
 
       /**
@@ -520,9 +554,9 @@ protected constructor(
     rangeProvider: CartesianLayerRangeProvider = CartesianLayerRangeProvider.auto(),
     verticalAxisPosition: Axis.Position.Vertical? = null,
     drawingModelInterpolator:
-      CartesianLayerDrawingModelInterpolator<
-        LineCartesianLayerDrawingModel.Entry,
-        LineCartesianLayerDrawingModel,
+    CartesianLayerDrawingModelInterpolator<
+      LineCartesianLayerDrawingModel.Entry,
+      LineCartesianLayerDrawingModel,
       > =
       CartesianLayerDrawingModelInterpolator.default(),
     yTransform: ((
@@ -712,16 +746,18 @@ protected constructor(
       previousX != null && nextX != null -> min(abs(x - previousX), abs(nextX - x))
       previousX == null && nextX == null ->
         min(layerDimensions.startPadding, layerDimensions.endPadding).doubled
+
       nextX != null -> {
         ((entry.x - ranges.minX) / ranges.xStep * layerDimensions.xSpacing +
-            layerDimensions.startPadding)
+          layerDimensions.startPadding)
           .doubled
           .toFloat()
           .coerceAtMost(abs(nextX - x))
       }
+
       else -> {
         ((ranges.maxX - entry.x) / ranges.xStep * layerDimensions.xSpacing +
-            layerDimensions.endPadding)
+          layerDimensions.endPadding)
           .doubled
           .toFloat()
           .coerceAtMost(abs(x - previousX!!))
@@ -816,8 +852,8 @@ protected constructor(
     drawFullLineLength: Boolean = false,
     action:
       (
-        entry: LineCartesianLayerModel.Entry, x: Float, y: Float, previousX: Float?, nextX: Float?,
-      ) -> Unit,
+      entry: LineCartesianLayerModel.Entry, x: Float, y: Float, previousX: Float?, nextX: Float?,
+    ) -> Unit,
   ) {
     val minX = ranges.minX
     val maxX = ranges.maxX
@@ -836,10 +872,11 @@ protected constructor(
     fun getDrawY(entry: LineCartesianLayerModel.Entry): Float {
       val yRange = ranges.getYRange(verticalAxisPosition)
       val idx = transformIndexMap?.get(entry.x)
-      val rawY = if (idx != null && transformCacheResult != null) transformCacheResult!![idx] else entry.y
+      val rawY =
+        if (idx != null && transformCacheResult != null) transformCacheResult!![idx] else entry.y
       return layerBounds.bottom -
         (pointInfoMap?.get(entry.x)?.y ?: ((rawY - yRange.minY) / yRange.length).toFloat()) *
-          layerBounds.height
+        layerBounds.height
     }
 
     series.forEachIn(minX = minX, maxX = maxX, padding = 1) { entry, next ->
@@ -850,9 +887,9 @@ protected constructor(
       nextX = immutableNextX
       if (
         drawFullLineLength.not() &&
-          immutableNextX != null &&
-          (isLtr && immutableX < boundsStart || !isLtr && immutableX > boundsStart) &&
-          (isLtr && immutableNextX < boundsStart || !isLtr && immutableNextX > boundsStart)
+        immutableNextX != null &&
+        (isLtr && immutableX < boundsStart || !isLtr && immutableX > boundsStart) &&
+        (isLtr && immutableNextX < boundsStart || !isLtr && immutableNextX > boundsStart)
       ) {
         return@forEachIn
       }
@@ -898,8 +935,8 @@ protected constructor(
     model.series.forEachIndexed { seriesIndex, series ->
       val interpolator = lineProvider.getLine(seriesIndex, model.extraStore).interpolator
       val yRange = interpolator.getYRange(series.map { it.y })
-      minY = kotlin.math.min(minY, yRange.start)
-      maxY = kotlin.math.max(maxY, yRange.endInclusive)
+      minY = min(minY, yRange.start)
+      maxY = max(maxY, yRange.endInclusive)
     }
     chartRanges.tryUpdate(
       rangeProvider.getMinX(model.minX, model.maxX, model.extraStore),
@@ -917,7 +954,7 @@ protected constructor(
     model: LineCartesianLayerModel,
   ) {
     with(context) {
-      val maxMargin =
+      val verticalMargin =
         (0..<model.series.size)
           .mapNotNull { lineProvider.getLine(it, model.extraStore) }
           .maxOf {
@@ -927,12 +964,7 @@ protected constructor(
             )
           }
           .half
-      layerMargins.ensureValuesAtLeast(
-        start = maxMargin,
-        top = maxMargin * 2,
-        end = maxMargin,
-        bottom = maxMargin * 2,
-      )
+      layerMargins.ensureValuesAtLeast(top = verticalMargin, bottom = verticalMargin)
     }
   }
 
@@ -953,7 +985,7 @@ protected constructor(
   }
 
   private fun LineCartesianLayerModel.toDrawingModel(
-    ranges: CartesianChartRanges
+    ranges: CartesianChartRanges,
   ): LineCartesianLayerDrawingModel {
     val yRange = ranges.getYRange(verticalAxisPosition)
     return LineCartesianLayerDrawingModel(
@@ -961,10 +993,10 @@ protected constructor(
         series.associate { entry ->
           entry.x to
             LineCartesianLayerDrawingModel.Entry(
-              ((entry.y - yRange.minY) / yRange.length).toFloat()
+              ((entry.y - yRange.minY) / yRange.length).toFloat(),
             )
         }
-      }
+      },
     )
   }
 
@@ -975,9 +1007,9 @@ protected constructor(
     rangeProvider: CartesianLayerRangeProvider = this.rangeProvider,
     verticalAxisPosition: Axis.Position.Vertical? = this.verticalAxisPosition,
     drawingModelInterpolator:
-      CartesianLayerDrawingModelInterpolator<
-        LineCartesianLayerDrawingModel.Entry,
-        LineCartesianLayerDrawingModel,
+    CartesianLayerDrawingModelInterpolator<
+      LineCartesianLayerDrawingModel.Entry,
+      LineCartesianLayerDrawingModel,
       > =
       this.drawingModelInterpolator,
     yTransform: ((
@@ -999,11 +1031,11 @@ protected constructor(
   override fun equals(other: Any?): Boolean =
     this === other ||
       other is LineCartesianLayer &&
-        lineProvider == other.lineProvider &&
-        pointSpacing == other.pointSpacing &&
-        rangeProvider == other.rangeProvider &&
-        verticalAxisPosition == other.verticalAxisPosition &&
-        drawingModelInterpolator == other.drawingModelInterpolator
+      lineProvider == other.lineProvider &&
+      pointSpacing == other.pointSpacing &&
+      rangeProvider == other.rangeProvider &&
+      verticalAxisPosition == other.verticalAxisPosition &&
+      drawingModelInterpolator == other.drawingModelInterpolator
 
   override fun hashCode(): Int {
     var result = lineProvider.hashCode()
@@ -1027,7 +1059,7 @@ internal fun CartesianDrawingContext.getCanvasSplitY(
   val base =
     layerBounds.bottom -
       ((splitY(model.extraStore).toDouble() - yRange.minY) / yRange.length).toFloat() *
-        layerBounds.height
+      layerBounds.height
   return ceil(base).coerceIn(layerBounds.top..layerBounds.bottom) + ceil(halfLineThickness)
 }
 
@@ -1038,15 +1070,15 @@ public fun rememberLineCartesianLayer(
     LineCartesianLayer.LineProvider.series(
       vicoTheme.lineCartesianLayerColors.map { color ->
         LineCartesianLayer.rememberLine(LineCartesianLayer.LineFill.single(Fill(color)))
-      }
+      },
     ),
   pointSpacing: Dp = Defaults.POINT_SPACING.dp,
   rangeProvider: CartesianLayerRangeProvider = remember { CartesianLayerRangeProvider.auto() },
   verticalAxisPosition: Axis.Position.Vertical? = null,
   drawingModelInterpolator:
-    CartesianLayerDrawingModelInterpolator<
-      LineCartesianLayerDrawingModel.Entry,
-      LineCartesianLayerDrawingModel,
+  CartesianLayerDrawingModelInterpolator<
+    LineCartesianLayerDrawingModel.Entry,
+    LineCartesianLayerDrawingModel,
     > =
     remember {
       CartesianLayerDrawingModelInterpolator.default()

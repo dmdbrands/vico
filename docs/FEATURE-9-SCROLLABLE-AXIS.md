@@ -46,4 +46,5 @@ VerticalAxis.rememberStart(
 | Label maxWidth | `ceil(spacing * xSpacing)` — 0 at boundary | Not passed (no width constraint) |
 | Clip boundary | Tied to axis line position via `getLineLeft` | `bounds ± startLayerMargin` |
 | Label clip | Only `getStartLayerMargin` (~3px) | Extended by `maxLabelWidth.half` in drawUnderLayers |
-| Point padding | `maxPointSize.half` in unscalable padding | Clip via layer margins (start/end/top/bottom) |
+| Point padding | `maxPointSize.half` in unscalable padding | Removed — no `maxPointSize.half` in unscalable padding |
+| Scroll margin | `context.scrollEnabled` gates `scrollOffset` in `updateHorizontalLayerMargins` | `scrollEnabled` removed — `Size.Scroll` renders regardless of chart scroll state. Margin uses `effectiveWidth` without `scrollEnabled` gate |

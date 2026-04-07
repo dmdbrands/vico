@@ -440,7 +440,7 @@ protected constructor(
   ) {
     val width = getWidth(context, layerHeight)
     val scrollSize = size as? Size.Scroll
-    val scrollOffset = if (scrollSize != null && scrollSize.isLabelsScrollable && context.scrollEnabled) {
+    val scrollOffset = if (scrollSize != null && scrollSize.isLabelsScrollable) {
       if (position == Axis.Position.Vertical.Start) scrollValue else maxScroll - scrollValue
     } else 0f
     val effectiveWidth = (width - scrollOffset).coerceAtLeast(0f)
