@@ -35,34 +35,32 @@ import kotlinx.coroutines.flow.MutableSharedFlow
  *   for stable range computation. Default 1.
  * @param debounceMs milliseconds to wait after scroll settles before updating the range.
  * @param animDurationMs duration of the range animation in milliseconds.
- * @param onVisibleEntries callback receiving the visible entries (+ padding) as (x, y) pairs.
- *   Returns a [Pair] of the display range ([ClosedRange]) and tick label values ([List]).
+ * @param onVisibleEntries callback receiving the visible entries per series as List<List<(x, y)>>.
+ *   For single-series charts this is a list of one list. For multi-series (e.g. BP with 3 lines)
+ *   this is a list of 3 lists. Returns a [Pair] of the display range and tick label values.
  */
 public class ScrollAwareRangeProvider(
   private val paddingEntries: Int = 1,
   internal val debounceMs: Long = 100L,
   internal val animDurationMs: Int = Animation.RANGE_ANIM_DURATION,
-  private val onVisibleEntries: (visibleEntries: List<Pair<Double, Double>>, visibleXRange: ClosedRange<Double>) -> Pair<ClosedRange<Double>, List<Double>>,
+  private val onVisibleEntries: (visibleEntries: List<List<Pair<Double, Double>>>, visibleXRange: ClosedRange<Double>) -> Pair<ClosedRange<Double>, List<Double>>,
 ) : CartesianLayerRangeProvider {
 
   init {
     require(paddingEntries >= 0) { "paddingEntries must be >= 0" }
   }
 
-  // All entries from the first series, sorted by X. Stores (x, y).
-  private var allEntries: List<Pair<Double, Double>> = emptyList()
+  // Per-series entries sorted by X. allSeriesEntries[seriesIndex] = list of (x, y).
+  private var allSeriesEntries: List<List<Pair<Double, Double>>> = emptyList()
 
-  // Sorted X values for binary search (parallel to allEntries).
+  // Sorted unique X values across all series for binary search.
   private var sortedXValues: DoubleArray = DoubleArray(0)
 
   // Current animated range values — set by ScrollAwareRangeEffect animation.
   internal var currentMinY: Double = Double.NaN
   internal var currentMaxY: Double = Double.NaN
 
-
-
   // X range override — set during composition via direct property access.
-  // Plain var, not Compose State — no recomposition from provider side.
   public var xRangeMin: Double = Double.NaN
   public var xRangeMax: Double = Double.NaN
 
@@ -74,13 +72,12 @@ public class ScrollAwareRangeProvider(
     internal set
 
   // Flow for scroll updates — CartesianChartHost emits to this.
-  // replay = 1: Canvas emits before LaunchedEffect subscribes. Replay ensures first emission isn't lost.
   internal val scrollUpdates = MutableSharedFlow<ScrollInfo>(replay = 1, extraBufferCapacity = 10)
 
   // Cache: avoid recomputing if visible window hasn't changed.
   private var lastVisibleStartIndex: Int = -1
   private var lastVisibleEndIndex: Int = -1
-  private var lastVisibleEntries: List<Pair<Double, Double>> = emptyList()
+  private var lastVisibleEntries: List<List<Pair<Double, Double>>> = emptyList()
 
   override fun getMinX(minX: Double, maxX: Double, extraStore: ExtraStore): Double =
     if (!xRangeMin.isNaN()) xRangeMin else minX
@@ -95,93 +92,82 @@ public class ScrollAwareRangeProvider(
     if (isCacheReady && !currentMaxY.isNaN()) currentMaxY else maxY
 
   /**
-   * Builds the entry list from model data. Called when the model changes.
-   * Merges all series: for each X, stores min and max Y so the range callback
-   * sees the full Y span (needed for multi-line charts like BP).
+   * Builds per-series entry lists + a merged sorted X array for binary search.
+   * Called when the model structure changes.
    */
   internal fun buildCache(series: List<List<LineCartesianLayerModel.Entry>>) {
     if (series.isEmpty() || series.first().isEmpty()) {
-      allEntries = emptyList()
+      allSeriesEntries = emptyList()
       sortedXValues = DoubleArray(0)
       isCacheReady = false
       lastVisibleStartIndex = -1
       return
     }
-    if (series.size == 1) {
-      val entries = series.first().sortedBy { it.x }
-      allEntries = entries.map { it.x to it.y }
-      sortedXValues = DoubleArray(entries.size) { entries[it].x }
-    } else {
-      // Multi-series: merge min/max Y per X across all series
-      val byX = linkedMapOf<Double, Pair<Double, Double>>()
-      for (s in series) {
-        for (entry in s) {
-          val prev = byX[entry.x]
-          byX[entry.x] = if (prev != null) {
-            minOf(prev.first, entry.y) to maxOf(prev.second, entry.y)
-          } else {
-            entry.y to entry.y
-          }
-        }
-      }
-      allEntries = byX.entries.sortedBy { it.key }.flatMap { (x, minMax) ->
-        if (minMax.first == minMax.second) listOf(x to minMax.first)
-        else listOf(x to minMax.first, x to minMax.second)
-      }
-      sortedXValues = byX.keys.sorted().toDoubleArray()
+    // Store each series separately, sorted by X
+    allSeriesEntries = series.map { s ->
+      s.sortedBy { it.x }.map { it.x to it.y }
     }
+    // Merged unique sorted X values for binary search
+    val allX = sortedSetOf<Double>()
+    for (s in allSeriesEntries) {
+      for ((x, _) in s) allX.add(x)
+    }
+    sortedXValues = allX.toDoubleArray()
     isCacheReady = true
     lastVisibleStartIndex = -1
   }
 
   /**
-   * Computes the visible entries (+ padding) based on scroll info.
-   * Uses binary search on sorted X values — O(log n).
+   * Computes the visible entries per series based on scroll info.
+   * Uses binary search on merged X values — O(log n).
    * Returns null if not ready or no entries in visible range.
    */
-  internal fun computeVisibleEntries(info: ScrollInfo): List<Pair<Double, Double>>? {
-    if (!isCacheReady || allEntries.isEmpty() || info.xSpacing <= 0f) return null
+  internal fun computeVisibleEntries(info: ScrollInfo): List<List<Pair<Double, Double>>>? {
+    if (!isCacheReady || allSeriesEntries.isEmpty() || info.xSpacing <= 0f) return null
 
-    // Use the visible X range directly from scroll info.
-    // visibleXStart/End are computed from the actual chart ranges.xStep (not estimated).
     val visibleXStart = info.visibleXStart
     val visibleXEnd = info.visibleXEnd
 
-    // Binary search for start and end indices
+    // Binary search on merged X values for window bounds
     var startIndex = sortedXValues.binarySearchInsertionPoint(visibleXStart)
     var endIndex = sortedXValues.binarySearchInsertionPoint(visibleXEnd)
 
-    // Clamp to valid range
-    startIndex = startIndex.coerceIn(0, allEntries.lastIndex)
-    endIndex = endIndex.coerceIn(0, allEntries.lastIndex)
+    startIndex = startIndex.coerceIn(0, sortedXValues.lastIndex)
+    endIndex = endIndex.coerceIn(0, sortedXValues.lastIndex)
 
-    // Add padding entries
     val paddedStart = (startIndex - paddingEntries).coerceAtLeast(0)
-    val paddedEnd = (endIndex + paddingEntries).coerceAtMost(allEntries.lastIndex)
+    val paddedEnd = (endIndex + paddingEntries).coerceAtMost(sortedXValues.lastIndex)
 
     if (paddedStart > paddedEnd) return null
 
-    // Cache check — skip if same window
+    // Cache check
     if (paddedStart == lastVisibleStartIndex && paddedEnd == lastVisibleEndIndex) {
       return lastVisibleEntries
     }
 
-    val entries = allEntries.subList(paddedStart, paddedEnd + 1)
+    val xMin = sortedXValues[paddedStart]
+    val xMax = sortedXValues[paddedEnd]
+
+    // Filter each series to the visible X window
+    val result = allSeriesEntries.map { seriesEntries ->
+      seriesEntries.filter { (x, _) -> x in xMin..xMax }
+    }
+
     lastVisibleStartIndex = paddedStart
     lastVisibleEndIndex = paddedEnd
-    lastVisibleEntries = entries
-    return entries
+    lastVisibleEntries = result
+    return result
   }
 
   /**
-   * Calls the consumer's callback with visible entries.
+   * Calls the consumer's callback with visible entries per series.
    * Returns null if the callback returns a zero-length range.
    */
   internal fun computeDisplayRange(
-    visibleEntries: List<Pair<Double, Double>>,
+    visibleEntries: List<List<Pair<Double, Double>>>,
     visibleXRange: ClosedRange<Double>,
   ): Pair<ClosedRange<Double>, List<Double>>? {
-    if (visibleEntries.isEmpty()) return null
+    if (visibleEntries.all { it.isEmpty() }) return null
     val result = try {
       onVisibleEntries(visibleEntries, visibleXRange)
     } catch (_: Exception) {
@@ -222,7 +208,7 @@ private fun DoubleArray.binarySearchInsertionPoint(value: Double): Int {
  * @param paddingEntries extra entries before/after visible window (default 1)
  * @param debounceMs debounce delay after scroll settles (default 100ms)
  * @param animDurationMs range animation duration (default 300ms)
- * @param onVisibleEntries callback receiving visible (x, y) entries + padding.
+ * @param onVisibleEntries callback receiving visible entries per series as List<List<(x, y)>>.
  *   Returns display range and tick labels.
  */
 @Composable
@@ -232,7 +218,7 @@ public fun rememberScrollAwareRangeProvider(
   animDurationMs: Int = 300,
   minX: Double = Double.NaN,
   maxX: Double = Double.NaN,
-  onVisibleEntries: (visibleEntries: List<Pair<Double, Double>>, visibleXRange: ClosedRange<Double>) -> Pair<ClosedRange<Double>, List<Double>>,
+  onVisibleEntries: (visibleEntries: List<List<Pair<Double, Double>>>, visibleXRange: ClosedRange<Double>) -> Pair<ClosedRange<Double>, List<Double>>,
 ): ScrollAwareRangeProvider {
   val callbackRef = rememberUpdatedState(onVisibleEntries)
   val provider = remember(paddingEntries, debounceMs, animDurationMs) {
@@ -240,7 +226,6 @@ public fun rememberScrollAwareRangeProvider(
       callbackRef.value(entries, xRange)
     }
   }
-  // Update X range from params — no recomposition from provider side (plain var)
   provider.xRangeMin = minX
   provider.xRangeMax = maxX
   return provider
