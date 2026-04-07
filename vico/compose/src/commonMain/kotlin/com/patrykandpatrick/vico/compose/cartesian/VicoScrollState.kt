@@ -286,8 +286,7 @@ public class VicoScrollState {
     this.bounds = bounds
     val prevMaxValue = maxValue
     maxValue = context.getMaxScrollDistance(bounds.width, layerDimensions)
-    if (!initialScrollHandled || (prevMaxValue != maxValue && prevMaxValue > 0f)) {
-      // Apply/re-apply initialScroll when maxValue changes (model updated with different data)
+    if (!initialScrollHandled || (prevMaxValue != maxValue && prevMaxValue > 0f && !scrollableState.isScrollInProgress)) {
       value = initialScroll.getValue(context, layerDimensions, bounds, maxValue)
       initialScrollHandled = true
     }
