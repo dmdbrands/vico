@@ -105,8 +105,8 @@ internal object MonotoneInterpolator : LineCartesianLayer.Interpolator {
   public fun getYAtXFromEntries(x: Double, series: List<LineCartesianLayerModel.Entry>): Double? {
     val n = series.size
     if (n < 2) return series.firstOrNull()?.y
-    if (x <= series.first().x) return series.first().y
-    if (x >= series.last().x) return series.last().y
+    if (x < series.first().x) return null
+    if (x > series.last().x) return null
 
     // Binary search for bracketing segment
     var lo = 0

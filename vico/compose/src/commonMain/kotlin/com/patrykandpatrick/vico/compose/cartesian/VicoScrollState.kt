@@ -162,8 +162,8 @@ public class VicoScrollState {
     entries: List<LineCartesianLayerModel.Entry>,
   ): Double? {
     if (entries.size < 2) return entries.firstOrNull()?.y
-    if (x <= entries.first().x) return entries.first().y
-    if (x >= entries.last().x) return entries.last().y
+    if (x < entries.first().x) return null
+    if (x > entries.last().x) return null
     for (i in 0 until entries.lastIndex) {
       val x0 = entries[i].x; val y0 = entries[i].y
       val x1 = entries[i + 1].x; val y1 = entries[i + 1].y
