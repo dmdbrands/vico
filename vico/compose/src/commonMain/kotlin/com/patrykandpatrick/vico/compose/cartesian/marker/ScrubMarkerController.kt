@@ -58,7 +58,7 @@ public class ScrubMarkerController(
   private var lastTargets: List<CartesianMarker.Target>? = null
 
   /** Tracks if marker was showing (for shouldShowMarker logic). Set externally by CartesianChartHostImpl. */
-  internal var hasActiveMarker: Boolean = false
+  internal var hasActiveMarker: Boolean by androidx.compose.runtime.mutableStateOf(false)
 
   override val acceptsLongPress: Boolean = false
 
@@ -87,10 +87,12 @@ public class ScrubMarkerController(
     is Interaction.Tap -> {
       // Always show/move marker on tap (v3 parity). Dismiss only on scroll.
       lastTargets = targets
+      hasActiveMarker = true
       true
     }
     is Interaction.LongPress -> {
       lastTargets = targets
+      hasActiveMarker = true
       isScrubbing = true
       true
     }

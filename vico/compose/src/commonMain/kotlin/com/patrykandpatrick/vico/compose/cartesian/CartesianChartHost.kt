@@ -167,21 +167,20 @@ internal fun CartesianChartHostImpl(
   var lastAcceptedInteraction by
     rememberSaveable(saver = Interaction.Saver) { mutableStateOf(null) }
 
-  // Sync ScrubMarkerController.hasActiveMarker with markerX (single source of truth).
-  // Also dismiss marker on scroll via consumedXDeltas.
   val scrubController = chart.markerController as? ScrubMarkerController
-  scrubController?.hasActiveMarker = markerX != null
 
+  // Dismiss marker on scroll start — Modifier.kt sets hasActiveMarker=false via onDismiss().
+  // Observe the state change to clear host's markerX.
   if (scrubController != null) {
-    LaunchedEffect(scrollState.consumedXDeltas) {
-      scrollState.consumedXDeltas.collect {
-        if (markerX != null && !scrubController.isScrubbing) {
-          scrubController.onDismiss()
-          markerX = null
-          markerSeriesIndex = null
-          lastAcceptedInteraction = null  // prevent onViewportChange from re-showing
+    LaunchedEffect(Unit) {
+      snapshotFlow { scrubController.hasActiveMarker }
+        .collect { active ->
+          if (!active && markerX != null) {
+            markerX = null
+            markerSeriesIndex = null
+            lastAcceptedInteraction = null
+          }
         }
-      }
     }
   }
 
@@ -293,6 +292,8 @@ internal fun CartesianChartHostImpl(
     }
 
   fun onViewportChange() {
+    // ScrubMarkerController dismisses marker on scroll — no position tracking needed.
+    if (chart.markerController is ScrubMarkerController) return
     lastAcceptedInteraction
       ?.takeIf { chart.markerController.lock == Lock.Position }
       ?.let { onInteraction?.invoke(it) }
