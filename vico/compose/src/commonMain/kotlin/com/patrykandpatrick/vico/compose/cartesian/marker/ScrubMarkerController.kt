@@ -85,10 +85,9 @@ public class ScrubMarkerController(
     targets: List<CartesianMarker.Target>,
   ): Boolean = when (interaction) {
     is Interaction.Tap -> {
-      // Toggle: tap same targets = dismiss, tap different = show/move
-      val show = targets != lastTargets
-      lastTargets = if (show) targets else null
-      show
+      // Always show/move marker on tap (v3 parity). Dismiss only on scroll.
+      lastTargets = targets
+      true
     }
     is Interaction.LongPress -> {
       lastTargets = targets
