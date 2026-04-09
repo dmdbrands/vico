@@ -550,6 +550,10 @@ protected constructor(
   /** When false, this layer does not produce marker targets (e.g., percentile band layers). */
   public var markerTargetsEnabled: Boolean = true
 
+  /** When true, skip the drawing model cache and always compute line positions from the live
+   *  animated Y range. Use for layers that share another layer's scroll-aware range. */
+  public var alwaysUseLiveRange: Boolean = false
+
   /** Creates a [LineCartesianLayer]. */
   public constructor(
     lineProvider: LineProvider,
@@ -586,7 +590,7 @@ protected constructor(
 
       // When using ScrollAwareRangeProvider, skip the cached drawing model so that
       // line positions are always computed from the live (animated) yRange.
-      val drawingModel = if (rangeProvider is ScrollAwareRangeProvider) {
+      val drawingModel = if (rangeProvider is ScrollAwareRangeProvider || alwaysUseLiveRange) {
         null
       } else {
         extraStore.getOrNull(drawingModelKey)
@@ -1096,6 +1100,7 @@ public fun rememberLineCartesianLayer(
     visibleXRange: ClosedFloatingPointRange<Double>,
   ) -> DoubleArray?)? = null,
   markerTargetsEnabled: Boolean = true,
+  alwaysUseLiveRange: Boolean = false,
 ): LineCartesianLayer {
   var lineCartesianLayerWrapper by remember { ValueWrapper<LineCartesianLayer?>(null) }
   return remember(
@@ -1124,6 +1129,7 @@ public fun rememberLineCartesianLayer(
           markerTargetsEnabled,
         )
     lineCartesianLayer.markerTargetsEnabled = markerTargetsEnabled
+    lineCartesianLayer.alwaysUseLiveRange = alwaysUseLiveRange
     lineCartesianLayerWrapper = lineCartesianLayer
     lineCartesianLayer
   }

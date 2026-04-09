@@ -436,29 +436,14 @@ private fun ScrollAwareRangeEffect(
     key(provider) {
     val layerIndex = remember(chart, layer) { chart.layers.indexOf(layer) }
 
-    // Structural key: only reset when THIS layer's series count or point counts change.
-    // Adding/removing other layers (e.g., secondary metric toggle) won't restart.
-    val modelStructureKey = remember(model) {
-      val layerModel = model.models.getOrNull(layerIndex) as? LineCartesianLayerModel
-      if (layerModel != null) {
-        layerModel.series.size to layerModel.series.map { it.size }
-      } else {
-        null
-      }
-    }
-
-    val animMinY = remember(modelStructureKey) { Animatable(Float.NaN) }
-    val animMaxY = remember(modelStructureKey) { Animatable(Float.NaN) }
-    // Track whether the first visible-range update has happened.
-    // First update uses snapTo (no animation) because the initial range
-    // is computed from the FULL dataset, not the visible window.
+    val animMinY = remember { Animatable(Float.NaN) }
+    val animMaxY = remember { Animatable(Float.NaN) }
     var isFirstScrollUpdate by remember { mutableStateOf(true) }
 
-    // Build cache, initial range, and wait for first scroll. Only runs on structural change.
-    // Renormalization (same structure, different Y values) does NOT restart this.
-    // Build cache + compute initial visible range atomically.
-    // replay = 1 on scrollUpdates ensures first Canvas emission isn't lost.
-    LaunchedEffect(modelStructureKey) {
+    // Rebuild cache on every model change (including Y value changes like metric switch).
+    // LaunchedEffect restarts → waits for scroll info → recomputes with fresh cache.
+    // Animatables are NOT reset — they animate from old range to new range.
+    LaunchedEffect(model) {
       val layerModel = model.models.getOrNull(layerIndex) as? LineCartesianLayerModel
         ?: return@LaunchedEffect
       provider.buildCache(layerModel.series)
@@ -474,9 +459,16 @@ private fun ScrollAwareRangeEffect(
         provider.currentMinY = range.start
         provider.currentMaxY = range.endInclusive
         provider.currentTicks = ticks
-        animMinY.snapTo(range.start.toFloat())
-        animMaxY.snapTo(range.endInclusive.toFloat())
-        onAnimatedRange(range.start, range.endInclusive)
+        if (animMinY.value.isNaN()) {
+          // First ever render — snap (no animation from NaN)
+          animMinY.snapTo(range.start.toFloat())
+          animMaxY.snapTo(range.endInclusive.toFloat())
+          onAnimatedRange(range.start, range.endInclusive)
+        } else {
+          // Model changed (e.g., metric switch) — animate from old to new
+          launch { animMinY.animateTo(range.start.toFloat(), tween(provider.animDurationMs)) }
+          launch { animMaxY.animateTo(range.endInclusive.toFloat(), tween(provider.animDurationMs)) }
+        }
       }
       isFirstScrollUpdate = false
     }
