@@ -108,11 +108,11 @@ public class ScrollAwareRangeProvider(
       s.sortedBy { it.x }.map { it.x to it.y }
     }
     // Merged unique sorted X values for binary search
-    val allX = sortedSetOf<Double>()
+    val allX = mutableSetOf<Double>()
     for (s in allSeriesEntries) {
       for ((x, _) in s) allX.add(x)
     }
-    sortedXValues = allX.toDoubleArray()
+    sortedXValues = allX.toDoubleArray().also { it.sort() }
     isCacheReady = true
     lastVisibleStartIndex = -1
   }

@@ -184,9 +184,11 @@ public class VicoScrollState {
   internal var isScrollFrozen: Boolean = false
 
   internal val scrollableState = ScrollableState { delta ->
-    if (isScrollFrozen) {
+    if (isScrollFrozen || !scrollEnabled) {
       // Claim the delta (nestedScroll sees it as consumed → parent blocked)
-      // but don't actually move the scroll position
+      // but don't actually move the scroll position.
+      // !scrollEnabled: chart is non-scrollable (TOTAL/single-window) but scrollable modifier
+      // stays enabled so nestedScroll blocks parent during scrubbing.
       delta
     } else {
       val oldValue = value

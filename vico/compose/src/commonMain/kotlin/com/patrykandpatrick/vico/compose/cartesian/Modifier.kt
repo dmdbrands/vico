@@ -60,9 +60,9 @@ internal fun Modifier.pointerInput(
       state = scrollState.scrollableState,
       orientation = Orientation.Horizontal,
       flingBehavior = flingBehavior,
-      // Keep scrollable enabled even during scrubbing — nestedScroll blocks parent LazyColumn.
-      // Scroll position is frozen via ScrollableState during scrubbing.
-      enabled = scrollState.scrollEnabled,
+      // Always enabled so nestedScroll blocks parent scroll during scrubbing.
+      // Actual scroll is frozen via ScrollableState when scrollEnabled=false or during scrub.
+      enabled = true,
       reverseDirection = true,
     )
     .pointerInput(onZoom, onInteraction, markerController) {

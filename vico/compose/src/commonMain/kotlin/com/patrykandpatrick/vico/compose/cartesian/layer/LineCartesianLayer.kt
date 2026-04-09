@@ -547,6 +547,9 @@ protected constructor(
 
   override val markerTargets: Map<Double, List<CartesianMarker.Target>> = _markerTargets
 
+  /** When false, this layer does not produce marker targets (e.g., percentile band layers). */
+  public var markerTargetsEnabled: Boolean = true
+
   /** Creates a [LineCartesianLayer]. */
   public constructor(
     lineProvider: LineProvider,
@@ -564,6 +567,7 @@ protected constructor(
       yRange: CartesianChartRanges.YRange,
       visibleXRange: ClosedFloatingPointRange<Double>,
     ) -> DoubleArray?)? = null,
+    markerTargetsEnabled: Boolean = true,
   ) : this(
     lineProvider,
     pointSpacing,
@@ -572,7 +576,9 @@ protected constructor(
     drawingModelInterpolator,
     ExtraStore.Key(),
     yTransform,
-  )
+  ) {
+    this.markerTargetsEnabled = markerTargetsEnabled
+  }
 
   override fun drawInternal(context: CartesianDrawingContext, model: LineCartesianLayerModel) {
     with(context) {
@@ -669,6 +675,7 @@ protected constructor(
     canvasY: Float,
     color: Color,
   ) {
+    if (!markerTargetsEnabled) return
     if (canvasX <= layerBounds.left - 1 || canvasX >= layerBounds.right + 1) return
     val limitedCanvasY = canvasY.coerceIn(layerBounds.top, layerBounds.bottom)
     _markerTargets
@@ -1088,6 +1095,7 @@ public fun rememberLineCartesianLayer(
     yRange: CartesianChartRanges.YRange,
     visibleXRange: ClosedFloatingPointRange<Double>,
   ) -> DoubleArray?)? = null,
+  markerTargetsEnabled: Boolean = true,
 ): LineCartesianLayer {
   var lineCartesianLayerWrapper by remember { ValueWrapper<LineCartesianLayer?>(null) }
   return remember(
@@ -1113,7 +1121,9 @@ public fun rememberLineCartesianLayer(
           verticalAxisPosition,
           drawingModelInterpolator,
           yTransform,
+          markerTargetsEnabled,
         )
+    lineCartesianLayer.markerTargetsEnabled = markerTargetsEnabled
     lineCartesianLayerWrapper = lineCartesianLayer
     lineCartesianLayer
   }
