@@ -53,8 +53,9 @@ import com.patrykandpatrick.vico.compose.cartesian.layer.LineCartesianLayer.Poin
 import com.patrykandpatrick.vico.compose.cartesian.marker.CartesianMarker
 import com.patrykandpatrick.vico.compose.cartesian.marker.LineCartesianLayerMarkerTarget
 import com.patrykandpatrick.vico.compose.cartesian.marker.MutableLineCartesianLayerMarkerTarget
-import com.patrykandpatrick.vico.compose.common.Animation
 import com.patrykandpatrick.vico.compose.common.Defaults
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
 import com.patrykandpatrick.vico.compose.common.EmptyPaint
 import com.patrykandpatrick.vico.compose.common.Fill
 import com.patrykandpatrick.vico.compose.common.Position
@@ -119,32 +120,25 @@ protected constructor(
   internal val internalRangeProvider: CartesianLayerRangeProvider get() = rangeProvider
   internal val internalVerticalAxisPosition: Axis.Position.Vertical? get() = verticalAxisPosition
 
-  // yTransform screen-fraction cache + animation.
+  // yTransform — called ONLY on series change or when animation target changes.
+  // Not during scroll. Not during yRange animation frames.
   //
-  // Screen position = (clamped - effMin) / metricSpan — yRange cancels out.
-  // Cache by series+visibleXRange (skip yTransform when only yRange animates).
-  // Start animation only when yRange changes (syncs with primary layer).
-  private var transformDataKey: Long = 0L
+  // Scroll: stale rawY + stable yRange = constant position.
+  // Animation start: recompute with TARGET yRange + fade correction.
+  // Animation frames: stale rawY + animated yRange = natural animation (synced with primary).
+  private var transformCacheResult: DoubleArray? = null
   private var transformIndexMap: Map<Double, Int>? = null
-  private var transformTargetFractions: DoubleArray? = null   // latest computed fractions
-  private var transformFromFractions: DoubleArray? = null     // frozen "from" during animation
-  private var transformAnimStartNanos: Long = 0L
-  private var transformIsAnimating: Boolean = false
   private var transformLastSeriesKey: Long = 0L
-  private var transformLastYRangeBits: Long = 0L              // detect primary animation start
-  private var transformCurrentFractions: DoubleArray? = null   // output: shared across getDrawY paths
-  private val transformAnimDurationNanos: Long =
-    (if (rangeProvider is ScrollAwareRangeProvider)
-      (rangeProvider as ScrollAwareRangeProvider).animDurationMs.toLong()
-    else Animation.RANGE_ANIM_DURATION.toLong()) * 1_000_000L
-
-  /** FastOutSlowIn cubic bezier approximation — matches Compose tween() default easing. */
-  private fun fastOutSlowIn(t: Double): Double {
-    // Attempt to match Compose's FastOutSlowInEasing (0.4, 0.0, 0.2, 1.0).
-    // Cubic approximation: starts fast, decelerates smoothly.
-    val t2 = t * t
-    return 3.0 * t2 - 2.0 * t2 * t  // Hermite smoothstep — close match, zero alloc
-  }
+  private var transformLastTargetKey: Long = 0L  // tracks target yRange changes
+  // Fade: 0=none, 1=fading-out (old values), 2=fading-in (new values)
+  private var transformFadePhase: Int = 0
+  private var transformFadeStart: kotlin.time.TimeMark? = null
+  internal var transformFadeOpacity: Float = 1f
+    private set
+  private var transformPendingResult: DoubleArray? = null
+  private var transformPendingIndexMap: Map<Double, Int>? = null
+  private val fadeOutDuration = 100.milliseconds
+  private val fadeInDuration = 150.milliseconds
 
 
   /**
@@ -645,7 +639,7 @@ protected constructor(
           connectPoints(line.interpolator, points, visibleIndexRange)
         }
 
-        saveLayer(opacity = drawingModel?.opacity ?: 1f)
+        saveLayer(opacity = (drawingModel?.opacity ?: 1f) * transformFadeOpacity)
 
         line.fillColor?.let { color ->
           line.draw(context, linePath, color, verticalAxisPosition)
@@ -817,90 +811,69 @@ protected constructor(
 
     // yTransform with fraction caching + animated transitions synced to primary layer.
     //
-    // Phase 1: recompute fractions only when visible data changes (not every frame)
-    // Phase 2: start animation only when yRange changes (synced with primary layer)
+    // yTransform triggered ONLY on yRange change (syncs with primary layer range animation).
+    // Not called during active scrolling — fractions are stable until range updates.
 
-    if (yTransform != null) {
+    // yTransform — called on series change, first compute, or target yRange change.
+    val transformedY: DoubleArray? = if (yTransform != null) {
       val seriesKey = series.hashCode().toLong()
-      val visibleXRange = getVisibleXRange()
-      val dataKey = seriesKey * 31 + visibleXRange.start.toBits() * 37 +
-        visibleXRange.endInclusive.toBits()
+      val seriesChanged = transformLastSeriesKey != 0L && transformLastSeriesKey != seriesKey
 
-      // Phase 1: visible data changed → call yTransform, update target fractions
-      if (dataKey != transformDataKey || transformTargetFractions == null) {
-        val newResult = yTransform.invoke(series, yRange, visibleXRange)
+      // Read animation target from chart ranges — works with any provider type
+      val targetYRange = ranges.getTargetYRange(verticalAxisPosition)
+      val targetKey = targetYRange.minY.toBits() xor (targetYRange.maxY.toBits() * 31)
+
+      // First compute or series changed → snap (no fade)
+      if (transformCacheResult == null || seriesChanged) {
+        val visibleXRange = getVisibleXRange()
+        transformCacheResult = yTransform.invoke(series, yRange, visibleXRange)
         transformIndexMap = series.withIndex().associate { (i, e) -> e.x to i }
-
-        val yLen = yRange.length
-        val newFractions = if (newResult != null && yLen > 0) {
-          DoubleArray(newResult.size) { i -> (newResult[i] - yRange.minY) / yLen }
-        } else null
-
-        val seriesChanged = transformLastSeriesKey != 0L && transformLastSeriesKey != seriesKey
-
-        if (seriesChanged || transformCurrentFractions == null || newFractions == null) {
-          // Series changed, first compute, or null — snap
-          transformTargetFractions = newFractions
-          transformCurrentFractions = newFractions
-          transformFromFractions = null
-          transformIsAnimating = false
-        } else if (newFractions.size != (transformCurrentFractions?.size ?: -1)) {
-          // Size changed — snap
-          transformTargetFractions = newFractions
-          transformCurrentFractions = newFractions
-          transformFromFractions = null
-          transformIsAnimating = false
-        } else {
-          // Same series, same size — store as target (animation starts in phase 2)
-          transformTargetFractions = newFractions
-        }
-
         transformLastSeriesKey = seriesKey
-        transformDataKey = dataKey
+        transformLastTargetKey = targetKey
+        transformFadePhase = 0
+        transformFadeOpacity = 1f
       }
 
-      // Phase 2: yRange changed → if target differs from current, start animation
-      val yRangeBits = yRange.minY.toBits() xor (yRange.maxY.toBits() * 31)
-      if (yRangeBits != transformLastYRangeBits) {
-        transformLastYRangeBits = yRangeBits
-        if (!transformIsAnimating) {
-          val target = transformTargetFractions
-          val current = transformCurrentFractions
-          if (target != null && current != null && target.size == current.size) {
-            var differs = false
-            for (i in current.indices) {
-              if (kotlin.math.abs(current[i] - target[i]) > 0.001) { differs = true; break }
-            }
-            if (differs) {
-              transformFromFractions = current.copyOf()
-              transformAnimStartNanos = System.nanoTime()
-              transformIsAnimating = true
-            }
-          }
-        }
+      // Target changed → recompute with TARGET yRange + fade
+      if (targetKey != transformLastTargetKey && transformFadePhase == 0) {
+        val visibleXRange = getVisibleXRange()
+        transformPendingResult = yTransform.invoke(series, targetYRange, visibleXRange)
+        transformPendingIndexMap = series.withIndex().associate { (i, e) -> e.x to i }
+        transformLastTargetKey = targetKey
+        transformFadePhase = 1
+        transformFadeStart = TimeSource.Monotonic.markNow()
       }
 
-      // Phase 3: produce output fractions
-      val from = transformFromFractions
-      val target = transformTargetFractions
-      if (transformIsAnimating && from != null && target != null && from.size == target.size) {
-        val elapsed = System.nanoTime() - transformAnimStartNanos
-        val rawT = (elapsed.toDouble() / transformAnimDurationNanos).coerceIn(0.0, 1.0)
-        val t = fastOutSlowIn(rawT)
-        if (rawT >= 1.0) {
-          transformFromFractions = null
-          transformIsAnimating = false
-          transformCurrentFractions = target
-        } else {
-          transformCurrentFractions = DoubleArray(target.size) { i ->
-            from[i] + (target[i] - from[i]) * t
+      // Fade state machine
+      when (transformFadePhase) {
+        1 -> {
+          val elapsed = transformFadeStart?.elapsedNow() ?: fadeOutDuration
+          val t = (elapsed / fadeOutDuration).coerceIn(0.0, 1.0)
+          transformFadeOpacity = (1.0 - t).toFloat()
+          if (t >= 1.0) {
+            transformCacheResult = transformPendingResult
+            transformIndexMap = transformPendingIndexMap
+            transformPendingResult = null
+            transformPendingIndexMap = null
+            transformFadePhase = 2
+            transformFadeStart = TimeSource.Monotonic.markNow()
+            transformFadeOpacity = 0f
           }
         }
+        2 -> {
+          val elapsed = transformFadeStart?.elapsedNow() ?: fadeInDuration
+          val t = (elapsed / fadeInDuration).coerceIn(0.0, 1.0)
+          transformFadeOpacity = t.toFloat()
+          if (t >= 1.0) {
+            transformFadePhase = 0
+            transformFadeOpacity = 1f
+          }
+        }
+        else -> transformFadeOpacity = 1f
       }
-      // When not animating, transformCurrentFractions stays as-is (last stable value)
-    } else {
-      transformCurrentFractions = null
-    }
+
+      transformCacheResult
+    } else null
 
     val boundsStart = layerBounds.getStart(isLtr = isLtr)
     val boundsEnd = boundsStart + layoutDirectionMultiplier * layerBounds.width
@@ -913,14 +886,8 @@ protected constructor(
       val y = pointInfoMap?.get(entry.x)?.y?.let { it * layerBounds.height }
         ?: run {
           val idx = transformIndexMap?.get(entry.x)
-          val currentFracs = transformCurrentFractions
-          if (idx != null && currentFracs != null && idx < currentFracs.size) {
-            // Fraction-based rendering — yRange-independent, supports animation
-            currentFracs[idx].toFloat() * layerBounds.height
-          } else {
-            // Fallback: no yTransform or index mismatch
-            ((entry.y - yRange.minY) / yRange.length).toFloat() * layerBounds.height
-          }
+          val rawY = if (idx != null && transformedY != null) transformedY[idx] else entry.y
+          ((rawY - yRange.minY) / yRange.length).toFloat() * layerBounds.height
         }
       return layerBounds.bottom - y
     }
@@ -987,15 +954,11 @@ protected constructor(
     fun getDrawY(entry: LineCartesianLayerModel.Entry): Float {
       val yRange = ranges.getYRange(verticalAxisPosition)
       val idx = transformIndexMap?.get(entry.x)
-      val currentFracs = transformCurrentFractions
-      val y = if (idx != null && currentFracs != null && idx < currentFracs.size) {
-        // Fraction-based rendering — same as collectPoints path
-        currentFracs[idx].toFloat() * layerBounds.height
-      } else {
-        (pointInfoMap?.get(entry.x)?.y ?: ((entry.y - yRange.minY) / yRange.length).toFloat()) *
-          layerBounds.height
-      }
-      return layerBounds.bottom - y
+      val rawY =
+        if (idx != null && transformCacheResult != null) transformCacheResult!![idx] else entry.y
+      return layerBounds.bottom -
+        (pointInfoMap?.get(entry.x)?.y ?: ((rawY - yRange.minY) / yRange.length).toFloat()) *
+        layerBounds.height
     }
 
     series.forEachIn(minX = minX, maxX = maxX, padding = 1) { entry, next ->
@@ -1136,8 +1099,8 @@ protected constructor(
       yRange: CartesianChartRanges.YRange,
       visibleXRange: ClosedFloatingPointRange<Double>,
     ) -> DoubleArray?)? = this.yTransform,
-  ): LineCartesianLayer =
-    LineCartesianLayer(
+  ): LineCartesianLayer {
+    val newLayer = LineCartesianLayer(
       lineProvider,
       pointSpacing,
       rangeProvider,
@@ -1146,6 +1109,16 @@ protected constructor(
       drawingModelKey,
       yTransform,
     )
+    // Carry over yTransform cache so layer recreation doesn't cause a snap
+    newLayer.transformCacheResult = this.transformCacheResult
+    newLayer.transformIndexMap = this.transformIndexMap
+    newLayer.transformLastSeriesKey = this.transformLastSeriesKey
+    newLayer.transformLastTargetKey = this.transformLastTargetKey
+    newLayer.transformFadeOpacity = this.transformFadeOpacity
+    newLayer.transformFadePhase = this.transformFadePhase
+    newLayer.transformFadeStart = this.transformFadeStart
+    return newLayer
+  }
 
   override fun equals(other: Any?): Boolean =
     this === other ||

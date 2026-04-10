@@ -81,6 +81,8 @@ public fun CartesianChartHost(
   // Two separate vars instead of Pair to avoid boxing/allocation per animation frame.
   var animatedMinY by remember { mutableStateOf(Double.NaN) }
   var animatedMaxY by remember { mutableStateOf(Double.NaN) }
+  var targetMinY by remember { mutableStateOf(Double.NaN) }
+  var targetMaxY by remember { mutableStateOf(Double.NaN) }
   val hasValidAnimatedRange = !animatedMinY.isNaN() && !animatedMaxY.isNaN()
   val isInitialRangesReady = initialRanges !== CartesianChartRanges.Empty
 
@@ -89,16 +91,27 @@ public fun CartesianChartHost(
   }
 
   val ranges = if (hasValidAnimatedRange && isInitialRangesReady) {
-    AnimatedYCartesianChartRanges(initialRanges, animatedMinY, animatedMaxY)
+    AnimatedYCartesianChartRanges(
+      initialRanges, animatedMinY, animatedMaxY,
+      if (!targetMinY.isNaN()) targetMinY else animatedMinY,
+      if (!targetMaxY.isNaN()) targetMaxY else animatedMaxY,
+    )
   } else {
     initialRanges
   }
 
   if (model != null) {
-    ScrollAwareRangeEffect(chart, model, flingBehavior) { minY, maxY ->
-      animatedMinY = minY
-      animatedMaxY = maxY
-    }
+    ScrollAwareRangeEffect(
+      chart, model, flingBehavior,
+      onAnimatedRange = { minY, maxY ->
+        animatedMinY = minY
+        animatedMaxY = maxY
+      },
+      onTargetRange = { minY, maxY ->
+        targetMinY = minY
+        targetMaxY = maxY
+      },
+    )
   }
 
   // No alpha hiding — v3 approach. Chart renders immediately so initialScroll
@@ -417,6 +430,7 @@ private fun ScrollAwareRangeEffect(
   model: CartesianChartModel,
   flingBehavior: FlingBehavior? = null,
   onAnimatedRange: (minY: Double, maxY: Double) -> Unit,
+  onTargetRange: (minY: Double, maxY: Double) -> Unit = { _, _ -> },
 ) {
   // Deduplicate by provider identity — same instance shared by multiple layers
   // only processes once (uses the first layer for buildCache)
@@ -460,6 +474,7 @@ private fun ScrollAwareRangeEffect(
         provider.currentMinY = range.start
         provider.currentMaxY = range.endInclusive
         provider.currentTicks = ticks
+        onTargetRange(range.start, range.endInclusive)
         if (animMinY.value.isNaN()) {
           // First ever render — snap (no animation from NaN)
           animMinY.snapTo(range.start.toFloat())
@@ -494,6 +509,7 @@ private fun ScrollAwareRangeEffect(
 
           // iOS cross-fade approximation: swap ticks instantly
           provider.currentTicks = newTicks
+          onTargetRange(targetMinY.toDouble(), targetMaxY.toDouble())
 
           // Animate range — chart content scales smoothly
           val minJob = launch {
@@ -530,6 +546,8 @@ private class AnimatedYCartesianChartRanges(
   private val delegate: CartesianChartRanges,
   animMinY: Double,
   animMaxY: Double,
+  targetMinY: Double = animMinY,
+  targetMaxY: Double = animMaxY,
 ) : CartesianChartRanges {
   override val minX: Double get() = delegate.minX
   override val maxX: Double get() = delegate.maxX
@@ -542,5 +560,12 @@ private class AnimatedYCartesianChartRanges(
     override val length: Double = (animMaxY - animMinY).coerceAtLeast(1e-6)
   }
 
+  private val targetRange = object : CartesianChartRanges.YRange {
+    override val minY: Double = targetMinY
+    override val maxY: Double = targetMaxY
+    override val length: Double = (targetMaxY - targetMinY).coerceAtLeast(1e-6)
+  }
+
   override fun getYRange(axisPosition: Axis.Position.Vertical?): CartesianChartRanges.YRange = yRange
+  override fun getTargetYRange(axisPosition: Axis.Position.Vertical?): CartesianChartRanges.YRange = targetRange
 }
