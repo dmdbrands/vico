@@ -71,6 +71,13 @@ public class ScrollAwareRangeProvider(
   public var xRangeMin: Double = Double.NaN
   public var xRangeMax: Double = Double.NaN
 
+  // Seed Y range hint — used in getMinY/getMaxY before isCacheReady, eliminating frame-0
+  // flash on first load and segment switches. Supplied by the caller from the last settled
+  // range persisted in SegmentState, or from a synchronous initial-window computation.
+  // Falls through to Vico intrinsic range if NaN (default).
+  public var seedMinY: Double = Double.NaN
+  public var seedMaxY: Double = Double.NaN
+
   // Whether entries have been loaded at least once.
   internal var isCacheReady: Boolean = false
 
@@ -92,11 +99,16 @@ public class ScrollAwareRangeProvider(
   override fun getMaxX(minX: Double, maxX: Double, extraStore: ExtraStore): Double =
     if (!xRangeMax.isNaN()) xRangeMax else maxX
 
+  // Priority: animated current → seed hint (frame-0, segment switch) → Vico intrinsic (full dataset)
   override fun getMinY(minY: Double, maxY: Double, extraStore: ExtraStore): Double =
-    if (isCacheReady && !currentMinY.isNaN()) currentMinY else minY
+    if (isCacheReady && !currentMinY.isNaN()) currentMinY
+    else if (!seedMinY.isNaN()) seedMinY
+    else minY
 
   override fun getMaxY(minY: Double, maxY: Double, extraStore: ExtraStore): Double =
-    if (isCacheReady && !currentMaxY.isNaN()) currentMaxY else maxY
+    if (isCacheReady && !currentMaxY.isNaN()) currentMaxY
+    else if (!seedMaxY.isNaN()) seedMaxY
+    else maxY
 
   /**
    * Builds per-series entry lists + a merged sorted X array for binary search.
@@ -225,6 +237,8 @@ public fun rememberScrollAwareRangeProvider(
   animDurationMs: Int = 300,
   minX: Double = Double.NaN,
   maxX: Double = Double.NaN,
+  seedMinY: Double = Double.NaN,
+  seedMaxY: Double = Double.NaN,
   onVisibleEntries: (visibleEntries: List<List<Pair<Double, Double>>>, visibleXRange: ClosedRange<Double>) -> Pair<ClosedRange<Double>, List<Double>>,
 ): ScrollAwareRangeProvider {
   val callbackRef = rememberUpdatedState(onVisibleEntries)
@@ -235,5 +249,7 @@ public fun rememberScrollAwareRangeProvider(
   }
   provider.xRangeMin = minX
   provider.xRangeMax = maxX
+  provider.seedMinY = seedMinY
+  provider.seedMaxY = seedMaxY
   return provider
 }
