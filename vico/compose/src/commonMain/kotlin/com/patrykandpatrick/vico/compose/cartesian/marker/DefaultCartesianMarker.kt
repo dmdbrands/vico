@@ -51,7 +51,16 @@ import kotlin.math.min
  * @property labelPosition specifies the position of the label.
  * @property indicator returns a [Component] to be drawn at points with the given color.
  * @property indicatorSize the indicator size.
- * @property guideline drawn vertically through the marked points.
+ * @property guideline drawn vertically through the marked points (also used as the
+ *   horizontal crosshair line when [horizontalLabelPosition] is non-null).
+ * @property horizontalLabelPosition when non-null, the marker additionally draws a
+ *   horizontal crosshair line across the chart at the primary target's canvas-Y and
+ *   places a label anchored at this horizontal position (Start / Center / End).
+ *   Reuses [guideline] for the line and [label] for the text. Null (default) = the
+ *   marker behaves exactly as before — no crosshair.
+ * @property horizontalLabelFormatter formats the crosshair label. Fires with the same
+ *   per-series Y values passed to [yLabelCallback] plus the hovered X in data
+ *   coordinates. Return `null` to skip the label for this frame (line still draws).
  */
 public open class DefaultCartesianMarker(
   protected val label: TextComponent,
@@ -63,6 +72,8 @@ public open class DefaultCartesianMarker(
   protected val contentPadding: Insets = Insets.Zero,
   /** Callback invoked with interpolated Y values per series when marker is drawn. Used for chart header updates. */
   protected val yLabelCallback: ((List<List<Double>>) -> Unit)? = null,
+  protected val horizontalLabelPosition: Position.Horizontal? = null,
+  protected val horizontalLabelFormatter: ((List<List<Double>>, Double) -> CharSequence?)? = null,
 ) : CartesianMarker {
 
   protected val markerCornerBasedShape: MarkerCornerBasedShape? =
@@ -75,9 +86,18 @@ public open class DefaultCartesianMarker(
     targets: List<CartesianMarker.Target>,
   ) {
     with(context) {
+      // Per-series Y values — shared by yLabelCallback and the horizontal crosshair formatter.
+      val yValuesPerSeries: List<List<Double>> = targets.map { target ->
+        if (target is LineCartesianLayerMarkerTarget) target.points.map { it.entry.y }
+        else emptyList()
+      }
+      // Draw both crosshair lines first so indicators (dots) paint on top of the
+      // intersection — matches the vertical guideline's visual ordering so the
+      // hovered data point is never obscured by the crosshair.
       drawGuideline(targets)
-      val halfIndicatorSize = indicatorSize.pixels.half
+      drawHorizontalCrosshair(context, targets, yValuesPerSeries)
 
+      val halfIndicatorSize = indicatorSize.pixels.half
       targets.forEach { target ->
         when (target) {
           is CandlestickCartesianLayerMarkerTarget -> {
@@ -113,14 +133,69 @@ public open class DefaultCartesianMarker(
         }
       }
       // Invoke Y label callback with Y values per target (for chart header / metric info)
-      yLabelCallback?.invoke(
-        targets.map { target ->
-          if (target is LineCartesianLayerMarkerTarget) target.points.map { it.entry.y }
-          else emptyList()
-        }
-      )
+      yLabelCallback?.invoke(yValuesPerSeries)
       drawLabel(context, targets)
     }
+  }
+
+  /**
+   * Draws a horizontal crosshair line across the chart at the primary target's
+   * canvas-Y (first point of the first `LineCartesianLayerMarkerTarget` in [targets])
+   * and, optionally, a label at [horizontalLabelPosition]. No-op when
+   * [horizontalLabelPosition] is null, [guideline] is null, or no line target is
+   * present.
+   *
+   * The label text is supplied by [horizontalLabelFormatter] — callers may return
+   * `null` to suppress the label for that frame while still showing the line.
+   */
+  protected fun drawHorizontalCrosshair(
+    context: CartesianDrawingContext,
+    targets: List<CartesianMarker.Target>,
+    yValuesPerSeries: List<List<Double>>,
+  ): Unit = with(context) {
+    val labelPositionHorizontal = horizontalLabelPosition ?: return
+    val lineComponent = guideline ?: return
+    // Pick the *last* line layer's last point as the crosshair anchor — charts with
+    // background percentile bands (e.g. baby growth) push the bands as earlier layers
+    // and the real data line as the final one. `target.points[0]` would snap the line
+    // onto the lowest percentile band; `lastOrNull()` tracks the actual data line.
+    val primaryTarget = targets.lastOrNull { it is LineCartesianLayerMarkerTarget }
+      as? LineCartesianLayerMarkerTarget ?: return
+    val primaryY = primaryTarget.points.lastOrNull()?.canvasY ?: return
+
+    lineComponent.drawHorizontal(this, layerBounds.left, layerBounds.right, primaryY)
+
+    val text = horizontalLabelFormatter?.invoke(yValuesPerSeries, primaryTarget.x) ?: return
+    val labelBounds = label.getBounds(context, text, layerBounds.width.toInt())
+    // Anchor the label above the horizontal line by default. If it would clip the
+    // top of the chart, fall back to below the line so it stays visible.
+    val clippingFreeVerticalLabelPosition =
+      Position.Vertical.Top.inBounds(
+        bounds = layerBounds,
+        componentHeight = labelBounds.height,
+        referenceY = primaryY,
+        referenceDistance = lineComponent.thickness.pixels.half,
+      )
+    val labelY =
+      when (clippingFreeVerticalLabelPosition) {
+        Position.Vertical.Top -> primaryY - lineComponent.thickness.pixels.half
+        Position.Vertical.Center -> primaryY
+        Position.Vertical.Bottom -> primaryY + lineComponent.thickness.pixels.half
+      }
+    label.draw(
+      context = context,
+      text = text,
+      x =
+        when (labelPositionHorizontal) {
+          Position.Horizontal.Start -> layerBounds.getStart(isLtr)
+          Position.Horizontal.Center -> layerBounds.center.x
+          Position.Horizontal.End -> layerBounds.getEnd(isLtr)
+        },
+      y = labelY,
+      horizontalPosition = -labelPositionHorizontal,
+      verticalPosition = clippingFreeVerticalLabelPosition,
+      maxWidth = layerBounds.width.toInt(),
+    )
   }
 
   protected open fun CartesianDrawingContext.drawIndicator(
@@ -304,7 +379,8 @@ public open class DefaultCartesianMarker(
         labelPosition == other.labelPosition &&
         indicator == other.indicator &&
         indicatorSize == other.indicatorSize &&
-        guideline == other.guideline
+        guideline == other.guideline &&
+        horizontalLabelPosition == other.horizontalLabelPosition
 
   override fun hashCode(): Int {
     var result = label.hashCode()
@@ -313,6 +389,7 @@ public open class DefaultCartesianMarker(
     result = 31 * result + indicator.hashCode()
     result = 31 * result + indicatorSize.hashCode()
     result = 31 * result + guideline.hashCode()
+    result = 31 * result + horizontalLabelPosition.hashCode()
     return result
   }
 
@@ -473,9 +550,12 @@ public fun rememberDefaultCartesianMarker(
   guideline: LineComponent? = null,
   contentPadding: Insets = Insets.Zero,
   yLabelCallback: ((List<List<Double>>) -> Unit)? = null,
+  horizontalLabelPosition: Position.Horizontal? = null,
+  horizontalLabelFormatter: ((List<List<Double>>, Double) -> CharSequence?)? = null,
 ): DefaultCartesianMarker {
   val callbackRef = rememberUpdatedState(yLabelCallback)
-  return remember(label, valueFormatter, labelPosition, indicator, indicatorSize, guideline, contentPadding) {
+  val horizontalFormatterRef = rememberUpdatedState(horizontalLabelFormatter)
+  return remember(label, valueFormatter, labelPosition, indicator, indicatorSize, guideline, contentPadding, horizontalLabelPosition) {
     DefaultCartesianMarker(
       label = label,
       valueFormatter = valueFormatter,
@@ -485,6 +565,8 @@ public fun rememberDefaultCartesianMarker(
       guideline = guideline,
       contentPadding = contentPadding,
       yLabelCallback = { values -> callbackRef.value?.invoke(values) },
+      horizontalLabelPosition = horizontalLabelPosition,
+      horizontalLabelFormatter = { values, x -> horizontalFormatterRef.value?.invoke(values, x) },
     )
   }
 }
