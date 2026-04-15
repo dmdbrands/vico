@@ -283,11 +283,16 @@ internal fun CartesianChartHostImpl(
                 // Pass tap X and ALL marker target X values to consumer.
                 // Even when narrowedTargets is empty (no data points in window),
                 // consumer can still handle it (e.g., snap to nearest label).
-                // clickX is null when the touch projects outside the data's X range
-                // (e.g., scrubbing past the first/last data point into padded/empty
-                // chart area) — consumers already treat null as "no valid X".
+                // clickX is null when the touch projects outside the data's own X
+                // range (i.e., past the first or last entry's X). `ranges.minX/maxX`
+                // can include chart padding / nice-scale headroom that the consumer
+                // doesn't consider "real data", so we compare against the actual
+                // marker-target Xs instead.
                 val allTargetXValues = chart.allMarkerTargetXValues
-                val clickX = x.takeIf { it in ranges.minX..ranges.maxX }
+                val clickX = when {
+                  allTargetXValues.isEmpty() -> null
+                  else -> x.takeIf { it in allTargetXValues.min()..allTargetXValues.max() }
+                }
                 val userMarkerX = scrubCallback(clickX, allTargetXValues)
                 if (userMarkerX != null) {
                   markerX = userMarkerX

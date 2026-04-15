@@ -53,6 +53,16 @@ public class VicoScrollState {
 
   /** Whether the chart is currently being scrolled by the user. */
   public val isScrolling: Boolean get() = scrollableState.isScrollInProgress
+
+  /**
+   * True only while the user is actively scrolling the chart — the scroll
+   * position is changing. Distinct from [isScrolling], which also returns
+   * true during a marker scrub (the underlying `ScrollableState` stays
+   * active so `nestedScroll` blocks a parent `LazyColumn`, even though the
+   * position is frozen). Use this when you want to treat scrolling and
+   * scrubbing as separate concerns.
+   */
+  public val isUserScrolling: Boolean get() = isScrolling && !isScrollFrozen
   private var layerDimensions: CartesianLayerDimensions? = null
   private var bounds: Rect? = null
   /** Converts a data X value to a scroll pixel value. Returns null if context not ready. */
