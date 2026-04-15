@@ -47,7 +47,7 @@ public class VicoScrollState {
   private val autoScrollAnimationSpec: AnimationSpec<Float>
   private val _value: MutableFloatState
   private val _maxValue = mutableFloatStateOf(0f)
-  private var initialScrollHandled: Boolean
+  internal var initialScrollHandled: Boolean
   private var context: CartesianMeasuringContext? = null
   internal var drawingContext: CartesianDrawingContext? = null
 

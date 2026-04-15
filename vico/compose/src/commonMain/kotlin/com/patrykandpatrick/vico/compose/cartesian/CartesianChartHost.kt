@@ -83,18 +83,29 @@ public fun CartesianChartHost(
   var animatedMaxY by remember { mutableStateOf(Double.NaN) }
   var targetMinY by remember { mutableStateOf(Double.NaN) }
   var targetMaxY by remember { mutableStateOf(Double.NaN) }
-  val hasValidAnimatedRange = !animatedMinY.isNaN() && !animatedMaxY.isNaN()
   val isInitialRangesReady = initialRanges !== CartesianChartRanges.Empty
 
-  val hasScrollAwareProvider = remember(chart) {
-    chart.layers.any { it is LineCartesianLayer && it.internalRangeProvider is ScrollAwareRangeProvider }
+  val firstScrollAwareProvider = remember(chart) {
+    chart.layers.mapNotNull {
+      (it as? LineCartesianLayer)?.internalRangeProvider as? ScrollAwareRangeProvider
+    }.firstOrNull()
   }
+  val hasScrollAwareProvider = firstScrollAwareProvider != null
+
+  // Seed fallback: when animated range not yet established (first frame with model data),
+  // use provider.seedMinY/seedMaxY set synchronously from SegmentState each recomposition.
+  // Eliminates the 1-2 frame flash of full-model Y range on initial ViewModel creation.
+  val effectiveMinY = if (!animatedMinY.isNaN()) animatedMinY
+    else firstScrollAwareProvider?.seedMinY?.takeIf { !it.isNaN() } ?: Double.NaN
+  val effectiveMaxY = if (!animatedMaxY.isNaN()) animatedMaxY
+    else firstScrollAwareProvider?.seedMaxY?.takeIf { !it.isNaN() } ?: Double.NaN
+  val hasValidAnimatedRange = !effectiveMinY.isNaN() && !effectiveMaxY.isNaN()
 
   val ranges = if (hasValidAnimatedRange && isInitialRangesReady) {
     AnimatedYCartesianChartRanges(
-      initialRanges, animatedMinY, animatedMaxY,
-      if (!targetMinY.isNaN()) targetMinY else animatedMinY,
-      if (!targetMaxY.isNaN()) targetMaxY else animatedMaxY,
+      initialRanges, effectiveMinY, effectiveMaxY,
+      if (!targetMinY.isNaN()) targetMinY else effectiveMinY,
+      if (!targetMaxY.isNaN()) targetMaxY else effectiveMaxY,
     )
   } else {
     initialRanges
@@ -351,6 +362,20 @@ internal fun CartesianChartHostImpl(
   ) {
     if (size.isEmpty()) return@Canvas
     measuringContext.value.canvasSize = size
+
+    // Two-pass prepare on the very first draw so VerticalAxis.updateHorizontalLayerMargins
+    // sees the post-initialScroll scroll value. Without this, Size.Scroll axes compute
+    // effectiveWidth using scrollValue=0 on Frame 1 (initialScroll not yet applied),
+    // producing a cutoff that resolves on Frame 2 once the scroll is stable.
+    if (!scrollState.initialScrollHandled) {
+      layerDimensions.clear()
+      (chart.startAxis as? VerticalAxis<*>)?.updateScrollState(scrollState.value, scrollState.maxValue)
+      (chart.endAxis as? VerticalAxis<*>)?.updateScrollState(scrollState.value, scrollState.maxValue)
+      chart.prepare(measuringContext.value, layerDimensions)
+      if (!chart.layerBounds.isEmpty) {
+        scrollState.update(measuringContext.value, chart.layerBounds, layerDimensions)
+      }
+    }
 
     layerDimensions.clear()
     (chart.startAxis as? VerticalAxis<*>)?.updateScrollState(scrollState.value, scrollState.maxValue)
