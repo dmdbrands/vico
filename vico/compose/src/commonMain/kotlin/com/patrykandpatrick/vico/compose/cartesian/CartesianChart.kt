@@ -486,14 +486,18 @@ internal constructor(
     // Out of visible bounds — don't synthesize
     if (canvasX < layerBounds.left - 1 || canvasX > layerBounds.right + 1) return emptyList()
 
-    val target = MutableLineCartesianLayerMarkerTarget(x, canvasX)
-
-    val lineLayer = layers.firstOrNull { it is LineCartesianLayer } as? LineCartesianLayer
-    val yRange = ranges.getYRange(lineLayer?.internalVerticalAxisPosition)
-
-    // Interpolate Y values for label display, but mark as interpolated (no indicator dot)
-    for (layerModel in context.model.models) {
+    // Create one target PER enabled layer — matches the real-data path where each
+    // layer adds targets independently via updateMarkerTargets(). Layers with
+    // markerTargetsEnabled = false (e.g. CDC percentile bands) are skipped entirely.
+    val result = mutableListOf<CartesianMarker.Target>()
+    for ((layerIndex, layerModel) in context.model.models.withIndex()) {
       if (layerModel !is LineCartesianLayerModel) continue
+      val layer = layers.getOrNull(layerIndex) as? LineCartesianLayer ?: continue
+      if (!layer.markerTargetsEnabled) continue
+
+      val yRange = ranges.getYRange(layer.internalVerticalAxisPosition)
+      val target = MutableLineCartesianLayerMarkerTarget(x, canvasX)
+
       for ((_, series) in layerModel.series.withIndex()) {
         val interpolatedY = MonotoneInterpolator.getYAtXFromEntries(x, series) ?: continue
         val canvasY = layerBounds.bottom -
@@ -506,9 +510,10 @@ internal constructor(
           isInterpolated = true,
         )
       }
+      if (target.points.isNotEmpty()) result += target
     }
 
-    return if (target.points.isNotEmpty()) listOf(target) else emptyList()
+    return result
   }
 
   protected inline fun <reified T : CartesianLayerModel> MutableList<CartesianLayerModel>.consume(
