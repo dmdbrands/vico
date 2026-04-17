@@ -22,6 +22,9 @@ import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.withLock
 
 /** Creates [CartesianChartModel]s and handles difference animations. */
@@ -32,6 +35,15 @@ public class CartesianChartModelProducer {
   private var cachedModelPartialHashCode: Int? = null
   private val mutex = Mutex()
   private val updateReceivers = mutableMapOf<Any, UpdateReceiver>()
+
+  private val _isReady = MutableStateFlow(false)
+
+  /**
+   * True after the first successful [runTransaction] produces a non-null model.
+   * Consumers collect this to know when the chart has data and is ready to render
+   * (e.g., to dismiss a shimmer/skeleton loading state).
+   */
+  public val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
 
   private suspend fun update(
     partials: List<CartesianLayerModel.Partial>,
@@ -65,6 +77,7 @@ public class CartesianChartModelProducer {
       .also { model ->
         cachedModel = model
         cachedModelPartialHashCode = partials.hashCode()
+        if (model != null && !_isReady.value) _isReady.value = true
       }
 
   private suspend fun transform(
