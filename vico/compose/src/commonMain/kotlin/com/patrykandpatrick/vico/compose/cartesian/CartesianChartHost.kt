@@ -71,6 +71,7 @@ public fun CartesianChartHost(
   flingBehavior: FlingBehavior? = null,
   animationSpec: AnimationSpec<Float>? = defaultCartesianDiffAnimationSpec,
   animateIn: Boolean = true,
+  initialMarkerX: Double? = null,
   placeholder: @Composable BoxScope.() -> Unit = {},
 ) {
   val mutableRanges = remember { MutableCartesianChartRanges() }
@@ -138,6 +139,7 @@ public fun CartesianChartHost(
         previousModel,
         extraStore,
         flingBehavior,
+        initialMarkerX,
       )
     } else {
       placeholder()
@@ -164,6 +166,7 @@ public fun CartesianChartHost(
   modifier: Modifier = Modifier,
   scrollState: VicoScrollState = rememberVicoScrollState(),
   zoomState: VicoZoomState = rememberDefaultVicoZoomState(scrollState.scrollEnabled),
+  initialMarkerX: Double? = null,
 ) {
   val ranges = remember { MutableCartesianChartRanges() }
   remember(chart, model) {
@@ -171,7 +174,7 @@ public fun CartesianChartHost(
     chart.updateRanges(ranges, model)
   }
   CartesianChartHostBox(modifier) {
-    CartesianChartHostImpl(chart, model, scrollState, zoomState, ranges.toImmutable())
+    CartesianChartHostImpl(chart, model, scrollState, zoomState, ranges.toImmutable(), initialMarkerX = initialMarkerX)
   }
 }
 
@@ -185,6 +188,7 @@ internal fun CartesianChartHostImpl(
   previousModel: CartesianChartModel? = null,
   extraStore: ExtraStore = ExtraStore.Empty,
   flingBehavior: FlingBehavior? = null,
+  initialMarkerX: Double? = null,
 ) {
   var markerX by rememberSaveable { mutableStateOf<Double?>(null) }
   var markerSeriesIndex by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -193,10 +197,19 @@ internal fun CartesianChartHostImpl(
 
   val scrubController = chart.markerController as? ScrubMarkerController
 
-  // Dismiss marker on scroll start — Modifier.kt sets hasActiveMarker=false via onDismiss().
-  // Observe the state change to clear host's markerX.
+  // Restore or clear marker on first composition based on caller's state.
+  // initialMarkerX is the source of truth from the ViewModel — it overrides
+  // any stale value that rememberSaveable may have preserved.
   if (scrubController != null) {
     LaunchedEffect(Unit) {
+      if (initialMarkerX != null) {
+        // Caller has a marker — restore if saveable lost it, then activate
+        if (markerX == null) markerX = initialMarkerX
+        scrubController.hasActiveMarker = true
+      } else if (markerX != null) {
+        // Caller says no marker — clear stale saveable value (e.g. segment switch)
+        markerX = null
+      }
       snapshotFlow { scrubController.hasActiveMarker }
         .collect { active ->
           if (!active && markerX != null) {
