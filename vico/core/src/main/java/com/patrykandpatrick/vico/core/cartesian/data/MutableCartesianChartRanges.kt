@@ -61,12 +61,12 @@ public class MutableCartesianChartRanges : CartesianChartRanges {
     }
   }
 
-  /** Clears all values. */
+  /** Clears all values. Preserves [xStep] to avoid a race where label generation runs before
+   *  [com.patrykandpatrick.vico.core.cartesian.CartesianChart.updateRanges] sets the correct step. */
   public fun reset() {
     _minX = null
     _maxX = null
     yRanges = mutableMapOf()
-    xStep = 1.0
   }
 
   /** A mutable implementation of [CartesianChartRanges.YRange]. */

@@ -28,6 +28,7 @@ import kotlin.math.floor
 
 private const val LABEL_OVERFLOW_SIZE = 2
 private const val SEGMENTED_TICK_OVERFLOW_SIZE = 1
+private const val MAX_LABEL_COUNT = 500
 
 private val CartesianChartRanges.measuredLabelValues
   get() = buildList {
@@ -49,7 +50,9 @@ private fun CartesianDrawingContext.getLabelValues(
   val values = mutableListOf<Double>()
   var multiplier = -LABEL_OVERFLOW_SIZE
   var hasEndOverflow = false
+  var iterations = 0
   while (true) {
+    if (++iterations > MAX_LABEL_COUNT) break
     var potentialValue = firstValue + multiplier++ * spacing * ranges.xStep
     potentialValue =
       ranges.xStep * ((potentialValue - minXOffset) / ranges.xStep).roundedToNearest + minXOffset
