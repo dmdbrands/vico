@@ -19,6 +19,7 @@ package com.patrykandpatrick.vico.core.cartesian
 import android.graphics.RectF
 import androidx.annotation.RestrictTo
 import com.patrykandpatrick.vico.core.cartesian.Scroll.Absolute
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianRangeValues
 import com.patrykandpatrick.vico.core.cartesian.layer.CartesianLayerDimensions
 
 /** Represents a [CartesianChart] scroll value or delta. */
@@ -59,20 +60,37 @@ public sealed interface Scroll {
         }
 
       /**
-       * Scrolls to the specified _x_ coordinate with padding applied: the actual scroll target
-       * is [x] minus [paddingXStep] × xStep (e.g. x=50, paddingXStep=0.2 → scroll to 49.8).
-       * Position is adjusted by [bias] between start edge (0) and end edge (1).
+       * Scrolls to the specified _x_ coordinate with a padding offset, so [x] appears at
+       * [paddingXStep] distance from the start edge of the chart, where [paddingXStep] is in
+       * units of xStep (e.g. 0.5 = half a step from edge). Position is adjusted by [bias]
+       * between start edge (0) and end edge (1).
+       *
+       * Padding is applied as a pixel-space offset (paddingXStep × xSpacing) and does not
+       * depend on the chart's data range, so this is safe even when the data range is
+       * degenerate (single-window state, empty data, or transient layout passes before the
+       * model producer commits a real range).
+       *
+       * Optionally accepts preset [ranges] / [xStep] — mirrors the `ranges` parameter on
+       * [com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel]'s
+       * `series` builder. When provided, `ranges.minX` and [xStep] are used in place of
+       * `context.ranges.minX` and `context.ranges.xStep`. Useful for `VicoScrollState.initialScroll`
+       * so the lambda can compute a stable scroll position on the first layout pass —
+       * before the model producer commits.
        */
-      public fun xWithPadding(x: Double, paddingXStep: Double, bias: Float = 0f): Absolute =
+      public fun xWithPadding(
+        x: Double,
+        paddingXStep: Double,
+        bias: Float = 0f,
+        ranges: CartesianRangeValues? = null,
+        xStep: Double? = null,
+      ): Absolute =
         Absolute { context, layerDimensions, bounds, _ ->
-          val effectiveX =
-            (x - paddingXStep * context.ranges.xStep).coerceIn(
-              context.ranges.minX,
-              context.ranges.maxX,
-            )
+          val minX = ranges?.minX ?: context.ranges.minX
+          val resolvedXStep = xStep ?: context.ranges.xStep
           layerDimensions.startPadding +
-            ((effectiveX - context.ranges.minX) / context.ranges.xStep).toFloat() *
-              layerDimensions.xSpacing - bias * bounds.width()
+            ((x - minX) / resolvedXStep).toFloat() * layerDimensions.xSpacing -
+            (paddingXStep * layerDimensions.xSpacing).toFloat() -
+            bias * bounds.width()
         }
 
       // Cache for stable scroll positions to prevent recreation
