@@ -182,6 +182,12 @@ public class ScrollAwareRangeProvider(
     val visibleXStart = info.visibleXStart
     val visibleXEnd = info.visibleXEnd
 
+    // Guard: visible window must overlap the data domain. Without this, a scroll position
+    // beyond the last data point causes binarySearchInsertionPoint to return `size`, which
+    // coerceIn clamps to lastIndex — returning entries at the data boundary as "visible"
+    // even though the actual viewport contains no data (e.g. xRangeMax padding region).
+    if (visibleXEnd < sortedXValues.first() || visibleXStart > sortedXValues.last()) return null
+
     // Binary search on merged X values for window bounds
     var startIndex = sortedXValues.binarySearchInsertionPoint(visibleXStart)
     var endIndex = sortedXValues.binarySearchInsertionPoint(visibleXEnd)
