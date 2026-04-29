@@ -507,7 +507,7 @@ protected constructor(
   // to a single screen position.
   private var transformCacheResult: DoubleArray? = null
   private var transformIndexMap: Map<Double, Int>? = null
-  private var transformLastSeriesKey: Long = 0L
+  private var transformLastSeriesKey: Long? = null
   private var transformLastTargetKey: Long = 0L
 
   // Cross-fade state machine (mirrors vico 4): when the animation target yRange changes, the
@@ -780,7 +780,7 @@ protected constructor(
     val transform = yTransform ?: return
     val series = model.series.firstOrNull() ?: return
     val seriesKey = series.hashCode().toLong()
-    val seriesChanged = transformLastSeriesKey != 0L && transformLastSeriesKey != seriesKey
+    val seriesChanged = transformLastSeriesKey != null && transformLastSeriesKey != seriesKey
 
     val yRange = ranges.getYRange(verticalAxisPosition)
     val targetYRange = ranges.getTargetYRange(verticalAxisPosition)

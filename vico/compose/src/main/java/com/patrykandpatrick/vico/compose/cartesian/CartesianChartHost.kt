@@ -477,8 +477,9 @@ private fun ScrollAwareRangeEffect(
       var isFirstScrollUpdate by remember { mutableStateOf(true) }
 
       // (1) Rebuild cache on model change. Animatables are NOT reset — they animate
-      // smoothly from old range to new range when data changes.
-      LaunchedEffect(model) {
+      // smoothly from old range to new range when data changes. `layer` is keyed too so a
+      // layer reorder without a model change rebinds to the new index correctly.
+      LaunchedEffect(model, layer) {
         val layerModel =
           model.models.getOrNull(layerIndex) as? com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel
             ?: return@LaunchedEffect
@@ -609,8 +610,14 @@ private class AnimatedYCartesianChartRanges(
     override val length: Double = (targetMaxY - targetMinY).coerceAtLeast(1e-6)
   }
 
+  // The animated range represents the chart's primary Y scale. It applies to:
+  // (a) null queries — the "default / primary axis" semantic that downstream callers like
+  //     MonotonePointConnector use; routing these to the delegate would let line geometry
+  //     draw against the snapshot range while the layer scales against the animated one.
+  // (b) queries whose axisPosition matches the scroll-aware layer's verticalAxisPosition.
+  // All other non-null positions belong to a different axis and are delegated unchanged.
   private fun appliesTo(axisPosition: Axis.Position.Vertical?): Boolean =
-    axisPosition == targetAxisPosition
+    axisPosition == null || axisPosition == targetAxisPosition
 
   override fun getYRange(axisPosition: Axis.Position.Vertical?): CartesianChartRanges.YRange =
     if (appliesTo(axisPosition)) yRange else delegate.getYRange(axisPosition)
