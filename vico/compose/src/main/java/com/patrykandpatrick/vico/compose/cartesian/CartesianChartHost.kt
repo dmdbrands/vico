@@ -501,6 +501,20 @@ private fun ScrollAwareRangeEffect(
             launch { animMinY.animateTo(range.start.toFloat(), tween(provider.animDurationMs)) }
             launch { animMaxY.animateTo(range.endInclusive.toFloat(), tween(provider.animDurationMs)) }
           }
+        } else if (provider.currentTicks.isEmpty() &&
+          !provider.seedMinY.isNaN() &&
+          !provider.seedMaxY.isNaN() &&
+          provider.seedMaxY > provider.seedMinY
+        ) {
+          // First-pass fallback: visible-entries lookup returned null (e.g. cached ScrollInfo
+          // from before the model loaded, or no entry inside the bracketed window). Seed the
+          // tick list from `seedMinY/MaxY` so the axis renders labels and downstream code
+          // (e.g. `ListItemPlacer`) doesn't see an empty list. Subsequent scroll/data emits
+          // will replace these via block (2).
+          val span = provider.seedMaxY - provider.seedMinY
+          val count = 4
+          provider.currentTicks =
+            (0 until count).map { i -> provider.seedMinY + span * i / (count - 1) }
         }
         isFirstScrollUpdate = false
       }

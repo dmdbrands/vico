@@ -71,7 +71,17 @@ public class ListItemPlacer(
     position: Axis.Position.Vertical,
   ): List<Double> {
     val yRange = context.ranges.getYRange(position)
-    return getFilteredTicks(yRange.minY, yRange.maxY)
+    val filtered = getFilteredTicks(yRange.minY, yRange.maxY)
+    // Fallback: if ticks() hasn't been populated yet (race between first scroll-info emit and
+    // model load), synthesize evenly spaced ticks from the live yRange so the axis still
+    // renders labels. Prevents the "blank chart" appearance for charts whose
+    // ScrollAwareRangeEffect hasn't completed its first pass (e.g. YEAR with a single entry).
+    if (filtered.isNotEmpty()) return filtered
+    if (!yRange.minY.isFinite() || !yRange.maxY.isFinite()) return emptyList()
+    val span = yRange.maxY - yRange.minY
+    if (span <= 0.0) return listOf(yRange.minY)
+    val count = 4
+    return (0 until count).map { i -> yRange.minY + span * i / (count - 1) }
   }
 
   override fun getWidthMeasurementLabelValues(
