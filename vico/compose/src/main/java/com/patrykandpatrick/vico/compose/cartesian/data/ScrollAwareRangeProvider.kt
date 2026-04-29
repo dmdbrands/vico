@@ -169,6 +169,7 @@ public class ScrollAwareRangeProvider(
     sortedXValues = allX.toDoubleArray().also { it.sort() }
     isCacheReady = true
     lastVisibleStartIndex = -1
+    lastVisibleEndIndex = -1
   }
 
   /**
@@ -177,7 +178,7 @@ public class ScrollAwareRangeProvider(
    * Returns null if not ready or no entries in visible range.
    */
   internal fun computeVisibleEntries(info: ScrollInfo): List<List<Pair<Double, Double>>>? {
-    if (!isCacheReady || allSeriesEntries.isEmpty() || info.xSpacing <= 0f) return null
+    if (!isCacheReady || allSeriesEntries.isEmpty() || sortedXValues.isEmpty() || info.xSpacing <= 0f) return null
 
     val visibleXStart = info.visibleXStart
     val visibleXEnd = info.visibleXEnd

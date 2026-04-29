@@ -486,42 +486,49 @@ private fun ScrollAwareRangeEffect(
         provider.buildCache(layerModel.series)
 
         isFirstScrollUpdate = true
-        val firstInfo = provider.scrollUpdates.first()
-        val visibleEntries = provider.computeVisibleEntries(firstInfo)
-        val xRange = firstInfo.visibleXStart..firstInfo.visibleXEnd
-        val result = visibleEntries?.let { provider.computeDisplayRange(it, xRange) }
-        if (result != null) {
-          val (range, ticks) = result
-          provider.currentMinY = range.start
-          provider.currentMaxY = range.endInclusive
-          provider.currentTicks = ticks
-          provider.targetMinY = range.start
-          provider.targetMaxY = range.endInclusive
-          onTargetRange(range.start, range.endInclusive)
-          if (animMinY.value.isNaN()) {
-            animMinY.snapTo(range.start.toFloat())
-            animMaxY.snapTo(range.endInclusive.toFloat())
-            onAnimatedRange(range.start, range.endInclusive)
-          } else {
-            launch { animMinY.animateTo(range.start.toFloat(), tween(provider.animDurationMs)) }
-            launch { animMaxY.animateTo(range.endInclusive.toFloat(), tween(provider.animDurationMs)) }
+        try {
+          val firstInfo = provider.scrollUpdates.first()
+          val visibleEntries = provider.computeVisibleEntries(firstInfo)
+          val xRange = firstInfo.visibleXStart..firstInfo.visibleXEnd
+          val result = visibleEntries?.let { provider.computeDisplayRange(it, xRange) }
+          if (result != null) {
+            val (range, ticks) = result
+            provider.currentMinY = range.start
+            provider.currentMaxY = range.endInclusive
+            provider.currentTicks = ticks
+            provider.targetMinY = range.start
+            provider.targetMaxY = range.endInclusive
+            onTargetRange(range.start, range.endInclusive)
+            if (animMinY.value.isNaN()) {
+              animMinY.snapTo(range.start.toFloat())
+              animMaxY.snapTo(range.endInclusive.toFloat())
+              onAnimatedRange(range.start, range.endInclusive)
+            } else {
+              launch { animMinY.animateTo(range.start.toFloat(), tween(provider.animDurationMs)) }
+              launch { animMaxY.animateTo(range.endInclusive.toFloat(), tween(provider.animDurationMs)) }
+            }
+          } else if (provider.currentTicks.isEmpty() &&
+            !provider.seedMinY.isNaN() &&
+            !provider.seedMaxY.isNaN() &&
+            provider.seedMaxY > provider.seedMinY
+          ) {
+            // First-pass fallback: visible-entries lookup returned null (e.g. cached ScrollInfo
+            // from before the model loaded, or no entry inside the bracketed window). Seed the
+            // tick list from `seedMinY/MaxY` so the axis renders labels and downstream code
+            // (e.g. `ListItemPlacer`) doesn't see an empty list. Subsequent scroll/data emits
+            // will replace these via block (2).
+            val span = provider.seedMaxY - provider.seedMinY
+            val count = 4
+            provider.currentTicks =
+              (0 until count).map { i -> provider.seedMinY + span * i / (count - 1) }
           }
-        } else if (provider.currentTicks.isEmpty() &&
-          !provider.seedMinY.isNaN() &&
-          !provider.seedMaxY.isNaN() &&
-          provider.seedMaxY > provider.seedMinY
-        ) {
-          // First-pass fallback: visible-entries lookup returned null (e.g. cached ScrollInfo
-          // from before the model loaded, or no entry inside the bracketed window). Seed the
-          // tick list from `seedMinY/MaxY` so the axis renders labels and downstream code
-          // (e.g. `ListItemPlacer`) doesn't see an empty list. Subsequent scroll/data emits
-          // will replace these via block (2).
-          val span = provider.seedMaxY - provider.seedMinY
-          val count = 4
-          provider.currentTicks =
-            (0 until count).map { i -> provider.seedMinY + span * i / (count - 1) }
+        } finally {
+          // Always clear the gate — even if cancelled mid-flight (e.g. rapid model switch
+          // kills this coroutine before scrollUpdates.first() returns). Without this,
+          // isFirstScrollUpdate stays true permanently and LaunchedEffect(provider)'s
+          // scroll collector skips every subsequent event.
+          isFirstScrollUpdate = false
         }
-        isFirstScrollUpdate = false
       }
 
       // (2) Subsequent scroll events — debounced + animated.
