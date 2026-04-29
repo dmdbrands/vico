@@ -296,13 +296,21 @@ public class VicoScrollState {
     this.context = context
     this.layerDimensions = layerDimensions
     this.bounds = bounds
+    val prevMaxValue = maxValue
     maxValue = context.getMaxScrollDistance(bounds.width(), layerDimensions)
-    if (!initialScrollHandled) {
+    // Re-apply initialScroll on first measure, OR when the chart's scrollable extent changes
+    // out from under us (e.g. layer added/removed, layer dimensions shifted). Mirrors vico 4
+    // exactly. The `prevMaxValue > 0f` guard avoids re-applying during the very first measure
+    // (when prevMaxValue is still the constructor default 0f); the `!isScrollInProgress` guard
+    // avoids fighting an in-flight user fling.
+    if (
+      !initialScrollHandled ||
+        (prevMaxValue != maxValue && prevMaxValue > 0f && !scrollableState.isScrollInProgress)
+    ) {
       value = initialScroll.getValue(context, layerDimensions, bounds, maxValue)
       initialScrollHandled = true
-      // Don't emit visible range on initial setup
     } else {
-        emitVisibleRange(context, layerDimensions, bounds)
+      emitVisibleRange(context, layerDimensions, bounds)
     }
   }
 
@@ -492,7 +500,15 @@ public class VicoScrollState {
   }
 }
 
-/** Creates and remembers a [VicoScrollState] instance. */
+/**
+ * Creates and remembers a [VicoScrollState] instance.
+ *
+ * @param key opaque caller-supplied identity key for the saver. Pass a stable value (e.g. the
+ * current segment / page identifier) so scroll-state lifetime is decoupled from per-recomposition
+ * identity churn of [initialScroll] / [snapBehaviorConfig] / [scrollEnabled]. When `key` is
+ * unchanged, the state is preserved even if those other inputs change reference. Mirrors vico
+ * 4's `rememberVicoScrollState(key = ...)` pattern.
+ */
 @Composable
 public fun rememberVicoScrollState(
   scrollEnabled: Boolean = true,
@@ -502,10 +518,10 @@ public fun rememberVicoScrollState(
   autoScrollAnimationSpec: AnimationSpec<Float> = spring(),
   snapBehaviorConfig: SnapBehaviorConfig? = null,
   scrollStartPaddingXStep: Double = 0.0,
-  key: Any? = null, // Add key parameter to force recreation
+  key: Any? = null,
 ): VicoScrollState =
   rememberSaveable(
-    key, // Use key as the primary cache key
+    key,
     scrollEnabled,
     initialScroll,
     autoScroll,
@@ -514,7 +530,7 @@ public fun rememberVicoScrollState(
     snapBehaviorConfig,
     scrollStartPaddingXStep,
     saver =
-      remember(scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec, snapBehaviorConfig, scrollStartPaddingXStep, key) {
+      remember(key, scrollEnabled, initialScroll, autoScrollCondition, autoScrollAnimationSpec, snapBehaviorConfig, scrollStartPaddingXStep) {
         VicoScrollState.Saver(
           scrollEnabled,
           initialScroll,

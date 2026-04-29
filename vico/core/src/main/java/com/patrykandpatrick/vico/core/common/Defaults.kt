@@ -24,6 +24,8 @@ public object Animation {
   public val range: ClosedFloatingPointRange<Float> = 0f..1f
   public const val DIFF_DURATION: Int = 500
   public const val ANIMATED_SCROLL_DURATION: Int = 300
+  /** Default duration for `ScrollAwareRangeProvider`'s Y range animation. */
+  public const val RANGE_ANIM_DURATION: Int = 300
 }
 
 /** @suppress */

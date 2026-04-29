@@ -44,6 +44,16 @@ public interface CartesianLayerRangeProvider {
   public fun getMaxY(minY: Double, maxY: Double, extraStore: ExtraStore): Double =
     if (minY == 0.0 && maxY == 0.0) 1.0 else maxY
 
+  /**
+   * Whether this provider's Y range can change between draw frames (e.g. driven by scroll
+   * or animation). When `true`, line layers skip their cached drawing model and recompute
+   * point positions from the live `chartRanges.getYRange(...)` on each frame, so the line
+   * follows an animated Y range instead of being frozen at the range that was active when
+   * `prepareForTransformation` ran. Default `false`.
+   */
+  public val alwaysUseLiveRange: Boolean
+    get() = false
+
   public companion object {
     private object Auto : CartesianLayerRangeProvider {
       override fun getMinY(minY: Double, maxY: Double, extraStore: ExtraStore) =

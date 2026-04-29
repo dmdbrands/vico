@@ -37,6 +37,15 @@ public interface CartesianChartRanges {
    */
   public fun getYRange(axisPosition: Axis.Position.Vertical?): YRange
 
+  /**
+   * Returns the **animation-target** [YRange]. When the chart's Y range is animated (e.g. via
+   * `ScrollAwareRangeProvider` + the animated chart-ranges wrapper), this returns the value the
+   * animation is heading toward; otherwise it returns the same value as [getYRange]. Used by
+   * [com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer]'s `yTransform` to detect
+   * that a new transform pass is needed without recomputing on every draw frame.
+   */
+  public fun getTargetYRange(axisPosition: Axis.Position.Vertical?): YRange = getYRange(axisPosition)
+
   /** The difference between [maxX] and [minX]. */
   public val xLength: Double
     get() = maxX - minX

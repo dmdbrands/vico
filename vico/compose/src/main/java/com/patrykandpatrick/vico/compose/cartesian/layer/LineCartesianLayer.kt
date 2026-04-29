@@ -25,9 +25,11 @@ import androidx.compose.ui.unit.dp
 import com.patrykandpatrick.vico.compose.common.fill
 import com.patrykandpatrick.vico.compose.common.vicoTheme
 import com.patrykandpatrick.vico.core.cartesian.axis.Axis
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerDrawingModel
+import com.patrykandpatrick.vico.core.cartesian.data.LineCartesianLayerModel
 import com.patrykandpatrick.vico.core.cartesian.layer.LineCartesianLayer
 import com.patrykandpatrick.vico.core.common.Defaults
 import com.patrykandpatrick.vico.core.common.Position
@@ -38,7 +40,18 @@ import com.patrykandpatrick.vico.core.common.data.CartesianLayerDrawingModelInte
 import com.patrykandpatrick.vico.core.common.getValue
 import com.patrykandpatrick.vico.core.common.setValue
 
-/** Creates and remembers a [LineCartesianLayer]. */
+/**
+ * Creates and remembers a [LineCartesianLayer].
+ *
+ * @param yTransform optional render-time Y transform. Receives the full series, the chart's
+ *   animation-target `yRange`, and the visible X range. Returns a `DoubleArray` of transformed
+ *   Y values. Use this for a secondary metric line that needs to render in the primary's Y
+ *   space — output is cached and rendered against the live (animated) yRange so the line
+ *   tracks the primary's range animation naturally.
+ * @param alwaysUseLiveRange when `true`, the layer skips its cached drawing model and recomputes
+ *   line positions from the live `chartRanges.getYRange(...)` on every frame. Required when
+ *   pairing with [yTransform] so the transform output reaches screen.
+ */
 @Composable
 public fun rememberLineCartesianLayer(
   lineProvider: LineCartesianLayer.LineProvider =
@@ -58,6 +71,12 @@ public fun rememberLineCartesianLayer(
     remember {
       CartesianLayerDrawingModelInterpolator.default()
     },
+  yTransform: ((
+    series: List<LineCartesianLayerModel.Entry>,
+    yRange: CartesianChartRanges.YRange,
+    visibleXRange: ClosedFloatingPointRange<Double>,
+  ) -> DoubleArray?)? = null,
+  alwaysUseLiveRange: Boolean = false,
 ): LineCartesianLayer {
   var lineCartesianLayerWrapper by remember { ValueWrapper<LineCartesianLayer?>(null) }
   return remember(
@@ -66,6 +85,8 @@ public fun rememberLineCartesianLayer(
     rangeProvider,
     verticalAxisPosition,
     drawingModelInterpolator,
+    yTransform,
+    alwaysUseLiveRange,
   ) {
     val lineCartesianLayer =
       lineCartesianLayerWrapper?.copy(
@@ -74,6 +95,7 @@ public fun rememberLineCartesianLayer(
         rangeProvider,
         verticalAxisPosition,
         drawingModelInterpolator,
+        yTransform,
       )
         ?: LineCartesianLayer(
           lineProvider,
@@ -81,7 +103,9 @@ public fun rememberLineCartesianLayer(
           rangeProvider,
           verticalAxisPosition,
           drawingModelInterpolator,
+          yTransform,
         )
+    lineCartesianLayer.alwaysUseLiveRange = alwaysUseLiveRange
     lineCartesianLayerWrapper = lineCartesianLayer
     lineCartesianLayer
   }

@@ -19,6 +19,7 @@ package com.patrykandpatrick.vico.core.cartesian.layer
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.DashPathEffect
+import androidx.annotation.RestrictTo
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
@@ -28,6 +29,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import com.patrykandpatrick.vico.core.cartesian.CartesianDrawingContext
 import com.patrykandpatrick.vico.core.cartesian.CartesianMeasuringContext
+import com.patrykandpatrick.vico.core.cartesian.getVisibleXRange
 import com.patrykandpatrick.vico.core.cartesian.axis.Axis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges
@@ -89,7 +91,36 @@ protected constructor(
     > =
     CartesianLayerDrawingModelInterpolator.default(),
   protected val drawingModelKey: ExtraStore.Key<LineCartesianLayerDrawingModel>,
+  /**
+   * Optional render-time Y transform. Receives the full series, the chart's animation-target
+   * `yRange` (from `chartRanges.getTargetYRange(verticalAxisPosition)`), and the current visible
+   * X range. Returns a `DoubleArray` of Y values (same length as series) that the layer uses
+   * instead of `entry.y` when drawing.
+   *
+   * The transform is invoked **only on series change or target yRange change** — never per
+   * draw frame. Cached output is rendered against the *live* (animated) yRange in `getDrawY`,
+   * so the transformed line scales naturally with the primary layer's range animation.
+   *
+   * Use this for a secondary metric line that needs to render in the primary's Y space — the
+   * transform projects raw values into the primary's range space, eliminating any VM-side
+   * renormalization round-trip on every scroll.
+   */
+  protected val yTransform: ((
+    series: List<LineCartesianLayerModel.Entry>,
+    yRange: com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges.YRange,
+    visibleXRange: ClosedFloatingPointRange<Double>,
+  ) -> DoubleArray?)? = null,
 ) : BaseCartesianLayer<LineCartesianLayerModel>() {
+  /**
+   * Library-internal accessor for `CartesianChartHost` to detect scroll-aware range
+   * providers attached to this layer (e.g. `ScrollAwareRangeProvider`). Not part of the
+   * public API — restricted to vico's own modules.
+   */
+  /** @suppress */
+  public val internalRangeProvider: CartesianLayerRangeProvider
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    get() = rangeProvider
+
   /**
    * Defines the appearance of a line in a line chart.
    *
@@ -450,6 +481,39 @@ protected constructor(
 
   override val markerTargets: Map<Double, List<CartesianMarker.Target>> = _markerTargets
 
+  /**
+   * When `true`, the layer skips its cached drawing model and recomputes line positions from
+   * the live `chartRanges.getYRange(...)` on every frame. Set this for layers that need to
+   * follow another layer's animated Y range — typically the secondary line in a two-layer
+   * chart that pairs with `ScrollAwareRangeProvider` on the primary. Has no effect when the
+   * layer's own range provider is already live (e.g. `ScrollAwareRangeProvider` itself).
+   */
+  public var alwaysUseLiveRange: Boolean = false
+
+  // yTransform cache. Mirrors vico 4: yTransform is invoked ONLY on series change or when the
+  // animation **target** yRange changes — never per draw frame. During the actual animation
+  // frames, the cached transform output is rendered against the current animated yRange, so
+  // the secondary line scales naturally with the primary's animation instead of being pinned
+  // to a single screen position.
+  private var transformCacheResult: DoubleArray? = null
+  private var transformIndexMap: Map<Double, Int>? = null
+  private var transformLastSeriesKey: Long = 0L
+  private var transformLastTargetKey: Long = 0L
+
+  // Cross-fade state machine (mirrors vico 4): when the animation target yRange changes, the
+  // line fades out the old transformed positions over [LINE_FADE_OUT_MS], swaps to the pending
+  // result, then fades the new positions back in over [LINE_FADE_IN_MS]. transformFadeOpacity is
+  // Compose-observable — writes trigger redraws so the fade frames advance themselves.
+  // Phase: 0 = idle, 1 = fading out, 2 = fading in.
+  private var transformFadePhase: Int = 0
+  private var transformFadeStartNanos: Long = 0L
+  private val _transformFadeOpacity = androidx.compose.runtime.mutableFloatStateOf(1f)
+  internal var transformFadeOpacity: Float
+    get() = _transformFadeOpacity.floatValue
+    private set(value) { _transformFadeOpacity.floatValue = value }
+  private var transformPendingResult: DoubleArray? = null
+  private var transformPendingIndexMap: Map<Double, Int>? = null
+
   /** Creates a [LineCartesianLayer]. */
   public constructor(
     lineProvider: LineProvider,
@@ -462,6 +526,11 @@ protected constructor(
         LineCartesianLayerDrawingModel,
       > =
       CartesianLayerDrawingModelInterpolator.default(),
+    yTransform: ((
+      series: List<LineCartesianLayerModel.Entry>,
+      yRange: com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges.YRange,
+      visibleXRange: ClosedFloatingPointRange<Double>,
+    ) -> DoubleArray?)? = null,
   ) : this(
     lineProvider,
     pointSpacingDp,
@@ -469,13 +538,27 @@ protected constructor(
     verticalAxisPosition,
     drawingModelInterpolator,
     ExtraStore.Key(),
+    yTransform,
   )
 
   override fun drawInternal(context: CartesianDrawingContext, model: LineCartesianLayerModel) {
     with(context) {
       resetTempData()
 
-      val drawingModel = extraStore.getOrNull(drawingModelKey)
+      // Live-range providers (e.g. ScrollAwareRangeProvider) need the line redrawn from the
+      // raw model + current chart ranges every frame — the cached drawing model from
+      // `prepareForTransformation` is computed against a snapshot range and would freeze
+      // the line at the range that was active when the model arrived. The layer-level
+      // `alwaysUseLiveRange` flag opts a layer in even when its own provider isn't live
+      // (typical for a secondary layer that pairs with primary's scroll-aware range).
+      val drawingModel =
+        if (rangeProvider.alwaysUseLiveRange || alwaysUseLiveRange) null
+        else extraStore.getOrNull(drawingModelKey)
+
+      // Refresh yTransform cache once per draw call, before any forEachPointInBounds use.
+      // Cache invalidates only on series-identity change or animation target change, so the
+      // cached output renders against an animated live yRange without per-frame recomputation.
+      refreshTransformCache(model)
 
       model.series.forEachIndexed { seriesIndex, series ->
         val pointInfoMap = drawingModel?.getOrNull(seriesIndex)
@@ -518,7 +601,7 @@ protected constructor(
           previousEntry = entry
         }
 
-                canvas.saveLayer(opacity = drawingModel?.opacity ?: 1f)
+                canvas.saveLayer(opacity = (drawingModel?.opacity ?: 1f) * transformFadeOpacity)
 
         val lineBitmap = getBitmap(cacheKeyNamespace, seriesIndex, "line")
         lineCanvas.setBitmap(lineBitmap)
@@ -665,6 +748,84 @@ protected constructor(
     linePath.rewind()
   }
 
+  /**
+   * Refreshes the [yTransform] cache and advances the cross-fade state machine. Invoked once
+   * per `drawInternal` call. Mirrors vico 4's behavior exactly:
+   *
+   *  - **First compute / series change**: invoke transform with the *current* `yRange` and
+   *    snap (no fade). `transformFadePhase = 0`, `transformFadeOpacity = 1f`.
+   *  - **Animation target changes while phase=0**: invoke transform with the *target* yRange
+   *    (so by the time the animation lands, the secondary's positions match), save as
+   *    pending, kick off phase 1 (fade out).
+   *  - **Phase 1 (fade out)**: `opacity = 1 − t` over [LINE_FADE_OUT_MS]; on completion, swap
+   *    pending → cache, advance to phase 2, opacity = 0.
+   *  - **Phase 2 (fade in)**: `opacity = t` over [LINE_FADE_IN_MS]; on completion, return to
+   *    phase 0, opacity = 1.
+   *
+   * `transformFadeOpacity` is a Compose-observable `mutableFloatStateOf` — writes invalidate
+   * the Canvas reading it (via `saveLayer(opacity = … * transformFadeOpacity)`), so the fade
+   * frames advance via Compose's normal redraw path.
+   */
+  private fun CartesianDrawingContext.refreshTransformCache(model: LineCartesianLayerModel) {
+    val transform = yTransform ?: return
+    val series = model.series.firstOrNull() ?: return
+    val seriesKey = series.hashCode().toLong()
+    val seriesChanged = transformLastSeriesKey != 0L && transformLastSeriesKey != seriesKey
+
+    val yRange = ranges.getYRange(verticalAxisPosition)
+    val targetYRange = ranges.getTargetYRange(verticalAxisPosition)
+    val targetKey = targetYRange.minY.toBits() xor (targetYRange.maxY.toBits() * 31)
+
+    // First compute or series changed → snap (no fade), use CURRENT yRange.
+    if (transformCacheResult == null || seriesChanged) {
+      val visibleX = getVisibleXRange()
+      transformCacheResult = transform.invoke(series, yRange, visibleX)
+      transformIndexMap = series.withIndex().associate { (i, e) -> e.x to i }
+      transformLastSeriesKey = seriesKey
+      transformLastTargetKey = targetKey
+      transformFadePhase = 0
+      transformFadeOpacity = 1f
+    }
+
+    // Target changed while idle → recompute with TARGET yRange + start fade-out.
+    if (targetKey != transformLastTargetKey && transformFadePhase == 0) {
+      val visibleX = getVisibleXRange()
+      transformPendingResult = transform.invoke(series, targetYRange, visibleX)
+      transformPendingIndexMap = series.withIndex().associate { (i, e) -> e.x to i }
+      transformLastTargetKey = targetKey
+      transformFadePhase = 1
+      transformFadeStartNanos = System.nanoTime()
+    }
+
+    // Fade state machine.
+    when (transformFadePhase) {
+      1 -> {
+        val elapsedMs = (System.nanoTime() - transformFadeStartNanos) / 1_000_000.0
+        val t = (elapsedMs / LINE_FADE_OUT_MS).coerceIn(0.0, 1.0)
+        transformFadeOpacity = (1.0 - t).toFloat()
+        if (t >= 1.0) {
+          transformCacheResult = transformPendingResult
+          transformIndexMap = transformPendingIndexMap
+          transformPendingResult = null
+          transformPendingIndexMap = null
+          transformFadePhase = 2
+          transformFadeStartNanos = System.nanoTime()
+          transformFadeOpacity = 0f
+        }
+      }
+      2 -> {
+        val elapsedMs = (System.nanoTime() - transformFadeStartNanos) / 1_000_000.0
+        val t = (elapsedMs / LINE_FADE_IN_MS).coerceIn(0.0, 1.0)
+        transformFadeOpacity = t.toFloat()
+        if (t >= 1.0) {
+          transformFadePhase = 0
+          transformFadeOpacity = 1f
+        }
+      }
+      else -> transformFadeOpacity = 1f
+    }
+  }
+
   protected open fun CartesianDrawingContext.forEachPointInBounds(
     series: List<LineCartesianLayerModel.Entry>,
     drawingStart: Float,
@@ -679,6 +840,10 @@ protected constructor(
     val maxX = ranges.maxX
     val xStep = ranges.xStep
 
+    // Read cached transform results populated by refreshTransformCache(model).
+    val transformedY = transformCacheResult
+    val indexMap = transformIndexMap
+
     var x: Float? = null
     var nextX: Float? = null
 
@@ -691,9 +856,15 @@ protected constructor(
 
     fun getDrawY(entry: LineCartesianLayerModel.Entry): Float {
       val yRange = ranges.getYRange(verticalAxisPosition)
+      val cached = pointInfoMap?.get(entry.x)?.y
+      if (cached != null) {
+        return layerBounds.bottom - cached * layerBounds.height()
+      }
+      val rawY = indexMap?.get(entry.x)
+        ?.let { idx -> transformedY?.get(idx) }
+        ?: entry.y
       return layerBounds.bottom -
-        (pointInfoMap?.get(entry.x)?.y ?: ((entry.y - yRange.minY) / yRange.length).toFloat()) *
-          layerBounds.height()
+        ((rawY - yRange.minY) / yRange.length).toFloat() * layerBounds.height()
     }
 
     series.forEachIn(minX = minX, maxX = maxX, padding = 2) { entry, next ->
@@ -834,6 +1005,11 @@ protected constructor(
         LineCartesianLayerDrawingModel,
       > =
       this.drawingModelInterpolator,
+    yTransform: ((
+      series: List<LineCartesianLayerModel.Entry>,
+      yRange: com.patrykandpatrick.vico.core.cartesian.data.CartesianChartRanges.YRange,
+      visibleXRange: ClosedFloatingPointRange<Double>,
+    ) -> DoubleArray?)? = this.yTransform,
   ): LineCartesianLayer =
     LineCartesianLayer(
       lineProvider,
@@ -842,7 +1018,8 @@ protected constructor(
       verticalAxisPosition,
       drawingModelInterpolator,
       drawingModelKey,
-    )
+      yTransform,
+    ).also { it.alwaysUseLiveRange = this.alwaysUseLiveRange }
 
   override fun equals(other: Any?): Boolean =
     this === other ||
@@ -912,3 +1089,9 @@ internal fun CartesianDrawingContext.getCanvasSplitY(
         layerBounds.height()
   return ceil(base).coerceIn(layerBounds.top..layerBounds.bottom) + ceil(halfLineThickness)
 }
+
+// Cross-fade durations for `yTransform` target-change transitions in [LineCartesianLayer].
+// Total transition = LINE_FADE_OUT_MS + LINE_FADE_IN_MS (line fades old positions out, swaps
+// to new positions, fades them back in).
+private const val LINE_FADE_OUT_MS: Long = 100L
+private const val LINE_FADE_IN_MS: Long = 150L
