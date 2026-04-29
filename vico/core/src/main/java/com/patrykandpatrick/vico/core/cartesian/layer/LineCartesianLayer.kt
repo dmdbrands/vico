@@ -122,6 +122,16 @@ protected constructor(
     get() = rangeProvider
 
   /**
+   * Library-internal accessor for the layer's vertical-axis position so
+   * `CartesianChartHost` can scope live-range animation to only the matching axis. Not part
+   * of the public API.
+   */
+  /** @suppress */
+  public val internalVerticalAxisPosition: Axis.Position.Vertical?
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    get() = verticalAxisPosition
+
+  /**
    * Defines the appearance of a line in a line chart.
    *
    * @property fill draws the line fill.
@@ -1028,7 +1038,9 @@ protected constructor(
         pointSpacingDp == other.pointSpacingDp &&
         rangeProvider == other.rangeProvider &&
         verticalAxisPosition == other.verticalAxisPosition &&
-        drawingModelInterpolator == other.drawingModelInterpolator
+        drawingModelInterpolator == other.drawingModelInterpolator &&
+        yTransform === other.yTransform &&
+        alwaysUseLiveRange == other.alwaysUseLiveRange
 
   override fun hashCode(): Int =
     Objects.hash(
@@ -1037,6 +1049,8 @@ protected constructor(
       rangeProvider,
       verticalAxisPosition,
       drawingModelInterpolator,
+      System.identityHashCode(yTransform),
+      alwaysUseLiveRange,
     )
 
   /** Provides access to [Line] and [Point] factory functions. */

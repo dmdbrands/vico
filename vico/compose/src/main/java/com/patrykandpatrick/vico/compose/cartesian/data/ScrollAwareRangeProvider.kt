@@ -145,11 +145,18 @@ public class ScrollAwareRangeProvider(
    * Called when the model structure changes.
    */
   internal fun buildCache(series: List<List<LineCartesianLayerModel.Entry>>) {
-    if (series.isEmpty() || series.first().isEmpty()) {
+    // Multi-series safe: cache is only invalidated when ALL series are empty. The previous
+    // `series.first().isEmpty()` check wiped the cache whenever the leading metric was
+    // momentarily empty, dropping back to vico's intrinsic full-dataset range — surfacing as
+    // a Y-axis snap. Also reset every cached field to avoid stale visible-entries from a
+    // previous model leaking through after invalidation.
+    if (series.isEmpty() || series.all { it.isEmpty() }) {
       allSeriesEntries = emptyList()
       sortedXValues = DoubleArray(0)
       isCacheReady = false
       lastVisibleStartIndex = -1
+      lastVisibleEndIndex = -1
+      lastVisibleEntries = emptyList()
       return
     }
     // Store each series separately, sorted by X
@@ -217,6 +224,11 @@ public class ScrollAwareRangeProvider(
     if (visibleEntries.all { it.isEmpty() }) return null
     val result = try {
       onVisibleEntries(visibleEntries, visibleXRange)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      // Preserve structured concurrency: the live-range pipeline runs inside a LaunchedEffect
+      // coroutine, so swallowing CancellationException here would break parent-scope cancel
+      // propagation on recomposition / chart disposal.
+      throw e
     } catch (_: Exception) {
       return null
     }

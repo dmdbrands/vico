@@ -118,11 +118,12 @@ public fun CartesianChartHost(
   var targetMinY by remember { mutableStateOf(Double.NaN) }
   var targetMaxY by remember { mutableStateOf(Double.NaN) }
 
-  val firstScrollAwareProvider = remember(chart) {
-    chart.layers.mapNotNull {
-      (it as? LineCartesianLayer)?.internalRangeProvider as? ScrollAwareRangeProvider
-    }.firstOrNull()
+  val firstScrollAwareLayer = remember(chart) {
+    chart.layers.firstOrNull {
+      (it as? LineCartesianLayer)?.internalRangeProvider is ScrollAwareRangeProvider
+    } as? LineCartesianLayer
   }
+  val firstScrollAwareProvider = firstScrollAwareLayer?.internalRangeProvider as? ScrollAwareRangeProvider
 
   // Seed fallback: when animated range not yet established (first frame with model data),
   // use provider.seedMinY/seedMaxY supplied synchronously by the caller. Eliminates the
@@ -139,6 +140,7 @@ public fun CartesianChartHost(
       animMaxY = effectiveMaxY,
       targetMinY = if (!targetMinY.isNaN()) targetMinY else effectiveMinY,
       targetMaxY = if (!targetMaxY.isNaN()) targetMaxY else effectiveMaxY,
+      targetAxisPosition = firstScrollAwareLayer?.internalVerticalAxisPosition,
     )
   } else ranges
 
@@ -215,11 +217,12 @@ public fun CartesianChartHost(
   var targetMinY by remember { mutableStateOf(Double.NaN) }
   var targetMaxY by remember { mutableStateOf(Double.NaN) }
 
-  val firstScrollAwareProvider = remember(chart) {
-    chart.layers.mapNotNull {
-      (it as? LineCartesianLayer)?.internalRangeProvider as? ScrollAwareRangeProvider
-    }.firstOrNull()
+  val firstScrollAwareLayer = remember(chart) {
+    chart.layers.firstOrNull {
+      (it as? LineCartesianLayer)?.internalRangeProvider is ScrollAwareRangeProvider
+    } as? LineCartesianLayer
   }
+  val firstScrollAwareProvider = firstScrollAwareLayer?.internalRangeProvider as? ScrollAwareRangeProvider
 
   val effectiveMinY = if (!animatedMinY.isNaN()) animatedMinY
     else firstScrollAwareProvider?.seedMinY?.takeIf { !it.isNaN() } ?: Double.NaN
@@ -233,6 +236,7 @@ public fun CartesianChartHost(
       animMaxY = effectiveMaxY,
       targetMinY = if (!targetMinY.isNaN()) targetMinY else effectiveMinY,
       targetMaxY = if (!targetMaxY.isNaN()) targetMaxY else effectiveMaxY,
+      targetAxisPosition = firstScrollAwareLayer?.internalVerticalAxisPosition,
     )
   } else baseRanges
 
@@ -580,6 +584,14 @@ private class AnimatedYCartesianChartRanges(
   animMaxY: Double,
   targetMinY: Double = animMinY,
   targetMaxY: Double = animMaxY,
+  /**
+   * The axis position the animated range applies to. Queries for any other axis (e.g. a
+   * dual-axis chart with a separate `End` axis range) delegate to the underlying ranges so
+   * the second axis is unaffected by the live animation. `null` means "primary/default
+   * axis only" — non-null requested positions still delegate. Pass `null` here for the
+   * common single-axis case where the chart only ever queries with a `null` axisPosition.
+   */
+  private val targetAxisPosition: Axis.Position.Vertical? = null,
 ) : CartesianChartRanges {
   override val minX: Double get() = delegate.minX
   override val maxX: Double get() = delegate.maxX
@@ -597,7 +609,12 @@ private class AnimatedYCartesianChartRanges(
     override val length: Double = (targetMaxY - targetMinY).coerceAtLeast(1e-6)
   }
 
-  override fun getYRange(axisPosition: Axis.Position.Vertical?): CartesianChartRanges.YRange = yRange
+  private fun appliesTo(axisPosition: Axis.Position.Vertical?): Boolean =
+    axisPosition == targetAxisPosition
 
-  override fun getTargetYRange(axisPosition: Axis.Position.Vertical?): CartesianChartRanges.YRange = targetRange
+  override fun getYRange(axisPosition: Axis.Position.Vertical?): CartesianChartRanges.YRange =
+    if (appliesTo(axisPosition)) yRange else delegate.getYRange(axisPosition)
+
+  override fun getTargetYRange(axisPosition: Axis.Position.Vertical?): CartesianChartRanges.YRange =
+    if (appliesTo(axisPosition)) targetRange else delegate.getTargetYRange(axisPosition)
 }
